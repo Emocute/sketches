@@ -1,0 +1,19 @@
+[package]
+name = "geomonic"
+version = "0.1.0"
+edition = "2021"
+authors = ["Emocute"]
+description = "Geomonic — 幾何学的だが和声的に綺麗な MIDI を生成する VST3/CLAP プラグイン"
+license = "MIT"
+
+[lib]
+name = "geomonic"
+crate-type = ["lib", "cdylib"]
+
+[dependencies]
+nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["standalone"] }
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
