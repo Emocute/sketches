@@ -12,6 +12,8 @@ crate-type = ["lib", "cdylib"]
 
 [dependencies]
 nih_plug = { git = "https://github.com/robbert-vdh/nih-plug.git", features = ["standalone"] }
+nih_plug_egui = { git = "https://github.com/robbert-vdh/nih-plug.git" }
+parking_lot = "0.12"
 
 [profile.release]
 opt-level = 3
