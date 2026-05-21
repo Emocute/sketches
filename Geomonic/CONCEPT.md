@@ -90,6 +90,66 @@ DAW transport (BPM, pos_beats)
 - GUI（egui）で 4 軸セレクタ + 図形プレビュー
 - パターン × 数理モデルの組み合わせライブラリ（プリセット）
 
+## V3 — Lydian × 数理モデル（未着手）
+
+Lydian は「**倍音列に最も近い自然スケール**」（基音から 5度堆積 6回で得られる：C–G–D–A–E–B–F#）、ジョージ・ラッセル『The Lydian Chromatic Concept of Tonal Organization』(LCC) で「すべての調性の重力中心」と定義された、数理的に最も整合的なモード。これを Geomonic に組み込む。
+
+### 新軸 E. Scale
+
+| Scale | 構成音（C 基点） | 性格 |
+|---|---|---|
+| **Lydian** | C D E F# G A B | 倍音列由来、最も明るい・浮遊感 |
+| **Lydian #5 (Lydian Augmented)** | C D E F# G# A B | 増5度、宇宙的・前衛的 |
+| **Lydian b7 (Lydian Dominant / Acoustic)** | C D E F# G A Bb | 倍音列の理想形、ブルース寄り |
+| **Lydian Diminished** | C D Eb F# G A B | LCC で第3階層 |
+| **Lydian #2 #5** | C D# E F# G# A B | LCC 第4階層、極限の外向度 |
+| **(参考) Ionian / Dorian / Mixolydian** | 通常モード | 比較用 |
+
+スケール軸は全 Transform / Progression / Voicing と独立に組み合わせ可能（**5軸目** matrix）。スケール縛りはテンション選択・voicing 段階でフィルタとして効く。
+
+### Transform 軸に追加するモデル
+
+| モデル | エンジン |
+|---|---|
+| **Lydian Chromatic Order (LCC)** | 5度堆積 7音 = Lydian、8音目から12音目まで段階的に「外向度」が増す。現在の Lydian Tonic からの 5度距離で各和音を配置、距離が短いほど「内向（協和）」、長いほど「外向（不協和）」。和音生成時にユーザーが「外向度ノブ」で 0–6 を選び、対応する音群から和音を組む |
+| **Lydian Tonnetz** | 既存 Tonnetz の格子を Lydian 制約付きで歩く（#4 を含む格子、F# が常時利用可能）。Lydian Tonic からの voice leading 最短経路 |
+| **Lydian Spectral** | 倍音列から #11 (4倍音 × 11/8 ≒ Lydian の #4) を強調した和音生成。物理的に最も自然な #11 voicing |
+| **Lydian Symmetry** | Lydian の前半 4音（C D E F#）が全音音階の半分 = 全音シンメトリーを内包。Sym6 (whole tone) との混合モード |
+
+### Progression 軸に追加するパターン
+
+| Pattern | 内容 |
+|---|---|
+| **Lydian I–II–V–IV** | I (Lydian) – II (Dorian) – V (Mixolydian) – IV (Lydian #11) のモーダル進行 |
+| **LCC Vertical Stack** | Lydian Tonic から5度堆積で順次重ねる（C → CG → CGD → CGDA → ...）。和音が時間軸で「育つ」進行 |
+| **Lydian Pivot Cycle** | Lydian Tonic を半音 / 全音 / 短3度 / 長3度 / 完全4度でずらす変調サイクル（Coltrane Changes の Lydian 版） |
+| **Hermode Lydian** | コードチェンジごとに Lydian Tonic を再計算（各和音を最も「内向」に響かせる）。リアルタイム LCC 解析 |
+
+### Voicing 軸に追加するモデル
+
+| Voicing | 内容 |
+|---|---|
+| **Lydian Pentachord** | 1–2–3–#4–5（Lydian の前半5音）を低音から積む |
+| **Lydian #11 spread** | root – 3 – 5 – 7 – 9 – #11 – 13 の完全 Lydian テンション堆積（7和音上） |
+| **Quartal Lydian** | 完全4度 + 増4度の混合堆積（McCoy Tyner 風 + Lydian の #4） |
+
+### GUI 拡張
+
+- Scale セレクタ追加（5軸目）
+- 幾何プレビュー: **Lydian Chromatic Spiral**（Lydian Tonic を中心に5度螺旋で12音配置、現在和音の外向度を色で可視化）
+- LCC「外向度メーター」（0–6 の縦バー）
+
+### 着手前メモ
+
+- LCC は「正しい使い方」が議論を呼ぶ理論（ラッセル本家の運用 vs マイルス周辺の解釈）。**Geomonic では「数理モデルとしての美しさ」優先**、ラッセル運用には準拠しない
+- Lydian は「明るすぎ」「ふわふわしすぎ」と感じる用途では使いにくい → Scale 軸で Lydian b7 / Ionian にすぐ切替できる UX を優先
+- V3 着手タイミングは V1+V2 を実 DAW で触って軸の使い心地を確かめてから（spec を実用に合わせて削る or 増やす）
+
+### 関連参考
+
+- George Russell『Lydian Chromatic Concept of Tonal Organization』(1953/2001 改訂版)
+- Lydian は HarmonyScope の scale suggestion でも頻出 — 解析側と生成側で同じ理論基盤を共有可能
+
 ## 関連
 
 - HarmonyScope（解析側） — 和声理論基盤を共有可能
