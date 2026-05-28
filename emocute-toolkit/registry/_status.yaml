@@ -9,9 +9,9 @@ meta:
   phase_0_done: true
   last_updated: "2026-05-29"
   status_counts:
-    planned: 191
+    planned: 181
     in_progress: 0
-    implemented: 94
+    implemented: 104
     deprecated: 0
 
 phases:
@@ -124,23 +124,23 @@ tools:
   visual-lrc-srt-json: { phase: 3, category: visual, priority: med, status: implemented }
   visual-whisper-srt: { phase: 3, category: visual, priority: med, status: implemented }
   visual-karaoke-preset: { phase: 3, category: visual, priority: med, status: implemented }
-  visual-mvtool-gui: { phase: 3, category: visual, priority: med, status: planned }
+  visual-mvtool-gui: { phase: 3, category: visual, priority: med, status: implemented }
   visual-lut-color-grading: { phase: 3, category: visual, priority: med, status: implemented }
   visual-loudness-report: { phase: 3, category: visual, priority: med, status: implemented }
-  visual-shader-preset-catalog: { phase: 3, category: visual, priority: med, status: planned }
+  visual-shader-preset-catalog: { phase: 3, category: visual, priority: med, status: implemented }
   visual-recording-fps-verify: { phase: 3, category: visual, priority: med, status: implemented }
-  visual-canvas-raster-pipeline: { phase: 3, category: visual, priority: low, status: planned }
-  visual-polyglot-markup: { phase: 3, category: visual, priority: low, status: planned }
+  visual-canvas-raster-pipeline: { phase: 3, category: visual, priority: low, status: implemented }
+  visual-polyglot-markup: { phase: 3, category: visual, priority: low, status: implemented }
   visual-flag-svg-generator: { phase: 3, category: visual, priority: low, status: implemented }
-  visual-hls-streaming-preview: { phase: 3, category: visual, priority: low, status: planned }
-  visual-color-space-verify: { phase: 3, category: visual, priority: low, status: planned }
-  visual-stabilization: { phase: 3, category: visual, priority: low, status: planned }
-  visual-deinterlace-auto: { phase: 3, category: visual, priority: low, status: planned }
+  visual-hls-streaming-preview: { phase: 3, category: visual, priority: low, status: implemented }
+  visual-color-space-verify: { phase: 3, category: visual, priority: low, status: implemented }
+  visual-stabilization: { phase: 3, category: visual, priority: low, status: implemented }
+  visual-deinterlace-auto: { phase: 3, category: visual, priority: low, status: implemented }
 
   # === sale (25) ===
   sale-channel-sync: { phase: 4, category: sale, priority: high, status: implemented }
-  sale-coupon-bulk-mail: { phase: 4, category: sale, priority: med, status: planned }
-  sale-philtz-redirect-manager: { phase: 4, category: sale, priority: med, status: planned }
+  sale-coupon-bulk-mail: { phase: 4, category: sale, priority: med, status: implemented }
+  sale-philtz-redirect-manager: { phase: 4, category: sale, priority: med, status: implemented }
   sale-revenue-aggregate: { phase: 4, category: sale, priority: high, status: implemented }
   sale-fee-simulator: { phase: 4, category: sale, priority: med, status: planned }
   sale-tax-doc-generator: { phase: 4, category: sale, priority: med, status: planned }
