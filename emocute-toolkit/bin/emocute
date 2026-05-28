@@ -170,21 +170,99 @@ def cmd_hook(args):
 
 def cmd_automation(args):
     """launchd / git-hook の install / uninstall / status."""
+    import subprocess
     auto_dir = TOOLKIT_ROOT / "automation"
+    plist_dir = auto_dir / "launchd"
+    hook_dir = auto_dir / "git-hooks"
+    launch_agents = Path.home() / "Library" / "LaunchAgents"
+    uid = os.getuid()
+
     if args.action == "status":
-        # シンプルに plist / hook 存在を表示
-        plist_dir = auto_dir / "launchd"
-        hook_dir = auto_dir / "git-hooks"
-        print("=== launchd plists ===")
+        print("=== launchd plists (toolkit-provided) ===")
         if plist_dir.exists():
             for p in sorted(plist_dir.glob("*.plist")):
-                print(f"  {p.name}")
-        print("=== git hooks ===")
+                # check if loaded
+                label = p.stem
+                r = subprocess.run(
+                    ["launchctl", "print", f"gui/{uid}/{label}"],
+                    capture_output=True, text=True, check=False,
+                )
+                loaded = "loaded" if r.returncode == 0 else "not loaded"
+                link = launch_agents / p.name
+                linked = "linked" if link.is_symlink() and link.resolve() == p.resolve() else "not linked"
+                print(f"  {p.name}  [{linked}, {loaded}]")
+        print("\n=== git hooks (toolkit-provided) ===")
         if hook_dir.exists():
-            for p in sorted(hook_dir.iterdir()):
-                print(f"  {p.name}")
+            git_hooks_dir = Path.home() / "Downloads" / ".git-hooks"
+            for p in sorted(hook_dir.glob("*.sh")):
+                phase = p.stem
+                target = git_hooks_dir / phase
+                linked = "linked" if target.is_symlink() and target.resolve() == p.resolve() else "not linked"
+                print(f"  {p.name} → ~/Downloads/.git-hooks/{phase}  [{linked}]")
+        # log directory
+        log_dir = auto_dir / "logs"
+        if log_dir.exists():
+            print(f"\nlogs: {log_dir} ({sum(1 for _ in log_dir.iterdir())} files)")
         return 0
-    print(f"automation {args.action} not yet implemented (see AUTOMATION.md spec)", file=sys.stderr)
+
+    if args.action == "install":
+        rc = 0
+        # 1. log dir
+        (auto_dir / "logs").mkdir(parents=True, exist_ok=True)
+        # 2. launchd plists
+        if plist_dir.exists():
+            launch_agents.mkdir(parents=True, exist_ok=True)
+            for p in sorted(plist_dir.glob("*.plist")):
+                link = launch_agents / p.name
+                if link.exists() or link.is_symlink():
+                    link.unlink()
+                link.symlink_to(p.resolve())
+                # bootout if loaded, then bootstrap
+                label = p.stem
+                subprocess.run(["launchctl", "bootout", f"gui/{uid}/{label}"],
+                               capture_output=True, check=False)
+                r = subprocess.run(["launchctl", "bootstrap", f"gui/{uid}", str(link)],
+                                   capture_output=True, text=True, check=False)
+                if r.returncode != 0:
+                    print(f"  ⚠️  bootstrap {p.name} failed: {r.stderr.strip()[:200]}", file=sys.stderr)
+                    rc = 1
+                else:
+                    print(f"  ✅ {p.name}")
+        # 3. git hooks (Downloads/.git-hooks/)
+        git_hooks_dir = Path.home() / "Downloads" / ".git-hooks"
+        git_hooks_dir.mkdir(parents=True, exist_ok=True)
+        if hook_dir.exists():
+            for p in sorted(hook_dir.glob("*.sh")):
+                phase = p.stem  # pre-commit / pre-push
+                target = git_hooks_dir / phase
+                if target.exists() or target.is_symlink():
+                    target.unlink()
+                target.symlink_to(p.resolve())
+                p.chmod(0o755)
+                print(f"  ✅ git-hook {phase} → {target}")
+        return rc
+
+    if args.action == "uninstall":
+        # 1. launchd bootout & unlink
+        if plist_dir.exists():
+            for p in sorted(plist_dir.glob("*.plist")):
+                label = p.stem
+                subprocess.run(["launchctl", "bootout", f"gui/{uid}/{label}"],
+                               capture_output=True, check=False)
+                link = launch_agents / p.name
+                if link.is_symlink():
+                    link.unlink()
+                    print(f"  ✅ removed {p.name}")
+        # 2. git hooks
+        git_hooks_dir = Path.home() / "Downloads" / ".git-hooks"
+        if hook_dir.exists() and git_hooks_dir.exists():
+            for p in sorted(hook_dir.glob("*.sh")):
+                phase = p.stem
+                target = git_hooks_dir / phase
+                if target.is_symlink() and target.resolve() == p.resolve():
+                    target.unlink()
+                    print(f"  ✅ removed git-hook {phase}")
+        return 0
     return 1
 
 

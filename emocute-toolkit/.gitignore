@@ -1,0 +1,17 @@
+# runtime logs
+automation/log.jsonl
+automation/logs/
+
+# python caches
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# 監査作業ディレクトリ（.audit_<date>/ は zip 親 dir 側、こちらは念のため）
+.audit_*/
+
+# user config sample（実体は ~/.config/emocute/）
+config.local.yaml
+credentials.yaml

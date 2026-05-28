@@ -9,9 +9,9 @@ meta:
   phase_0_done: true
   last_updated: "2026-05-29"
   status_counts:
-    planned: 285
+    planned: 273
     in_progress: 0
-    implemented: 0
+    implemented: 12
     deprecated: 0
 
 phases:
@@ -45,7 +45,7 @@ phases:
 tools:
 
   # === audit ===
-  audit-zip-3axis: { phase: 1, category: audit, priority: high, status: planned }
+  audit-zip-3axis: { phase: 1, category: audit, priority: high, status: implemented }
   audit-personal-info-scan: { phase: 5, category: audit, priority: high, status: planned }
   audit-license-cross-check: { phase: 5, category: audit, priority: med, status: planned }
   audit-old-philtz-residue: { phase: 5, category: audit, priority: med, status: planned }
@@ -53,19 +53,19 @@ tools:
   audit-style-guide: { phase: 4, category: audit, priority: med, status: planned }
 
   # === release ===
-  release-bump-version: { phase: 1, category: release, priority: high, status: planned }
+  release-bump-version: { phase: 1, category: release, priority: high, status: implemented }
   release-changelog-prepend: { phase: 2, category: release, priority: med, status: planned }
   release-old-zip-archive: { phase: 2, category: release, priority: med, status: planned }
   release-album-zip-builder: { phase: 2, category: release, priority: med, status: planned }
   release-master-flow: { phase: 4, category: release, priority: high, status: planned }
 
   # === price ===
-  price-cross-check: { phase: 1, category: price, priority: high, status: planned }
+  price-cross-check: { phase: 1, category: price, priority: high, status: implemented }
   price-fee-simulator: { phase: 4, category: price, priority: med, status: planned }
 
   # === mem ===
-  mem-auto-split: { phase: 1, category: mem, priority: high, status: planned }
-  mem-index-verify: { phase: 1, category: mem, priority: high, status: planned }
+  mem-auto-split: { phase: 1, category: mem, priority: high, status: implemented }
+  mem-index-verify: { phase: 1, category: mem, priority: high, status: implemented }
   mem-stale-detect: { phase: 5, category: mem, priority: med, status: planned }
   mem-duplicate-detect: { phase: 5, category: mem, priority: med, status: planned }
   mem-backlink-index: { phase: 5, category: mem, priority: low, status: planned }
@@ -103,9 +103,9 @@ tools:
   studio-production-phase-fsm: { phase: 2, category: studio, priority: low, status: planned }
 
   # === visual (30) ===
-  visual-silence-trim: { phase: 1, category: visual, priority: high, status: planned }
-  visual-scale-pad-even: { phase: 1, category: visual, priority: high, status: planned }
-  visual-chrome-app-launch: { phase: 1, category: visual, priority: high, status: planned }
+  visual-silence-trim: { phase: 1, category: visual, priority: high, status: implemented }
+  visual-scale-pad-even: { phase: 1, category: visual, priority: high, status: implemented }
+  visual-chrome-app-launch: { phase: 1, category: visual, priority: high, status: implemented }
   visual-concat-fade: { phase: 3, category: visual, priority: high, status: planned }
   visual-crf-auto: { phase: 3, category: visual, priority: high, status: planned }
   visual-overlay-batch: { phase: 3, category: visual, priority: high, status: planned }
@@ -167,8 +167,8 @@ tools:
   sale-confirm-mail-flow-test: { phase: 5, category: sale, priority: med, status: planned }
 
   # === site (10) ===
-  site-vercel-quota: { phase: 1, category: site, priority: high, status: planned }
-  site-dl-integrity: { phase: 1, category: site, priority: high, status: planned }
+  site-vercel-quota: { phase: 1, category: site, priority: high, status: implemented }
+  site-dl-integrity: { phase: 1, category: site, priority: high, status: implemented }
   site-orphan-pages-purge: { phase: 4, category: site, priority: med, status: planned }
   site-hreflang-generator: { phase: 4, category: site, priority: med, status: planned }
   site-schema-org-inject: { phase: 4, category: site, priority: med, status: planned }
@@ -181,7 +181,7 @@ tools:
   site-sitemap-rebuild: { phase: 4, category: site, priority: med, status: planned }
 
   # === game (21) ===
-  game-mbti-banned-words: { phase: 1, category: game, priority: high, status: planned }
+  game-mbti-banned-words: { phase: 1, category: game, priority: high, status: implemented }
   game-numbloom-persona-filter: { phase: 4, category: game, priority: high, status: planned }
   game-numbloom-poc-validate: { phase: 4, category: game, priority: med, status: planned }
   game-numbloom-card-art-score: { phase: 4, category: game, priority: med, status: planned }
@@ -216,7 +216,7 @@ tools:
   infra-cookie-expiry-monitor: { phase: 4, category: infra, priority: med, status: planned }
 
   # === ops (20) ===
-  ops-session-log-append: { phase: 1, category: ops, priority: high, status: planned }
+  ops-session-log-append: { phase: 1, category: ops, priority: high, status: implemented }
   ops-session-handoff-md: { phase: 5, category: ops, priority: med, status: planned }
   ops-pj-start-unified: { phase: 5, category: ops, priority: med, status: planned }
   ops-memory-backlink-index: { phase: 5, category: ops, priority: low, status: planned }

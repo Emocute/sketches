@@ -5,9 +5,14 @@
 
 ## 現在フェーズ
 
-**Phase 0: Foundation（土台）** ← 着手中
+**Phase 1: 即効性 12 ツール** ✅ 完了（2026-05-29）
 
-完了したら次セッションで Phase 1 に進む。
+- 12 tools all implemented + smoke tested
+- mem-index-verify が実 drift（259 行・60 件 rule 違反・6 orphans）検出
+- game-mbti-banned-words が Idiograph game.html の sale-path hits 検出（要修正）
+- price-cross-check が Kagebu/Studio の memory 不整合検出
+
+次は Phase 2（Studio/Suno 30）。
 
 ---
 
@@ -50,6 +55,13 @@
 | 12 | `ops-session-log-append` | ops | SESSION_LOG.md 自動追記（UUID/start/end） |
 
 **完了基準**: 12 個すべて `--help` + dry-run + apply が動く + integration test 1 本ずつ。
+
+**実装結果（2026-05-29）**: 12/12 完了。tests/ 配下の integration test は Phase 2 と並行。
+Real-world findings:
+- `mem-index-verify`: MEMORY.md 259 行・60 rule violations・6 orphans 検出
+- `game-mbti-banned-words`: Idiograph/game.html に MBTI 4 タイプ名 hardcode 検出
+- `price-cross-check`: Kagebu (¥1000/5800/9800) と Studio ($24/$49) の memory inconsistent
+- `mem-auto-split`: 1 section （人格マップ 40d old）を split candidate として提案
 
 ---
 
