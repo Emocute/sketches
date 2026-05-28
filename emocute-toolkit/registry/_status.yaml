@@ -11,7 +11,7 @@ meta:
   status_counts:
     planned: 0
     in_progress: 0
-    implemented: 191
+    implemented: 192
     deprecated: 0
 
 phases:
@@ -162,6 +162,7 @@ tools:
   sale-interview-template: { phase: 4, category: sale, priority: low, status: implemented }
   sale-interview-diff-tracker: { phase: 4, category: sale, priority: low, status: implemented }
   sale-press-news-collect: { phase: 4, category: sale, priority: med, status: implemented }
+  sale-style-guide-checker: { phase: 4, category: sale, priority: med, status: implemented }
   sale-booth-coupon-workaround: { phase: 5, category: sale, priority: med, status: implemented }
   sale-stripe-meta-builder: { phase: 5, category: sale, priority: med, status: implemented }
   sale-confirm-mail-flow-test: { phase: 5, category: sale, priority: med, status: implemented }
