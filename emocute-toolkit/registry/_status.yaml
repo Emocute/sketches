@@ -9,9 +9,9 @@ meta:
   phase_0_done: true
   last_updated: "2026-05-29"
   status_counts:
-    planned: 131
+    planned: 121
     in_progress: 0
-    implemented: 154
+    implemented: 164
     deprecated: 0
 
 phases:
@@ -213,19 +213,19 @@ tools:
   infra-stripe-security-audit: { phase: 4, category: infra, priority: med, status: implemented }
   infra-credentials-vault: { phase: 4, category: infra, priority: high, status: implemented }
   infra-totp-keychain: { phase: 4, category: infra, priority: high, status: implemented }
-  infra-cookie-expiry-monitor: { phase: 4, category: infra, priority: med, status: planned }
+  infra-cookie-expiry-monitor: { phase: 4, category: infra, priority: med, status: implemented }
 
   # === ops (20) ===
   ops-session-log-append: { phase: 1, category: ops, priority: high, status: implemented }
-  ops-session-handoff-md: { phase: 5, category: ops, priority: med, status: planned }
-  ops-pj-start-unified: { phase: 5, category: ops, priority: med, status: planned }
-  ops-memory-backlink-index: { phase: 5, category: ops, priority: low, status: planned }
-  ops-obsidian-elasticsearch: { phase: 5, category: ops, priority: low, status: planned }
-  ops-obsidian-auto-launch: { phase: 5, category: ops, priority: med, status: planned }
-  ops-archive-auto-classify: { phase: 5, category: ops, priority: med, status: planned }
-  ops-file-routing: { phase: 5, category: ops, priority: med, status: planned }
-  ops-downloads-weekly-clean: { phase: 5, category: ops, priority: med, status: planned }
-  ops-cache-safe-rm: { phase: 5, category: ops, priority: med, status: planned }
+  ops-session-handoff-md: { phase: 5, category: ops, priority: med, status: implemented }
+  ops-pj-start-unified: { phase: 5, category: ops, priority: med, status: implemented }
+  ops-memory-backlink-index: { phase: 5, category: ops, priority: low, status: implemented }
+  ops-obsidian-elasticsearch: { phase: 5, category: ops, priority: low, status: implemented }
+  ops-obsidian-auto-launch: { phase: 5, category: ops, priority: med, status: implemented }
+  ops-archive-auto-classify: { phase: 5, category: ops, priority: med, status: implemented }
+  ops-file-routing: { phase: 5, category: ops, priority: med, status: implemented }
+  ops-downloads-weekly-clean: { phase: 5, category: ops, priority: med, status: implemented }
+  ops-cache-safe-rm: { phase: 5, category: ops, priority: med, status: implemented }
   ops-commit-msg-lint-strong: { phase: 5, category: ops, priority: med, status: planned }
   ops-pre-push-safety: { phase: 5, category: ops, priority: med, status: planned }
   ops-failure-mode-early-check: { phase: 5, category: ops, priority: med, status: planned }
