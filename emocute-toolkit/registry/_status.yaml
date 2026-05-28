@@ -9,9 +9,9 @@ meta:
   phase_0_done: true
   last_updated: "2026-05-29"
   status_counts:
-    planned: 181
+    planned: 171
     in_progress: 0
-    implemented: 104
+    implemented: 114
     deprecated: 0
 
 phases:
@@ -142,18 +142,18 @@ tools:
   sale-coupon-bulk-mail: { phase: 4, category: sale, priority: med, status: implemented }
   sale-philtz-redirect-manager: { phase: 4, category: sale, priority: med, status: implemented }
   sale-revenue-aggregate: { phase: 4, category: sale, priority: high, status: implemented }
-  sale-fee-simulator: { phase: 4, category: sale, priority: med, status: planned }
-  sale-tax-doc-generator: { phase: 4, category: sale, priority: med, status: planned }
+  sale-fee-simulator: { phase: 4, category: sale, priority: med, status: implemented }
+  sale-tax-doc-generator: { phase: 4, category: sale, priority: med, status: implemented }
   sale-confirm-mail-dashboard: { phase: 4, category: sale, priority: high, status: implemented }
-  sale-mail-template-bilingual: { phase: 4, category: sale, priority: med, status: planned }
-  sale-audience-segmentation: { phase: 4, category: sale, priority: med, status: planned }
+  sale-mail-template-bilingual: { phase: 4, category: sale, priority: med, status: implemented }
+  sale-audience-segmentation: { phase: 4, category: sale, priority: med, status: implemented }
   sale-mail-retry-manager: { phase: 4, category: sale, priority: high, status: implemented }
-  sale-x-post-bilingual: { phase: 4, category: sale, priority: med, status: planned }
-  sale-utm-shortener: { phase: 4, category: sale, priority: med, status: planned }
-  sale-post-replicator: { phase: 4, category: sale, priority: low, status: planned }
-  sale-calendar-auto-post: { phase: 4, category: sale, priority: med, status: planned }
-  sale-tunecore-meta-sync: { phase: 4, category: sale, priority: med, status: planned }
-  sale-dsp-reach-check: { phase: 4, category: sale, priority: med, status: planned }
+  sale-x-post-bilingual: { phase: 4, category: sale, priority: med, status: implemented }
+  sale-utm-shortener: { phase: 4, category: sale, priority: med, status: implemented }
+  sale-post-replicator: { phase: 4, category: sale, priority: low, status: implemented }
+  sale-calendar-auto-post: { phase: 4, category: sale, priority: med, status: implemented }
+  sale-tunecore-meta-sync: { phase: 4, category: sale, priority: med, status: implemented }
+  sale-dsp-reach-check: { phase: 4, category: sale, priority: med, status: implemented }
   sale-spotify-playlist-pitch: { phase: 4, category: sale, priority: med, status: planned }
   sale-takedown-uri-list: { phase: 4, category: sale, priority: med, status: planned }
   sale-landr-contract-reminder: { phase: 4, category: sale, priority: low, status: planned }
