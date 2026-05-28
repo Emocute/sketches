@@ -9,9 +9,9 @@ meta:
   phase_0_done: true
   last_updated: "2026-05-29"
   status_counts:
-    planned: 121
+    planned: 111
     in_progress: 0
-    implemented: 164
+    implemented: 174
     deprecated: 0
 
 phases:
@@ -226,17 +226,17 @@ tools:
   ops-file-routing: { phase: 5, category: ops, priority: med, status: implemented }
   ops-downloads-weekly-clean: { phase: 5, category: ops, priority: med, status: implemented }
   ops-cache-safe-rm: { phase: 5, category: ops, priority: med, status: implemented }
-  ops-commit-msg-lint-strong: { phase: 5, category: ops, priority: med, status: planned }
-  ops-pre-push-safety: { phase: 5, category: ops, priority: med, status: planned }
-  ops-failure-mode-early-check: { phase: 5, category: ops, priority: med, status: planned }
-  ops-apple-notes-sync: { phase: 5, category: ops, priority: high, status: planned }
-  ops-task-monthly-archive: { phase: 5, category: ops, priority: med, status: planned }
-  ops-aiff-context-notify: { phase: 5, category: ops, priority: med, status: planned }
-  ops-idle-alert: { phase: 5, category: ops, priority: med, status: planned }
+  ops-commit-msg-lint-strong: { phase: 5, category: ops, priority: med, status: implemented }
+  ops-pre-push-safety: { phase: 5, category: ops, priority: med, status: implemented }
+  ops-failure-mode-early-check: { phase: 5, category: ops, priority: med, status: implemented }
+  ops-apple-notes-sync: { phase: 5, category: ops, priority: high, status: implemented }
+  ops-task-monthly-archive: { phase: 5, category: ops, priority: med, status: implemented }
+  ops-aiff-context-notify: { phase: 5, category: ops, priority: med, status: implemented }
+  ops-idle-alert: { phase: 5, category: ops, priority: med, status: implemented }
   ops-priority-notify: { phase: 5, category: ops, priority: high, status: implemented }
-  ops-mcp-usage-log: { phase: 5, category: ops, priority: med, status: planned }
-  ops-mcp-scanner-extend: { phase: 5, category: ops, priority: low, status: planned }
-  ops-local-source-cache: { phase: 5, category: ops, priority: low, status: planned }
+  ops-mcp-usage-log: { phase: 5, category: ops, priority: med, status: implemented }
+  ops-mcp-scanner-extend: { phase: 5, category: ops, priority: low, status: implemented }
+  ops-local-source-cache: { phase: 5, category: ops, priority: low, status: implemented }
 
   # === comm (5) ===
   comm-discord-reply-guard: { phase: 5, category: comm, priority: med, status: planned }
