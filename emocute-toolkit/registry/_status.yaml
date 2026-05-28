@@ -9,9 +9,9 @@ meta:
   phase_0_done: true
   last_updated: "2026-05-29"
   status_counts:
-    planned: 141
+    planned: 131
     in_progress: 0
-    implemented: 144
+    implemented: 154
     deprecated: 0
 
 phases:
@@ -197,20 +197,20 @@ tools:
   game-kagebu-zip-builder: { phase: 4, category: game, priority: high, status: implemented }
   game-persona-cross-checker: { phase: 4, category: game, priority: high, status: implemented }
   game-roleplay-product-page: { phase: 4, category: game, priority: med, status: implemented }
-  game-persona-glossary: { phase: 4, category: game, priority: med, status: planned }
-  game-harmonyscope-cargo-runner: { phase: 4, category: game, priority: med, status: planned }
-  game-harmonyscope-plugin-pkg: { phase: 4, category: game, priority: high, status: planned }
-  game-chord-dict-sqlite: { phase: 4, category: game, priority: med, status: planned }
-  game-ios-theory-lab-poc: { phase: 4, category: game, priority: low, status: planned }
-  game-sketches-index: { phase: 4, category: game, priority: med, status: planned }
+  game-persona-glossary: { phase: 4, category: game, priority: med, status: implemented }
+  game-harmonyscope-cargo-runner: { phase: 4, category: game, priority: med, status: implemented }
+  game-harmonyscope-plugin-pkg: { phase: 4, category: game, priority: high, status: implemented }
+  game-chord-dict-sqlite: { phase: 4, category: game, priority: med, status: implemented }
+  game-ios-theory-lab-poc: { phase: 4, category: game, priority: low, status: implemented }
+  game-sketches-index: { phase: 4, category: game, priority: med, status: implemented }
 
   # === infra (9) ===
   infra-r2-waf-fallback: { phase: 4, category: infra, priority: high, status: implemented }
-  infra-r2-cost-estimator: { phase: 4, category: infra, priority: med, status: planned }
-  infra-cf-dns-ssl-monitor: { phase: 4, category: infra, priority: med, status: planned }
+  infra-r2-cost-estimator: { phase: 4, category: infra, priority: med, status: implemented }
+  infra-cf-dns-ssl-monitor: { phase: 4, category: infra, priority: med, status: implemented }
   infra-supabase-webhook-monitor: { phase: 4, category: infra, priority: high, status: implemented }
-  infra-supabase-schema-migrate: { phase: 4, category: infra, priority: med, status: planned }
-  infra-stripe-security-audit: { phase: 4, category: infra, priority: med, status: planned }
+  infra-supabase-schema-migrate: { phase: 4, category: infra, priority: med, status: implemented }
+  infra-stripe-security-audit: { phase: 4, category: infra, priority: med, status: implemented }
   infra-credentials-vault: { phase: 4, category: infra, priority: high, status: implemented }
   infra-totp-keychain: { phase: 4, category: infra, priority: high, status: implemented }
   infra-cookie-expiry-monitor: { phase: 4, category: infra, priority: med, status: planned }
