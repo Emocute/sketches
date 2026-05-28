@@ -9,9 +9,9 @@ meta:
   phase_0_done: true
   last_updated: "2026-05-29"
   status_counts:
-    planned: 161
+    planned: 151
     in_progress: 0
-    implemented: 124
+    implemented: 134
     deprecated: 0
 
 phases:
@@ -164,20 +164,20 @@ tools:
   sale-press-news-collect: { phase: 4, category: sale, priority: med, status: implemented }
   sale-booth-coupon-workaround: { phase: 5, category: sale, priority: med, status: implemented }
   sale-stripe-meta-builder: { phase: 5, category: sale, priority: med, status: implemented }
-  sale-confirm-mail-flow-test: { phase: 5, category: sale, priority: med, status: planned }
+  sale-confirm-mail-flow-test: { phase: 5, category: sale, priority: med, status: implemented }
 
   # === site (10) ===
   site-vercel-quota: { phase: 1, category: site, priority: high, status: implemented }
   site-dl-integrity: { phase: 1, category: site, priority: high, status: implemented }
-  site-orphan-pages-purge: { phase: 4, category: site, priority: med, status: planned }
-  site-hreflang-generator: { phase: 4, category: site, priority: med, status: planned }
-  site-schema-org-inject: { phase: 4, category: site, priority: med, status: planned }
-  site-vercel-analytics-export: { phase: 4, category: site, priority: med, status: planned }
-  site-keyword-rank-monitor: { phase: 4, category: site, priority: med, status: planned }
-  site-vercel-env-add: { phase: 4, category: site, priority: med, status: planned }
-  site-asset-cache-bust: { phase: 4, category: site, priority: med, status: planned }
-  site-config-schema-validator: { phase: 4, category: site, priority: med, status: planned }
-  site-bundle-analyzer: { phase: 4, category: site, priority: med, status: planned }
+  site-orphan-pages-purge: { phase: 4, category: site, priority: med, status: implemented }
+  site-hreflang-generator: { phase: 4, category: site, priority: med, status: implemented }
+  site-schema-org-inject: { phase: 4, category: site, priority: med, status: implemented }
+  site-vercel-analytics-export: { phase: 4, category: site, priority: med, status: implemented }
+  site-keyword-rank-monitor: { phase: 4, category: site, priority: med, status: implemented }
+  site-vercel-env-add: { phase: 4, category: site, priority: med, status: implemented }
+  site-asset-cache-bust: { phase: 4, category: site, priority: med, status: implemented }
+  site-config-schema-validator: { phase: 4, category: site, priority: med, status: implemented }
+  site-bundle-analyzer: { phase: 4, category: site, priority: med, status: implemented }
   site-sitemap-rebuild: { phase: 4, category: site, priority: med, status: planned }
 
   # === game (21) ===
