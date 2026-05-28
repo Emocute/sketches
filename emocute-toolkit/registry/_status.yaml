@@ -9,9 +9,9 @@ meta:
   phase_0_done: true
   last_updated: "2026-05-29"
   status_counts:
-    planned: 241
+    planned: 231
     in_progress: 0
-    implemented: 44
+    implemented: 54
     deprecated: 0
 
 phases:
@@ -81,9 +81,9 @@ tools:
   studio-batch-mcp-wrapper: { phase: 2, category: studio, priority: med, status: planned }
   studio-album-zip-builder: { phase: 2, category: studio, priority: med, status: implemented }
   studio-id3-tag-batch: { phase: 2, category: studio, priority: med, status: implemented }
-  studio-audio-highlight-30s: { phase: 2, category: studio, priority: med, status: planned }
+  studio-audio-highlight-30s: { phase: 2, category: studio, priority: med, status: implemented }
   studio-loudness-report: { phase: 2, category: studio, priority: med, status: implemented }
-  studio-midi-chord-extract: { phase: 2, category: studio, priority: med, status: planned }
+  studio-midi-chord-extract: { phase: 2, category: studio, priority: med, status: implemented }
   studio-midi-voice-leading: { phase: 2, category: studio, priority: med, status: planned }
   studio-chord-dict-sync: { phase: 2, category: studio, priority: med, status: planned }
   studio-bach-chorale-verify: { phase: 2, category: studio, priority: med, status: planned }
@@ -115,23 +115,23 @@ tools:
   visual-vertical-crop-smart: { phase: 3, category: visual, priority: high, status: implemented }
   visual-ogp-generator: { phase: 3, category: visual, priority: high, status: implemented }
   visual-ffprobe-verify: { phase: 3, category: visual, priority: high, status: implemented }
-  visual-webm-mp4-fallback: { phase: 3, category: visual, priority: med, status: planned }
+  visual-webm-mp4-fallback: { phase: 3, category: visual, priority: med, status: implemented }
   visual-mediarecorder-seg-concat: { phase: 3, category: visual, priority: med, status: planned }
   visual-canvas-png-seq: { phase: 3, category: visual, priority: med, status: planned }
   visual-three-js-mp4-export: { phase: 3, category: visual, priority: med, status: planned }
-  visual-platform-versions: { phase: 3, category: visual, priority: med, status: planned }
-  visual-hls-segment: { phase: 3, category: visual, priority: med, status: planned }
-  visual-lrc-srt-json: { phase: 3, category: visual, priority: med, status: planned }
-  visual-whisper-srt: { phase: 3, category: visual, priority: med, status: planned }
+  visual-platform-versions: { phase: 3, category: visual, priority: med, status: implemented }
+  visual-hls-segment: { phase: 3, category: visual, priority: med, status: implemented }
+  visual-lrc-srt-json: { phase: 3, category: visual, priority: med, status: implemented }
+  visual-whisper-srt: { phase: 3, category: visual, priority: med, status: implemented }
   visual-karaoke-preset: { phase: 3, category: visual, priority: med, status: planned }
   visual-mvtool-gui: { phase: 3, category: visual, priority: med, status: planned }
   visual-lut-color-grading: { phase: 3, category: visual, priority: med, status: planned }
-  visual-loudness-report: { phase: 3, category: visual, priority: med, status: planned }
+  visual-loudness-report: { phase: 3, category: visual, priority: med, status: implemented }
   visual-shader-preset-catalog: { phase: 3, category: visual, priority: med, status: planned }
-  visual-recording-fps-verify: { phase: 3, category: visual, priority: med, status: planned }
+  visual-recording-fps-verify: { phase: 3, category: visual, priority: med, status: implemented }
   visual-canvas-raster-pipeline: { phase: 3, category: visual, priority: low, status: planned }
   visual-polyglot-markup: { phase: 3, category: visual, priority: low, status: planned }
-  visual-flag-svg-generator: { phase: 3, category: visual, priority: low, status: planned }
+  visual-flag-svg-generator: { phase: 3, category: visual, priority: low, status: implemented }
   visual-hls-streaming-preview: { phase: 3, category: visual, priority: low, status: planned }
   visual-color-space-verify: { phase: 3, category: visual, priority: low, status: planned }
   visual-stabilization: { phase: 3, category: visual, priority: low, status: planned }
