@@ -9,9 +9,9 @@ meta:
   phase_0_done: true
   last_updated: "2026-05-29"
   status_counts:
-    planned: 261
+    planned: 251
     in_progress: 0
-    implemented: 24
+    implemented: 34
     deprecated: 0
 
 phases:
@@ -46,7 +46,7 @@ tools:
 
   # === audit ===
   audit-zip-3axis: { phase: 1, category: audit, priority: high, status: implemented }
-  audit-personal-info-scan: { phase: 5, category: audit, priority: high, status: planned }
+  audit-personal-info-scan: { phase: 5, category: audit, priority: high, status: implemented }
   audit-license-cross-check: { phase: 5, category: audit, priority: med, status: planned }
   audit-old-philtz-residue: { phase: 5, category: audit, priority: med, status: planned }
   audit-id3-completeness: { phase: 5, category: audit, priority: med, status: planned }
@@ -54,8 +54,8 @@ tools:
 
   # === release ===
   release-bump-version: { phase: 1, category: release, priority: high, status: implemented }
-  release-changelog-prepend: { phase: 2, category: release, priority: med, status: planned }
-  release-old-zip-archive: { phase: 2, category: release, priority: med, status: planned }
+  release-changelog-prepend: { phase: 2, category: release, priority: med, status: implemented }
+  release-old-zip-archive: { phase: 2, category: release, priority: med, status: implemented }
   release-album-zip-builder: { phase: 2, category: release, priority: med, status: planned }
   release-master-flow: { phase: 4, category: release, priority: high, status: planned }
 
@@ -108,12 +108,12 @@ tools:
   visual-chrome-app-launch: { phase: 1, category: visual, priority: high, status: implemented }
   visual-concat-fade: { phase: 3, category: visual, priority: high, status: implemented }
   visual-crf-auto: { phase: 3, category: visual, priority: high, status: implemented }
-  visual-overlay-batch: { phase: 3, category: visual, priority: high, status: planned }
-  visual-obs-remote: { phase: 3, category: visual, priority: high, status: planned }
+  visual-overlay-batch: { phase: 3, category: visual, priority: high, status: implemented }
+  visual-obs-remote: { phase: 3, category: visual, priority: high, status: implemented }
   visual-thumbnail-multi-aspect: { phase: 3, category: visual, priority: high, status: implemented }
   visual-mvtool-autopilot: { phase: 3, category: visual, priority: high, status: planned }
   visual-vertical-crop-smart: { phase: 3, category: visual, priority: high, status: implemented }
-  visual-ogp-generator: { phase: 3, category: visual, priority: high, status: planned }
+  visual-ogp-generator: { phase: 3, category: visual, priority: high, status: implemented }
   visual-ffprobe-verify: { phase: 3, category: visual, priority: high, status: implemented }
   visual-webm-mp4-fallback: { phase: 3, category: visual, priority: med, status: planned }
   visual-mediarecorder-seg-concat: { phase: 3, category: visual, priority: med, status: planned }
@@ -141,7 +141,7 @@ tools:
   sale-channel-sync: { phase: 4, category: sale, priority: high, status: planned }
   sale-coupon-bulk-mail: { phase: 4, category: sale, priority: med, status: planned }
   sale-philtz-redirect-manager: { phase: 4, category: sale, priority: med, status: planned }
-  sale-revenue-aggregate: { phase: 4, category: sale, priority: high, status: planned }
+  sale-revenue-aggregate: { phase: 4, category: sale, priority: high, status: implemented }
   sale-fee-simulator: { phase: 4, category: sale, priority: med, status: planned }
   sale-tax-doc-generator: { phase: 4, category: sale, priority: med, status: planned }
   sale-confirm-mail-dashboard: { phase: 4, category: sale, priority: high, status: planned }
@@ -190,7 +190,7 @@ tools:
   game-numbloom-voice-consistency: { phase: 4, category: game, priority: med, status: planned }
   game-numbloom-hand-layout-lock: { phase: 4, category: game, priority: low, status: planned }
   game-numbloom-idiograph-map: { phase: 4, category: game, priority: high, status: planned }
-  game-idiograph-name-generator: { phase: 4, category: game, priority: high, status: planned }
+  game-idiograph-name-generator: { phase: 4, category: game, priority: high, status: implemented }
   game-idiograph-theme-generator: { phase: 4, category: game, priority: med, status: planned }
   game-idiograph-axis-builder: { phase: 4, category: game, priority: med, status: planned }
   game-kagebu-role-prefix-gen: { phase: 4, category: game, priority: high, status: planned }
@@ -211,8 +211,8 @@ tools:
   infra-supabase-webhook-monitor: { phase: 4, category: infra, priority: high, status: planned }
   infra-supabase-schema-migrate: { phase: 4, category: infra, priority: med, status: planned }
   infra-stripe-security-audit: { phase: 4, category: infra, priority: med, status: planned }
-  infra-credentials-vault: { phase: 4, category: infra, priority: high, status: planned }
-  infra-totp-keychain: { phase: 4, category: infra, priority: high, status: planned }
+  infra-credentials-vault: { phase: 4, category: infra, priority: high, status: implemented }
+  infra-totp-keychain: { phase: 4, category: infra, priority: high, status: implemented }
   infra-cookie-expiry-monitor: { phase: 4, category: infra, priority: med, status: planned }
 
   # === ops (20) ===
