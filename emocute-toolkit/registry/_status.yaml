@@ -9,9 +9,9 @@ meta:
   phase_0_done: true
   last_updated: "2026-05-29"
   status_counts:
-    planned: 231
+    planned: 221
     in_progress: 0
-    implemented: 54
+    implemented: 64
     deprecated: 0
 
 phases:
@@ -138,16 +138,16 @@ tools:
   visual-deinterlace-auto: { phase: 3, category: visual, priority: low, status: planned }
 
   # === sale (25) ===
-  sale-channel-sync: { phase: 4, category: sale, priority: high, status: planned }
+  sale-channel-sync: { phase: 4, category: sale, priority: high, status: implemented }
   sale-coupon-bulk-mail: { phase: 4, category: sale, priority: med, status: planned }
   sale-philtz-redirect-manager: { phase: 4, category: sale, priority: med, status: planned }
   sale-revenue-aggregate: { phase: 4, category: sale, priority: high, status: implemented }
   sale-fee-simulator: { phase: 4, category: sale, priority: med, status: planned }
   sale-tax-doc-generator: { phase: 4, category: sale, priority: med, status: planned }
-  sale-confirm-mail-dashboard: { phase: 4, category: sale, priority: high, status: planned }
+  sale-confirm-mail-dashboard: { phase: 4, category: sale, priority: high, status: implemented }
   sale-mail-template-bilingual: { phase: 4, category: sale, priority: med, status: planned }
   sale-audience-segmentation: { phase: 4, category: sale, priority: med, status: planned }
-  sale-mail-retry-manager: { phase: 4, category: sale, priority: high, status: planned }
+  sale-mail-retry-manager: { phase: 4, category: sale, priority: high, status: implemented }
   sale-x-post-bilingual: { phase: 4, category: sale, priority: med, status: planned }
   sale-utm-shortener: { phase: 4, category: sale, priority: med, status: planned }
   sale-post-replicator: { phase: 4, category: sale, priority: low, status: planned }
@@ -189,13 +189,13 @@ tools:
   game-numbloom-disc-events: { phase: 4, category: game, priority: med, status: planned }
   game-numbloom-voice-consistency: { phase: 4, category: game, priority: med, status: planned }
   game-numbloom-hand-layout-lock: { phase: 4, category: game, priority: low, status: planned }
-  game-numbloom-idiograph-map: { phase: 4, category: game, priority: high, status: planned }
+  game-numbloom-idiograph-map: { phase: 4, category: game, priority: high, status: implemented }
   game-idiograph-name-generator: { phase: 4, category: game, priority: high, status: implemented }
   game-idiograph-theme-generator: { phase: 4, category: game, priority: med, status: planned }
   game-idiograph-axis-builder: { phase: 4, category: game, priority: med, status: planned }
-  game-kagebu-role-prefix-gen: { phase: 4, category: game, priority: high, status: planned }
+  game-kagebu-role-prefix-gen: { phase: 4, category: game, priority: high, status: implemented }
   game-kagebu-zip-builder: { phase: 4, category: game, priority: high, status: planned }
-  game-persona-cross-checker: { phase: 4, category: game, priority: high, status: planned }
+  game-persona-cross-checker: { phase: 4, category: game, priority: high, status: implemented }
   game-roleplay-product-page: { phase: 4, category: game, priority: med, status: planned }
   game-persona-glossary: { phase: 4, category: game, priority: med, status: planned }
   game-harmonyscope-cargo-runner: { phase: 4, category: game, priority: med, status: planned }
@@ -205,10 +205,10 @@ tools:
   game-sketches-index: { phase: 4, category: game, priority: med, status: planned }
 
   # === infra (9) ===
-  infra-r2-waf-fallback: { phase: 4, category: infra, priority: high, status: planned }
+  infra-r2-waf-fallback: { phase: 4, category: infra, priority: high, status: implemented }
   infra-r2-cost-estimator: { phase: 4, category: infra, priority: med, status: planned }
   infra-cf-dns-ssl-monitor: { phase: 4, category: infra, priority: med, status: planned }
-  infra-supabase-webhook-monitor: { phase: 4, category: infra, priority: high, status: planned }
+  infra-supabase-webhook-monitor: { phase: 4, category: infra, priority: high, status: implemented }
   infra-supabase-schema-migrate: { phase: 4, category: infra, priority: med, status: planned }
   infra-stripe-security-audit: { phase: 4, category: infra, priority: med, status: planned }
   infra-credentials-vault: { phase: 4, category: infra, priority: high, status: implemented }
@@ -233,7 +233,7 @@ tools:
   ops-task-monthly-archive: { phase: 5, category: ops, priority: med, status: planned }
   ops-aiff-context-notify: { phase: 5, category: ops, priority: med, status: planned }
   ops-idle-alert: { phase: 5, category: ops, priority: med, status: planned }
-  ops-priority-notify: { phase: 5, category: ops, priority: high, status: planned }
+  ops-priority-notify: { phase: 5, category: ops, priority: high, status: implemented }
   ops-mcp-usage-log: { phase: 5, category: ops, priority: med, status: planned }
   ops-mcp-scanner-extend: { phase: 5, category: ops, priority: low, status: planned }
   ops-local-source-cache: { phase: 5, category: ops, priority: low, status: planned }
@@ -258,7 +258,7 @@ tools:
   env-vst3-cross-platform-validator: { phase: 5, category: env, priority: low, status: planned }
 
   # === internal (6) ===
-  internal-dashboard-html: { phase: 0, category: internal, priority: high, status: planned }
+  internal-dashboard-html: { phase: 0, category: internal, priority: high, status: implemented }
   internal-tool-template-gen: { phase: 0, category: internal, priority: high, status: planned }
   internal-registry-bulk-import: { phase: 0, category: internal, priority: med, status: planned }
   internal-changelog-gen: { phase: 5, category: internal, priority: low, status: planned }
