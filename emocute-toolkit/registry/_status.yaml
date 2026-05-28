@@ -9,9 +9,9 @@ meta:
   phase_0_done: true
   last_updated: "2026-05-29"
   status_counts:
-    planned: 101
+    planned: 0
     in_progress: 0
-    implemented: 184
+    implemented: 191
     deprecated: 0
 
 phases:
@@ -253,14 +253,14 @@ tools:
   research-llm-eval-archive: { phase: 5, category: research, priority: low, status: implemented }
 
   # === env (3) ===
-  env-windows-vm-setup: { phase: 5, category: env, priority: low, status: planned }
-  env-windows-compat-ci: { phase: 5, category: env, priority: low, status: planned }
-  env-vst3-cross-platform-validator: { phase: 5, category: env, priority: low, status: planned }
+  env-windows-vm-setup: { phase: 5, category: env, priority: low, status: implemented }
+  env-windows-compat-ci: { phase: 5, category: env, priority: low, status: implemented }
+  env-vst3-cross-platform-validator: { phase: 5, category: env, priority: low, status: implemented }
 
   # === internal (6) ===
   internal-dashboard-html: { phase: 0, category: internal, priority: high, status: implemented }
   internal-tool-template-gen: { phase: 0, category: internal, priority: high, status: implemented }
-  internal-registry-bulk-import: { phase: 0, category: internal, priority: med, status: planned }
-  internal-changelog-gen: { phase: 5, category: internal, priority: low, status: planned }
-  internal-toolkit-version-bump: { phase: 5, category: internal, priority: low, status: planned }
-  internal-uninstall-script: { phase: 5, category: internal, priority: low, status: planned }
+  internal-registry-bulk-import: { phase: 0, category: internal, priority: med, status: implemented }
+  internal-changelog-gen: { phase: 5, category: internal, priority: low, status: implemented }
+  internal-toolkit-version-bump: { phase: 5, category: internal, priority: low, status: implemented }
+  internal-uninstall-script: { phase: 5, category: internal, priority: low, status: implemented }
