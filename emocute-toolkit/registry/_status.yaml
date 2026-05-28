@@ -9,9 +9,9 @@ meta:
   phase_0_done: true
   last_updated: "2026-05-29"
   status_counts:
-    planned: 171
+    planned: 161
     in_progress: 0
-    implemented: 114
+    implemented: 124
     deprecated: 0
 
 phases:
@@ -154,16 +154,16 @@ tools:
   sale-calendar-auto-post: { phase: 4, category: sale, priority: med, status: implemented }
   sale-tunecore-meta-sync: { phase: 4, category: sale, priority: med, status: implemented }
   sale-dsp-reach-check: { phase: 4, category: sale, priority: med, status: implemented }
-  sale-spotify-playlist-pitch: { phase: 4, category: sale, priority: med, status: planned }
-  sale-takedown-uri-list: { phase: 4, category: sale, priority: med, status: planned }
-  sale-landr-contract-reminder: { phase: 4, category: sale, priority: low, status: planned }
-  sale-cover-multi-size: { phase: 4, category: sale, priority: med, status: planned }
-  sale-en-native-score: { phase: 4, category: sale, priority: med, status: planned }
-  sale-interview-template: { phase: 4, category: sale, priority: low, status: planned }
-  sale-interview-diff-tracker: { phase: 4, category: sale, priority: low, status: planned }
-  sale-press-news-collect: { phase: 4, category: sale, priority: med, status: planned }
-  sale-booth-coupon-workaround: { phase: 5, category: sale, priority: med, status: planned }
-  sale-stripe-meta-builder: { phase: 5, category: sale, priority: med, status: planned }
+  sale-spotify-playlist-pitch: { phase: 4, category: sale, priority: med, status: implemented }
+  sale-takedown-uri-list: { phase: 4, category: sale, priority: med, status: implemented }
+  sale-landr-contract-reminder: { phase: 4, category: sale, priority: low, status: implemented }
+  sale-cover-multi-size: { phase: 4, category: sale, priority: med, status: implemented }
+  sale-en-native-score: { phase: 4, category: sale, priority: med, status: implemented }
+  sale-interview-template: { phase: 4, category: sale, priority: low, status: implemented }
+  sale-interview-diff-tracker: { phase: 4, category: sale, priority: low, status: implemented }
+  sale-press-news-collect: { phase: 4, category: sale, priority: med, status: implemented }
+  sale-booth-coupon-workaround: { phase: 5, category: sale, priority: med, status: implemented }
+  sale-stripe-meta-builder: { phase: 5, category: sale, priority: med, status: implemented }
   sale-confirm-mail-flow-test: { phase: 5, category: sale, priority: med, status: planned }
 
   # === site (10) ===
