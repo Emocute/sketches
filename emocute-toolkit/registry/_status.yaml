@@ -9,9 +9,9 @@ meta:
   phase_0_done: true
   last_updated: "2026-05-29"
   status_counts:
-    planned: 211
+    planned: 201
     in_progress: 0
-    implemented: 74
+    implemented: 84
     deprecated: 0
 
 phases:
@@ -57,7 +57,7 @@ tools:
   release-changelog-prepend: { phase: 2, category: release, priority: med, status: implemented }
   release-old-zip-archive: { phase: 2, category: release, priority: med, status: implemented }
   release-album-zip-builder: { phase: 2, category: release, priority: med, status: planned }
-  release-master-flow: { phase: 4, category: release, priority: high, status: planned }
+  release-master-flow: { phase: 4, category: release, priority: high, status: implemented }
 
   # === price ===
   price-cross-check: { phase: 1, category: price, priority: high, status: implemented }
@@ -71,22 +71,22 @@ tools:
   mem-backlink-index: { phase: 5, category: mem, priority: low, status: implemented }
 
   # === studio (30) ===
-  studio-suno-verify-loop: { phase: 2, category: studio, priority: high, status: planned }
-  studio-suno-render-hook: { phase: 2, category: studio, priority: high, status: planned }
-  studio-landr-parallel: { phase: 2, category: studio, priority: high, status: planned }
-  studio-stretch-versions: { phase: 2, category: studio, priority: high, status: planned }
+  studio-suno-verify-loop: { phase: 2, category: studio, priority: high, status: implemented }
+  studio-suno-render-hook: { phase: 2, category: studio, priority: high, status: implemented }
+  studio-landr-parallel: { phase: 2, category: studio, priority: high, status: implemented }
+  studio-stretch-versions: { phase: 2, category: studio, priority: high, status: implemented }
   studio-banned-artist-scan: { phase: 2, category: studio, priority: high, status: implemented }
   studio-suno-filter-bypass: { phase: 2, category: studio, priority: med, status: planned }
   studio-suno-length-verify: { phase: 2, category: studio, priority: med, status: implemented }
-  studio-batch-mcp-wrapper: { phase: 2, category: studio, priority: med, status: planned }
+  studio-batch-mcp-wrapper: { phase: 2, category: studio, priority: med, status: implemented }
   studio-album-zip-builder: { phase: 2, category: studio, priority: med, status: implemented }
   studio-id3-tag-batch: { phase: 2, category: studio, priority: med, status: implemented }
   studio-audio-highlight-30s: { phase: 2, category: studio, priority: med, status: implemented }
   studio-loudness-report: { phase: 2, category: studio, priority: med, status: implemented }
   studio-midi-chord-extract: { phase: 2, category: studio, priority: med, status: implemented }
-  studio-midi-voice-leading: { phase: 2, category: studio, priority: med, status: planned }
-  studio-chord-dict-sync: { phase: 2, category: studio, priority: med, status: planned }
-  studio-bach-chorale-verify: { phase: 2, category: studio, priority: med, status: planned }
+  studio-midi-voice-leading: { phase: 2, category: studio, priority: med, status: implemented }
+  studio-chord-dict-sync: { phase: 2, category: studio, priority: med, status: implemented }
+  studio-bach-chorale-verify: { phase: 2, category: studio, priority: med, status: implemented }
   studio-sample-pack-builder: { phase: 2, category: studio, priority: med, status: implemented }
   studio-audio-fingerprint-dedupe: { phase: 2, category: studio, priority: med, status: implemented }
   studio-melody-chord-recommend: { phase: 2, category: studio, priority: med, status: planned }
@@ -259,7 +259,7 @@ tools:
 
   # === internal (6) ===
   internal-dashboard-html: { phase: 0, category: internal, priority: high, status: implemented }
-  internal-tool-template-gen: { phase: 0, category: internal, priority: high, status: planned }
+  internal-tool-template-gen: { phase: 0, category: internal, priority: high, status: implemented }
   internal-registry-bulk-import: { phase: 0, category: internal, priority: med, status: planned }
   internal-changelog-gen: { phase: 5, category: internal, priority: low, status: planned }
   internal-toolkit-version-bump: { phase: 5, category: internal, priority: low, status: planned }
