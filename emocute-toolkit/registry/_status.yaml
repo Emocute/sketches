@@ -9,9 +9,9 @@ meta:
   phase_0_done: true
   last_updated: "2026-05-29"
   status_counts:
-    planned: 221
+    planned: 211
     in_progress: 0
-    implemented: 64
+    implemented: 74
     deprecated: 0
 
 phases:
@@ -90,13 +90,13 @@ tools:
   studio-sample-pack-builder: { phase: 2, category: studio, priority: med, status: implemented }
   studio-audio-fingerprint-dedupe: { phase: 2, category: studio, priority: med, status: implemented }
   studio-melody-chord-recommend: { phase: 2, category: studio, priority: med, status: planned }
-  studio-credit-tracker: { phase: 2, category: studio, priority: med, status: planned }
-  studio-changelog-from-suno: { phase: 2, category: studio, priority: med, status: planned }
-  studio-fft-spectrum: { phase: 2, category: studio, priority: low, status: planned }
+  studio-credit-tracker: { phase: 2, category: studio, priority: med, status: implemented }
+  studio-changelog-from-suno: { phase: 2, category: studio, priority: med, status: implemented }
+  studio-fft-spectrum: { phase: 2, category: studio, priority: low, status: implemented }
   studio-melody-contour: { phase: 2, category: studio, priority: low, status: planned }
   studio-humanize-midi: { phase: 2, category: studio, priority: low, status: planned }
-  studio-lyric-meter: { phase: 2, category: studio, priority: low, status: planned }
-  studio-arrangement-density: { phase: 2, category: studio, priority: low, status: planned }
+  studio-lyric-meter: { phase: 2, category: studio, priority: low, status: implemented }
+  studio-arrangement-density: { phase: 2, category: studio, priority: low, status: implemented }
   studio-suno-style-catalog: { phase: 2, category: studio, priority: low, status: planned }
   studio-groove-half-auto-verify: { phase: 2, category: studio, priority: low, status: planned }
   studio-suno-prompt-tuner: { phase: 2, category: studio, priority: low, status: planned }
@@ -111,21 +111,21 @@ tools:
   visual-overlay-batch: { phase: 3, category: visual, priority: high, status: implemented }
   visual-obs-remote: { phase: 3, category: visual, priority: high, status: implemented }
   visual-thumbnail-multi-aspect: { phase: 3, category: visual, priority: high, status: implemented }
-  visual-mvtool-autopilot: { phase: 3, category: visual, priority: high, status: planned }
+  visual-mvtool-autopilot: { phase: 3, category: visual, priority: high, status: implemented }
   visual-vertical-crop-smart: { phase: 3, category: visual, priority: high, status: implemented }
   visual-ogp-generator: { phase: 3, category: visual, priority: high, status: implemented }
   visual-ffprobe-verify: { phase: 3, category: visual, priority: high, status: implemented }
   visual-webm-mp4-fallback: { phase: 3, category: visual, priority: med, status: implemented }
-  visual-mediarecorder-seg-concat: { phase: 3, category: visual, priority: med, status: planned }
-  visual-canvas-png-seq: { phase: 3, category: visual, priority: med, status: planned }
+  visual-mediarecorder-seg-concat: { phase: 3, category: visual, priority: med, status: implemented }
+  visual-canvas-png-seq: { phase: 3, category: visual, priority: med, status: implemented }
   visual-three-js-mp4-export: { phase: 3, category: visual, priority: med, status: planned }
   visual-platform-versions: { phase: 3, category: visual, priority: med, status: implemented }
   visual-hls-segment: { phase: 3, category: visual, priority: med, status: implemented }
   visual-lrc-srt-json: { phase: 3, category: visual, priority: med, status: implemented }
   visual-whisper-srt: { phase: 3, category: visual, priority: med, status: implemented }
-  visual-karaoke-preset: { phase: 3, category: visual, priority: med, status: planned }
+  visual-karaoke-preset: { phase: 3, category: visual, priority: med, status: implemented }
   visual-mvtool-gui: { phase: 3, category: visual, priority: med, status: planned }
-  visual-lut-color-grading: { phase: 3, category: visual, priority: med, status: planned }
+  visual-lut-color-grading: { phase: 3, category: visual, priority: med, status: implemented }
   visual-loudness-report: { phase: 3, category: visual, priority: med, status: implemented }
   visual-shader-preset-catalog: { phase: 3, category: visual, priority: med, status: planned }
   visual-recording-fps-verify: { phase: 3, category: visual, priority: med, status: implemented }
