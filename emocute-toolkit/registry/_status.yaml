@@ -9,9 +9,9 @@ meta:
   phase_0_done: true
   last_updated: "2026-05-29"
   status_counts:
-    planned: 251
+    planned: 241
     in_progress: 0
-    implemented: 34
+    implemented: 44
     deprecated: 0
 
 phases:
@@ -47,10 +47,10 @@ tools:
   # === audit ===
   audit-zip-3axis: { phase: 1, category: audit, priority: high, status: implemented }
   audit-personal-info-scan: { phase: 5, category: audit, priority: high, status: implemented }
-  audit-license-cross-check: { phase: 5, category: audit, priority: med, status: planned }
-  audit-old-philtz-residue: { phase: 5, category: audit, priority: med, status: planned }
-  audit-id3-completeness: { phase: 5, category: audit, priority: med, status: planned }
-  audit-style-guide: { phase: 4, category: audit, priority: med, status: planned }
+  audit-license-cross-check: { phase: 5, category: audit, priority: med, status: implemented }
+  audit-old-philtz-residue: { phase: 5, category: audit, priority: med, status: implemented }
+  audit-id3-completeness: { phase: 5, category: audit, priority: med, status: implemented }
+  audit-style-guide: { phase: 4, category: audit, priority: med, status: implemented }
 
   # === release ===
   release-bump-version: { phase: 1, category: release, priority: high, status: implemented }
@@ -61,14 +61,14 @@ tools:
 
   # === price ===
   price-cross-check: { phase: 1, category: price, priority: high, status: implemented }
-  price-fee-simulator: { phase: 4, category: price, priority: med, status: planned }
+  price-fee-simulator: { phase: 4, category: price, priority: med, status: implemented }
 
   # === mem ===
   mem-auto-split: { phase: 1, category: mem, priority: high, status: implemented }
   mem-index-verify: { phase: 1, category: mem, priority: high, status: implemented }
-  mem-stale-detect: { phase: 5, category: mem, priority: med, status: planned }
-  mem-duplicate-detect: { phase: 5, category: mem, priority: med, status: planned }
-  mem-backlink-index: { phase: 5, category: mem, priority: low, status: planned }
+  mem-stale-detect: { phase: 5, category: mem, priority: med, status: implemented }
+  mem-duplicate-detect: { phase: 5, category: mem, priority: med, status: implemented }
+  mem-backlink-index: { phase: 5, category: mem, priority: low, status: implemented }
 
   # === studio (30) ===
   studio-suno-verify-loop: { phase: 2, category: studio, priority: high, status: planned }
@@ -182,10 +182,10 @@ tools:
 
   # === game (21) ===
   game-mbti-banned-words: { phase: 1, category: game, priority: high, status: implemented }
-  game-numbloom-persona-filter: { phase: 4, category: game, priority: high, status: planned }
+  game-numbloom-persona-filter: { phase: 4, category: game, priority: high, status: implemented }
   game-numbloom-poc-validate: { phase: 4, category: game, priority: med, status: planned }
   game-numbloom-card-art-score: { phase: 4, category: game, priority: med, status: planned }
-  game-numbloom-banned-words: { phase: 4, category: game, priority: high, status: planned }
+  game-numbloom-banned-words: { phase: 4, category: game, priority: high, status: implemented }
   game-numbloom-disc-events: { phase: 4, category: game, priority: med, status: planned }
   game-numbloom-voice-consistency: { phase: 4, category: game, priority: med, status: planned }
   game-numbloom-hand-layout-lock: { phase: 4, category: game, priority: low, status: planned }
