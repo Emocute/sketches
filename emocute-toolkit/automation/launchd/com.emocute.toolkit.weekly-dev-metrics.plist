@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 週次 Sketches repo の dev metrics 集計。日曜 11:00。 -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTD/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.emocute.toolkit.weekly-dev-metrics</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/emocute/Downloads/Sketches/emocute-toolkit/bin/emocute</string>
+    <string>research</string>
+    <string>dev-metrics</string>
+    <string>--repo</string>
+    <string>/Users/emocute/Downloads/Sketches</string>
+    <string>--days</string>
+    <string>7</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key>
+    <integer>0</integer>
+    <key>Hour</key>
+    <integer>11</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/emocute/Downloads/Sketches/emocute-toolkit/automation/logs/weekly-dev-metrics.out</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/emocute/Downloads/Sketches/emocute-toolkit/automation/logs/weekly-dev-metrics.err</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

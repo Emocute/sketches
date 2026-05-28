@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 日次 全 PJ TODO.md 未完カウント (14 日超 stale を warn)。10:00。 -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTD/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.emocute.toolkit.daily-incomplete-task-carry</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/emocute/Downloads/Sketches/emocute-toolkit/bin/emocute</string>
+    <string>research</string>
+    <string>incomplete-task-carry</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>10</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/emocute/Downloads/Sketches/emocute-toolkit/automation/logs/daily-incomplete-task-carry.out</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/emocute/Downloads/Sketches/emocute-toolkit/automation/logs/daily-incomplete-task-carry.err</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

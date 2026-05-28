@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 週次 memory stale 検出 (60 日未参照を warn)。月曜 07:00。 -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTD/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.emocute.toolkit.weekly-mem-stale</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/emocute/Downloads/Sketches/emocute-toolkit/bin/emocute</string>
+    <string>mem</string>
+    <string>stale-detect</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key>
+    <integer>1</integer>
+    <key>Hour</key>
+    <integer>7</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/emocute/Downloads/Sketches/emocute-toolkit/automation/logs/weekly-mem-stale.out</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/emocute/Downloads/Sketches/emocute-toolkit/automation/logs/weekly-mem-stale.err</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

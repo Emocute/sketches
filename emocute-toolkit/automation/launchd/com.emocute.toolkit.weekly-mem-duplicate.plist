@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 週次 memory 重複検出。月曜 07:15。 -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTD/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.emocute.toolkit.weekly-mem-duplicate</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/emocute/Downloads/Sketches/emocute-toolkit/bin/emocute</string>
+    <string>mem</string>
+    <string>duplicate-detect</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Weekday</key>
+    <integer>1</integer>
+    <key>Hour</key>
+    <integer>7</integer>
+    <key>Minute</key>
+    <integer>15</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/emocute/Downloads/Sketches/emocute-toolkit/automation/logs/weekly-mem-duplicate.out</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/emocute/Downloads/Sketches/emocute-toolkit/automation/logs/weekly-mem-duplicate.err</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>
