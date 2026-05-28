@@ -1,0 +1,30 @@
+id: visual-scale-pad-even
+name: 奇数解像度 → 偶数化（MediaRecorder 対策）
+category: visual
+phase: 1
+priority: high
+status: planned
+difficulty: easy
+value: med
+
+description: |
+  MediaRecorder の WebM/MP4 が 991×1762 のような奇数解像度を吐く → libx264 で
+  落ちる問題を回避。trunc(iw/2)*2 / trunc(ih/2)*2 への自動 scale を 1 コマンド化。
+
+cli: emocute visual scale-pad-even <input> [<output>] [--crf 18] [--apply]
+
+behavior:
+  steps:
+    - "1. ffprobe で解像度取得"
+    - "2. 既に偶数なら -c copy で再エンコ回避"
+    - "3. 奇数なら ffmpeg -vf 'scale=trunc(iw/2)*2:trunc(ih/2)*2' -c:v libx264 -crf <> -c:a copy"
+    - "4. 出力検証"
+
+dependencies:
+  binary:
+    - ffmpeg
+    - ffprobe
+
+related:
+  - visual-silence-trim
+  - visual-ffprobe-verify

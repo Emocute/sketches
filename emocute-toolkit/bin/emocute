@@ -1,0 +1,277 @@
+#!/usr/bin/env python3
+"""
+emocute — Emocute モノレポ統一 CLI
+
+Usage:
+    emocute <category> <action> [args...]
+    emocute --help
+    emocute --list
+    emocute tool <id> status
+    emocute tool <id> update <field>=<value>
+    emocute automation install|uninstall|status
+    emocute dashboard open
+    emocute hook <phase> [args...]
+
+詳細は PLAN.md / ARCHITECTURE.md / 各 registry/<cat>/<id>.yaml を参照。
+"""
+import argparse
+import importlib.util
+import json
+import os
+import sys
+from pathlib import Path
+
+TOOLKIT_ROOT = Path(__file__).resolve().parent.parent
+REGISTRY_DIR = TOOLKIT_ROOT / "registry"
+TOOLS_DIR = TOOLKIT_ROOT / "tools"
+STATUS_FILE = REGISTRY_DIR / "_status.yaml"
+
+
+def load_yaml(path: Path):
+    try:
+        import yaml
+    except ImportError:
+        print("pyyaml not installed. Run: uv pip install pyyaml", file=sys.stderr)
+        sys.exit(2)
+    with path.open() as f:
+        return yaml.safe_load(f)
+
+
+def load_status():
+    if not STATUS_FILE.exists():
+        print(f"status file missing: {STATUS_FILE}", file=sys.stderr)
+        sys.exit(2)
+    return load_yaml(STATUS_FILE)
+
+
+def list_tools(filter_category=None, filter_status=None, filter_phase=None):
+    status = load_status()
+    out = []
+    for tid, meta in (status.get("tools") or {}).items():
+        if filter_category and meta.get("category") != filter_category:
+            continue
+        if filter_status and meta.get("status") != filter_status:
+            continue
+        if filter_phase is not None and meta.get("phase") != filter_phase:
+            continue
+        out.append((tid, meta))
+    return out
+
+
+def cmd_list(args):
+    rows = list_tools(
+        filter_category=args.category,
+        filter_status=args.status,
+        filter_phase=args.phase,
+    )
+    if args.json:
+        print(json.dumps([{"id": t, **m} for t, m in rows], ensure_ascii=False, indent=2))
+        return 0
+    if not rows:
+        print("(no tools match)")
+        return 0
+    for tid, meta in rows:
+        flags = f"[{meta.get('status','?'):11}] phase={meta.get('phase','?')} pri={meta.get('priority','?')}"
+        print(f"{flags}  {tid}")
+    print(f"\n total: {len(rows)}")
+    return 0
+
+
+def cmd_tool_status(args):
+    status = load_status()
+    tool = (status.get("tools") or {}).get(args.id)
+    if not tool:
+        print(f"unknown tool id: {args.id}", file=sys.stderr)
+        return 2
+    spec_path = REGISTRY_DIR / tool["category"] / f"{args.id}.yaml"
+    print(f"id:       {args.id}")
+    print(f"category: {tool.get('category')}")
+    print(f"phase:    {tool.get('phase')}")
+    print(f"priority: {tool.get('priority')}")
+    print(f"status:   {tool.get('status')}")
+    print(f"spec:     {spec_path}  ({'exists' if spec_path.exists() else 'missing'})")
+    if spec_path.exists() and args.show_spec:
+        print("\n---")
+        print(spec_path.read_text())
+    return 0
+
+
+def cmd_tool_update(args):
+    # 簡易: 安全のため status のみ書換許可
+    if not args.assignment or "=" not in args.assignment:
+        print("usage: emocute tool <id> update <field>=<value>", file=sys.stderr)
+        return 2
+    field, value = args.assignment.split("=", 1)
+    if field not in {"status", "priority"}:
+        print(f"field '{field}' not editable via CLI (allowed: status, priority)", file=sys.stderr)
+        return 2
+    status = load_status()
+    tools = status.get("tools") or {}
+    if args.id not in tools:
+        print(f"unknown tool id: {args.id}", file=sys.stderr)
+        return 2
+    old = tools[args.id].get(field)
+    tools[args.id][field] = value
+    # 書き戻し（PyYAML round-trip は順序崩れるので ruamel が望ましいが暫定）
+    import yaml
+    STATUS_FILE.write_text(yaml.safe_dump(status, allow_unicode=True, sort_keys=False))
+    print(f"updated {args.id}.{field}: {old} -> {value}")
+    return 0
+
+
+def cmd_run(args):
+    """個別ツールを実行: emocute <category> <action> [args...]
+    実装は tools/<category>-<action>/main.py の main(argv) を呼ぶ。
+    """
+    tool_id = f"{args.category}-{args.action}"
+    tool_dir = TOOLS_DIR / tool_id
+    main_py = tool_dir / "main.py"
+    if not main_py.exists():
+        # phase 0 では未実装。registry に spec があれば説明だけ表示
+        spec_path = REGISTRY_DIR / args.category / f"{tool_id}.yaml"
+        if spec_path.exists():
+            spec = load_yaml(spec_path)
+            print(f"[NOT YET IMPLEMENTED] {tool_id}")
+            print(f"spec: {spec_path}")
+            print(f"description: {spec.get('description','')[:200]}")
+            print(f"phase: {spec.get('phase')}  status: {spec.get('status')}")
+            return 0
+        print(f"unknown tool: {tool_id}", file=sys.stderr)
+        return 2
+    # 動的 import して main(argv) 呼出
+    spec = importlib.util.spec_from_file_location(f"tools.{tool_id}.main", main_py)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    if not hasattr(mod, "main"):
+        print(f"tool {tool_id} has no main(argv) function", file=sys.stderr)
+        return 2
+    return mod.main(args.tool_args or [])
+
+
+def cmd_hook(args):
+    """Claude Code hook 統合エンドポイント。
+    現状はログのみ。実装は Phase 1 で。"""
+    # tools/_shared/logger.py を使って log.jsonl に追記
+    log_path = TOOLKIT_ROOT / "automation" / "log.jsonl"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    import datetime as dt
+    rec = {
+        "ts": dt.datetime.now().astimezone().isoformat(timespec="seconds"),
+        "tool": "_toolkit_hook",
+        "phase": args.phase,
+        "pj": args.pj,
+        "uuid": args.uuid,
+        "summary": args.summary,
+    }
+    with log_path.open("a") as f:
+        f.write(json.dumps(rec, ensure_ascii=False) + "\n")
+    return 0
+
+
+def cmd_automation(args):
+    """launchd / git-hook の install / uninstall / status."""
+    auto_dir = TOOLKIT_ROOT / "automation"
+    if args.action == "status":
+        # シンプルに plist / hook 存在を表示
+        plist_dir = auto_dir / "launchd"
+        hook_dir = auto_dir / "git-hooks"
+        print("=== launchd plists ===")
+        if plist_dir.exists():
+            for p in sorted(plist_dir.glob("*.plist")):
+                print(f"  {p.name}")
+        print("=== git hooks ===")
+        if hook_dir.exists():
+            for p in sorted(hook_dir.iterdir()):
+                print(f"  {p.name}")
+        return 0
+    print(f"automation {args.action} not yet implemented (see AUTOMATION.md spec)", file=sys.stderr)
+    return 1
+
+
+def cmd_dashboard(args):
+    html = TOOLKIT_ROOT / "dashboard" / "index.html"
+    if not html.exists():
+        print(f"dashboard html missing: {html}", file=sys.stderr)
+        return 1
+    if args.action == "open":
+        chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        os.execv(chrome, [
+            chrome, "--new-window",
+            f"--user-data-dir={os.environ.get('TMPDIR','/tmp')}/emocute-toolkit-dashboard",
+            f"--app=file://{html.absolute()}",
+        ])
+    return 0
+
+
+def build_parser():
+    p = argparse.ArgumentParser(
+        prog="emocute",
+        description="Emocute モノレポ統一 CLI (toolkit v0.1.0)",
+    )
+    sub = p.add_subparsers(dest="cmd")
+
+    # list
+    pl = sub.add_parser("list", aliases=["ls"], help="ツール一覧")
+    pl.add_argument("--category", "-c")
+    pl.add_argument("--status", "-s")
+    pl.add_argument("--phase", "-p", type=int)
+    pl.add_argument("--json", action="store_true")
+    pl.set_defaults(func=cmd_list)
+
+    # tool <id> ...
+    pt = sub.add_parser("tool", help="個別ツール情報")
+    ptsub = pt.add_subparsers(dest="tool_cmd")
+    pts = ptsub.add_parser("status")
+    pts.add_argument("id")
+    pts.add_argument("--show-spec", action="store_true")
+    pts.set_defaults(func=cmd_tool_status)
+    ptu = ptsub.add_parser("update")
+    ptu.add_argument("id")
+    ptu.add_argument("assignment", help="field=value（status / priority のみ）")
+    ptu.set_defaults(func=cmd_tool_update)
+
+    # hook
+    ph = sub.add_parser("hook", help="Claude Code hook 統合エンドポイント")
+    ph.add_argument("phase", choices=["session-start", "stop", "notification", "user-prompt"])
+    ph.add_argument("--pj")
+    ph.add_argument("--uuid")
+    ph.add_argument("--summary", default="")
+    ph.set_defaults(func=cmd_hook)
+
+    # automation
+    pa = sub.add_parser("automation", help="launchd / git-hook 管理")
+    pa.add_argument("action", choices=["install", "uninstall", "status"])
+    pa.set_defaults(func=cmd_automation)
+
+    # dashboard
+    pd = sub.add_parser("dashboard")
+    pd.add_argument("action", choices=["open"])
+    pd.set_defaults(func=cmd_dashboard)
+
+    # category subcommand (run)
+    # 実際の category は registry から取得
+    status = load_status() if STATUS_FILE.exists() else {"tools": {}}
+    categories = sorted({m.get("category") for m in (status.get("tools") or {}).values() if m.get("category")})
+    for cat in categories:
+        pc = sub.add_parser(cat, help=f"{cat} カテゴリのツール実行")
+        pc.add_argument("action")
+        pc.add_argument("tool_args", nargs=argparse.REMAINDER)
+        pc.set_defaults(func=cmd_run, category=cat)
+
+    return p
+
+
+def main():
+    parser = build_parser()
+    args = parser.parse_args()
+    if not args.cmd:
+        parser.print_help()
+        return 0
+    if hasattr(args, "func"):
+        return args.func(args)
+    parser.print_help()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main() or 0)

@@ -1,0 +1,73 @@
+id: game-mbti-banned-words
+name: Idiograph MBTI 商標侵害語スキャナ
+category: game
+phase: 1
+priority: high
+status: planned
+difficulty: easy
+value: very_high
+
+description: |
+  Idiograph は 16 タイプ性格診断系の販売前提 PJ で、MBTI / Myers-Briggs /
+  16Personalities / NERIS / "Architect" 等の商標を侵害できない（Idiograph/CLAUDE.md L5-9）。
+  販売物・docs・コードから禁止語を grep。
+
+cli: emocute game mbti-banned-words [<path>] [--json] [--notify]
+
+inputs:
+  - path: スキャン対象ルート（既定 Downloads/Idiograph）
+
+banned_words:
+  - MBTI
+  - Myers-Briggs
+  - Myers Briggs
+  - 16Personalities
+  - 16-Personalities
+  - 16 Personalities
+  - NERIS
+  - INFJ
+  - ENTP
+  - INTJ
+  - ISFP
+  - ESFJ
+  - ENFP
+  - ISTJ
+  - ESFP
+  - ISTP
+  - ESTJ
+  - ESTP
+  - ISFJ
+  - INTP
+  - INFP
+  - ENFJ
+  - ENTJ
+  - Architect
+  - Mediator
+  - Defender
+  - "性格分析プログラム®"
+
+allow_lists:
+  - "Big Five"
+  - "気質"
+  - "性格"
+
+behavior:
+  steps:
+    - "1. path 配下の販売対象ファイル（*.md, *.ts, *.tsx, *.json, *.html, *.zip）を walk"
+    - "2. ZIP は展開して中も grep"
+    - "3. banned 語 hit → 該当行表示"
+    - "4. allow_list 語のみなら OK"
+
+outputs:
+  exit_codes:
+    0: clean
+    1: warning（コメント / 内部 docs にのみ hit）
+    2: error（販売物本体にヒット）
+
+triggers:
+  - "git-hook pre-commit（Idiograph PJ）"
+  - "release-master-flow から呼出"
+
+related:
+  - audit-zip-3axis
+  - game-idiograph-name-generator

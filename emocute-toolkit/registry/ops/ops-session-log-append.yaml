@@ -1,0 +1,35 @@
+id: ops-session-log-append
+name: SESSION_LOG.md 自動追記（UUID + start/end）
+category: ops
+phase: 1
+priority: high
+status: planned
+difficulty: easy
+value: med
+
+description: |
+  feedback_session_protocol で定義された手順を CLI 化:
+  セッション開始時に UUID + start + cwd PJ を追記、終了時に summary + commits + push status を追記。
+
+cli:
+  start: emocute ops session-log append --pj <pj> --uuid <uuid> --phase start
+  end:   emocute ops session-log append --pj <pj> --uuid <uuid> --phase end --summary "..."
+
+behavior:
+  start:
+    - "1. <pj>/SESSION_LOG.md を読み込み（無ければ新規作成）"
+    - "2. 末尾に `## <uuid_short> <date>` セクション追加"
+    - "3. 開始時刻 + cwd を記録"
+  end:
+    - "1. 対応する uuid_short セクションを検索"
+    - "2. summary + 該当セッション中の git log + push 状況を追記"
+    - "3. ファイルが大きくなりすぎたら過去分を `_archive/SESSION_LOG_<YYYYMM>.md` に分離（200KB 超）"
+
+triggers:
+  - "Claude SessionStart hook（既存 ~/.claude/hooks/rename_terminal.sh から呼出）"
+  - "Claude Stop hook（既存 ~/.claude/hooks/notify_stop.sh から呼出）"
+
+related:
+  - ops-session-handoff-md
+  - ops-pj-start-unified
+  - research-incomplete-task-carry

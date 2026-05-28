@@ -1,0 +1,266 @@
+# 全 285 ツールの実装ステータス一覧。
+# status: planned | in_progress | implemented | deprecated
+# 詳細仕様は registry/<category>/<id>.yaml 参照。
+# このファイルは bin/emocute tool <id> update で書き換える（手編集も可）。
+
+meta:
+  total: 285
+  phase_completed: 0   # Phase 0 完了、ただし registry 上の implemented は 0（土台のみ）
+  phase_0_done: true
+  last_updated: "2026-05-29"
+  status_counts:
+    planned: 285
+    in_progress: 0
+    implemented: 0
+    deprecated: 0
+
+phases:
+  phase_0_foundation:
+    description: "土台。CLI / registry / 自動化骨格"
+    status: done
+    tools: []   # F-01〜F-10 は internal、registry には載せない
+  phase_1_quick_wins:
+    description: "即効性 12 案"
+    status: planned
+    tools:
+      - audit-zip-3axis
+      - release-bump-version
+      - price-cross-check
+      - mem-auto-split
+      - mem-index-verify
+      - visual-silence-trim
+      - visual-scale-pad-even
+      - visual-chrome-app-launch
+      - site-vercel-quota
+      - site-dl-integrity
+      - game-mbti-banned-words
+      - ops-session-log-append
+  phase_2_studio: { description: "Studio/Suno/楽曲 30", status: planned }
+  phase_3_visual:  { description: "Visual/MV/ffmpeg 30", status: planned }
+  phase_4_sale_site_game_infra: { description: "Sale/Site/Game/Infra 50", status: planned }
+  phase_5_ops_comm_research: { description: "横断運用・通信・研究 残全 50+", status: planned }
+
+# 個別ツールエントリ（IDのみ、status, phase, category, priority）
+# 詳細は registry/<category>/<id>.yaml に
+tools:
+
+  # === audit ===
+  audit-zip-3axis: { phase: 1, category: audit, priority: high, status: planned }
+  audit-personal-info-scan: { phase: 5, category: audit, priority: high, status: planned }
+  audit-license-cross-check: { phase: 5, category: audit, priority: med, status: planned }
+  audit-old-philtz-residue: { phase: 5, category: audit, priority: med, status: planned }
+  audit-id3-completeness: { phase: 5, category: audit, priority: med, status: planned }
+  audit-style-guide: { phase: 4, category: audit, priority: med, status: planned }
+
+  # === release ===
+  release-bump-version: { phase: 1, category: release, priority: high, status: planned }
+  release-changelog-prepend: { phase: 2, category: release, priority: med, status: planned }
+  release-old-zip-archive: { phase: 2, category: release, priority: med, status: planned }
+  release-album-zip-builder: { phase: 2, category: release, priority: med, status: planned }
+  release-master-flow: { phase: 4, category: release, priority: high, status: planned }
+
+  # === price ===
+  price-cross-check: { phase: 1, category: price, priority: high, status: planned }
+  price-fee-simulator: { phase: 4, category: price, priority: med, status: planned }
+
+  # === mem ===
+  mem-auto-split: { phase: 1, category: mem, priority: high, status: planned }
+  mem-index-verify: { phase: 1, category: mem, priority: high, status: planned }
+  mem-stale-detect: { phase: 5, category: mem, priority: med, status: planned }
+  mem-duplicate-detect: { phase: 5, category: mem, priority: med, status: planned }
+  mem-backlink-index: { phase: 5, category: mem, priority: low, status: planned }
+
+  # === studio (30) ===
+  studio-suno-verify-loop: { phase: 2, category: studio, priority: high, status: planned }
+  studio-suno-render-hook: { phase: 2, category: studio, priority: high, status: planned }
+  studio-landr-parallel: { phase: 2, category: studio, priority: high, status: planned }
+  studio-stretch-versions: { phase: 2, category: studio, priority: high, status: planned }
+  studio-banned-artist-scan: { phase: 2, category: studio, priority: high, status: planned }
+  studio-suno-filter-bypass: { phase: 2, category: studio, priority: med, status: planned }
+  studio-suno-length-verify: { phase: 2, category: studio, priority: med, status: planned }
+  studio-batch-mcp-wrapper: { phase: 2, category: studio, priority: med, status: planned }
+  studio-album-zip-builder: { phase: 2, category: studio, priority: med, status: planned }
+  studio-id3-tag-batch: { phase: 2, category: studio, priority: med, status: planned }
+  studio-audio-highlight-30s: { phase: 2, category: studio, priority: med, status: planned }
+  studio-loudness-report: { phase: 2, category: studio, priority: med, status: planned }
+  studio-midi-chord-extract: { phase: 2, category: studio, priority: med, status: planned }
+  studio-midi-voice-leading: { phase: 2, category: studio, priority: med, status: planned }
+  studio-chord-dict-sync: { phase: 2, category: studio, priority: med, status: planned }
+  studio-bach-chorale-verify: { phase: 2, category: studio, priority: med, status: planned }
+  studio-sample-pack-builder: { phase: 2, category: studio, priority: med, status: planned }
+  studio-audio-fingerprint-dedupe: { phase: 2, category: studio, priority: med, status: planned }
+  studio-melody-chord-recommend: { phase: 2, category: studio, priority: med, status: planned }
+  studio-credit-tracker: { phase: 2, category: studio, priority: med, status: planned }
+  studio-changelog-from-suno: { phase: 2, category: studio, priority: med, status: planned }
+  studio-fft-spectrum: { phase: 2, category: studio, priority: low, status: planned }
+  studio-melody-contour: { phase: 2, category: studio, priority: low, status: planned }
+  studio-humanize-midi: { phase: 2, category: studio, priority: low, status: planned }
+  studio-lyric-meter: { phase: 2, category: studio, priority: low, status: planned }
+  studio-arrangement-density: { phase: 2, category: studio, priority: low, status: planned }
+  studio-suno-style-catalog: { phase: 2, category: studio, priority: low, status: planned }
+  studio-groove-half-auto-verify: { phase: 2, category: studio, priority: low, status: planned }
+  studio-suno-prompt-tuner: { phase: 2, category: studio, priority: low, status: planned }
+  studio-production-phase-fsm: { phase: 2, category: studio, priority: low, status: planned }
+
+  # === visual (30) ===
+  visual-silence-trim: { phase: 1, category: visual, priority: high, status: planned }
+  visual-scale-pad-even: { phase: 1, category: visual, priority: high, status: planned }
+  visual-chrome-app-launch: { phase: 1, category: visual, priority: high, status: planned }
+  visual-concat-fade: { phase: 3, category: visual, priority: high, status: planned }
+  visual-crf-auto: { phase: 3, category: visual, priority: high, status: planned }
+  visual-overlay-batch: { phase: 3, category: visual, priority: high, status: planned }
+  visual-obs-remote: { phase: 3, category: visual, priority: high, status: planned }
+  visual-thumbnail-multi-aspect: { phase: 3, category: visual, priority: high, status: planned }
+  visual-mvtool-autopilot: { phase: 3, category: visual, priority: high, status: planned }
+  visual-vertical-crop-smart: { phase: 3, category: visual, priority: high, status: planned }
+  visual-ogp-generator: { phase: 3, category: visual, priority: high, status: planned }
+  visual-ffprobe-verify: { phase: 3, category: visual, priority: high, status: planned }
+  visual-webm-mp4-fallback: { phase: 3, category: visual, priority: med, status: planned }
+  visual-mediarecorder-seg-concat: { phase: 3, category: visual, priority: med, status: planned }
+  visual-canvas-png-seq: { phase: 3, category: visual, priority: med, status: planned }
+  visual-three-js-mp4-export: { phase: 3, category: visual, priority: med, status: planned }
+  visual-platform-versions: { phase: 3, category: visual, priority: med, status: planned }
+  visual-hls-segment: { phase: 3, category: visual, priority: med, status: planned }
+  visual-lrc-srt-json: { phase: 3, category: visual, priority: med, status: planned }
+  visual-whisper-srt: { phase: 3, category: visual, priority: med, status: planned }
+  visual-karaoke-preset: { phase: 3, category: visual, priority: med, status: planned }
+  visual-mvtool-gui: { phase: 3, category: visual, priority: med, status: planned }
+  visual-lut-color-grading: { phase: 3, category: visual, priority: med, status: planned }
+  visual-loudness-report: { phase: 3, category: visual, priority: med, status: planned }
+  visual-shader-preset-catalog: { phase: 3, category: visual, priority: med, status: planned }
+  visual-recording-fps-verify: { phase: 3, category: visual, priority: med, status: planned }
+  visual-canvas-raster-pipeline: { phase: 3, category: visual, priority: low, status: planned }
+  visual-polyglot-markup: { phase: 3, category: visual, priority: low, status: planned }
+  visual-flag-svg-generator: { phase: 3, category: visual, priority: low, status: planned }
+  visual-hls-streaming-preview: { phase: 3, category: visual, priority: low, status: planned }
+  visual-color-space-verify: { phase: 3, category: visual, priority: low, status: planned }
+  visual-stabilization: { phase: 3, category: visual, priority: low, status: planned }
+  visual-deinterlace-auto: { phase: 3, category: visual, priority: low, status: planned }
+
+  # === sale (25) ===
+  sale-channel-sync: { phase: 4, category: sale, priority: high, status: planned }
+  sale-coupon-bulk-mail: { phase: 4, category: sale, priority: med, status: planned }
+  sale-philtz-redirect-manager: { phase: 4, category: sale, priority: med, status: planned }
+  sale-revenue-aggregate: { phase: 4, category: sale, priority: high, status: planned }
+  sale-fee-simulator: { phase: 4, category: sale, priority: med, status: planned }
+  sale-tax-doc-generator: { phase: 4, category: sale, priority: med, status: planned }
+  sale-confirm-mail-dashboard: { phase: 4, category: sale, priority: high, status: planned }
+  sale-mail-template-bilingual: { phase: 4, category: sale, priority: med, status: planned }
+  sale-audience-segmentation: { phase: 4, category: sale, priority: med, status: planned }
+  sale-mail-retry-manager: { phase: 4, category: sale, priority: high, status: planned }
+  sale-x-post-bilingual: { phase: 4, category: sale, priority: med, status: planned }
+  sale-utm-shortener: { phase: 4, category: sale, priority: med, status: planned }
+  sale-post-replicator: { phase: 4, category: sale, priority: low, status: planned }
+  sale-calendar-auto-post: { phase: 4, category: sale, priority: med, status: planned }
+  sale-tunecore-meta-sync: { phase: 4, category: sale, priority: med, status: planned }
+  sale-dsp-reach-check: { phase: 4, category: sale, priority: med, status: planned }
+  sale-spotify-playlist-pitch: { phase: 4, category: sale, priority: med, status: planned }
+  sale-takedown-uri-list: { phase: 4, category: sale, priority: med, status: planned }
+  sale-landr-contract-reminder: { phase: 4, category: sale, priority: low, status: planned }
+  sale-cover-multi-size: { phase: 4, category: sale, priority: med, status: planned }
+  sale-en-native-score: { phase: 4, category: sale, priority: med, status: planned }
+  sale-interview-template: { phase: 4, category: sale, priority: low, status: planned }
+  sale-interview-diff-tracker: { phase: 4, category: sale, priority: low, status: planned }
+  sale-press-news-collect: { phase: 4, category: sale, priority: med, status: planned }
+  sale-booth-coupon-workaround: { phase: 5, category: sale, priority: med, status: planned }
+  sale-stripe-meta-builder: { phase: 5, category: sale, priority: med, status: planned }
+  sale-confirm-mail-flow-test: { phase: 5, category: sale, priority: med, status: planned }
+
+  # === site (10) ===
+  site-vercel-quota: { phase: 1, category: site, priority: high, status: planned }
+  site-dl-integrity: { phase: 1, category: site, priority: high, status: planned }
+  site-orphan-pages-purge: { phase: 4, category: site, priority: med, status: planned }
+  site-hreflang-generator: { phase: 4, category: site, priority: med, status: planned }
+  site-schema-org-inject: { phase: 4, category: site, priority: med, status: planned }
+  site-vercel-analytics-export: { phase: 4, category: site, priority: med, status: planned }
+  site-keyword-rank-monitor: { phase: 4, category: site, priority: med, status: planned }
+  site-vercel-env-add: { phase: 4, category: site, priority: med, status: planned }
+  site-asset-cache-bust: { phase: 4, category: site, priority: med, status: planned }
+  site-config-schema-validator: { phase: 4, category: site, priority: med, status: planned }
+  site-bundle-analyzer: { phase: 4, category: site, priority: med, status: planned }
+  site-sitemap-rebuild: { phase: 4, category: site, priority: med, status: planned }
+
+  # === game (21) ===
+  game-mbti-banned-words: { phase: 1, category: game, priority: high, status: planned }
+  game-numbloom-persona-filter: { phase: 4, category: game, priority: high, status: planned }
+  game-numbloom-poc-validate: { phase: 4, category: game, priority: med, status: planned }
+  game-numbloom-card-art-score: { phase: 4, category: game, priority: med, status: planned }
+  game-numbloom-banned-words: { phase: 4, category: game, priority: high, status: planned }
+  game-numbloom-disc-events: { phase: 4, category: game, priority: med, status: planned }
+  game-numbloom-voice-consistency: { phase: 4, category: game, priority: med, status: planned }
+  game-numbloom-hand-layout-lock: { phase: 4, category: game, priority: low, status: planned }
+  game-numbloom-idiograph-map: { phase: 4, category: game, priority: high, status: planned }
+  game-idiograph-name-generator: { phase: 4, category: game, priority: high, status: planned }
+  game-idiograph-theme-generator: { phase: 4, category: game, priority: med, status: planned }
+  game-idiograph-axis-builder: { phase: 4, category: game, priority: med, status: planned }
+  game-kagebu-role-prefix-gen: { phase: 4, category: game, priority: high, status: planned }
+  game-kagebu-zip-builder: { phase: 4, category: game, priority: high, status: planned }
+  game-persona-cross-checker: { phase: 4, category: game, priority: high, status: planned }
+  game-roleplay-product-page: { phase: 4, category: game, priority: med, status: planned }
+  game-persona-glossary: { phase: 4, category: game, priority: med, status: planned }
+  game-harmonyscope-cargo-runner: { phase: 4, category: game, priority: med, status: planned }
+  game-harmonyscope-plugin-pkg: { phase: 4, category: game, priority: high, status: planned }
+  game-chord-dict-sqlite: { phase: 4, category: game, priority: med, status: planned }
+  game-ios-theory-lab-poc: { phase: 4, category: game, priority: low, status: planned }
+  game-sketches-index: { phase: 4, category: game, priority: med, status: planned }
+
+  # === infra (9) ===
+  infra-r2-waf-fallback: { phase: 4, category: infra, priority: high, status: planned }
+  infra-r2-cost-estimator: { phase: 4, category: infra, priority: med, status: planned }
+  infra-cf-dns-ssl-monitor: { phase: 4, category: infra, priority: med, status: planned }
+  infra-supabase-webhook-monitor: { phase: 4, category: infra, priority: high, status: planned }
+  infra-supabase-schema-migrate: { phase: 4, category: infra, priority: med, status: planned }
+  infra-stripe-security-audit: { phase: 4, category: infra, priority: med, status: planned }
+  infra-credentials-vault: { phase: 4, category: infra, priority: high, status: planned }
+  infra-totp-keychain: { phase: 4, category: infra, priority: high, status: planned }
+  infra-cookie-expiry-monitor: { phase: 4, category: infra, priority: med, status: planned }
+
+  # === ops (20) ===
+  ops-session-log-append: { phase: 1, category: ops, priority: high, status: planned }
+  ops-session-handoff-md: { phase: 5, category: ops, priority: med, status: planned }
+  ops-pj-start-unified: { phase: 5, category: ops, priority: med, status: planned }
+  ops-memory-backlink-index: { phase: 5, category: ops, priority: low, status: planned }
+  ops-obsidian-elasticsearch: { phase: 5, category: ops, priority: low, status: planned }
+  ops-obsidian-auto-launch: { phase: 5, category: ops, priority: med, status: planned }
+  ops-archive-auto-classify: { phase: 5, category: ops, priority: med, status: planned }
+  ops-file-routing: { phase: 5, category: ops, priority: med, status: planned }
+  ops-downloads-weekly-clean: { phase: 5, category: ops, priority: med, status: planned }
+  ops-cache-safe-rm: { phase: 5, category: ops, priority: med, status: planned }
+  ops-commit-msg-lint-strong: { phase: 5, category: ops, priority: med, status: planned }
+  ops-pre-push-safety: { phase: 5, category: ops, priority: med, status: planned }
+  ops-failure-mode-early-check: { phase: 5, category: ops, priority: med, status: planned }
+  ops-apple-notes-sync: { phase: 5, category: ops, priority: high, status: planned }
+  ops-task-monthly-archive: { phase: 5, category: ops, priority: med, status: planned }
+  ops-aiff-context-notify: { phase: 5, category: ops, priority: med, status: planned }
+  ops-idle-alert: { phase: 5, category: ops, priority: med, status: planned }
+  ops-priority-notify: { phase: 5, category: ops, priority: high, status: planned }
+  ops-mcp-usage-log: { phase: 5, category: ops, priority: med, status: planned }
+  ops-mcp-scanner-extend: { phase: 5, category: ops, priority: low, status: planned }
+  ops-local-source-cache: { phase: 5, category: ops, priority: low, status: planned }
+
+  # === comm (5) ===
+  comm-discord-reply-guard: { phase: 5, category: comm, priority: med, status: planned }
+  comm-discord-one-point-deepdive: { phase: 5, category: comm, priority: med, status: planned }
+  comm-discord-arata-snapshot: { phase: 5, category: comm, priority: low, status: planned }
+  comm-discord-group-context-split: { phase: 5, category: comm, priority: low, status: planned }
+  comm-resend-failure-dashboard: { phase: 5, category: comm, priority: med, status: planned }
+
+  # === research (5) ===
+  research-pain-extract: { phase: 5, category: research, priority: med, status: planned }
+  research-dev-metrics: { phase: 5, category: research, priority: low, status: planned }
+  research-llm-usage-pattern: { phase: 5, category: research, priority: med, status: planned }
+  research-incomplete-task-carry: { phase: 5, category: research, priority: med, status: planned }
+  research-llm-eval-archive: { phase: 5, category: research, priority: low, status: planned }
+
+  # === env (3) ===
+  env-windows-vm-setup: { phase: 5, category: env, priority: low, status: planned }
+  env-windows-compat-ci: { phase: 5, category: env, priority: low, status: planned }
+  env-vst3-cross-platform-validator: { phase: 5, category: env, priority: low, status: planned }
+
+  # === internal (6) ===
+  internal-dashboard-html: { phase: 0, category: internal, priority: high, status: planned }
+  internal-tool-template-gen: { phase: 0, category: internal, priority: high, status: planned }
+  internal-registry-bulk-import: { phase: 0, category: internal, priority: med, status: planned }
+  internal-changelog-gen: { phase: 5, category: internal, priority: low, status: planned }
+  internal-toolkit-version-bump: { phase: 5, category: internal, priority: low, status: planned }
+  internal-uninstall-script: { phase: 5, category: internal, priority: low, status: planned }

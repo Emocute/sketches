@@ -1,0 +1,54 @@
+id: price-cross-check
+name: 価格 cross-check（memory / Site / BOOTH / Gumroad）
+category: price
+phase: 1
+priority: high
+status: planned
+difficulty: med
+value: high
+
+description: |
+  memory/business/Site の 3 location 価格 cross-check（feedback_eval_resource_price_sync）
+  を 4 location に拡張: memory + Site/data + BOOTH + Gumroad。
+  不一致を表で表示 + terminal-notifier alert。
+
+cli: emocute price cross-check [--json] [--fix-from <source>]
+
+sources:
+  - memory:
+      file: "~/.claude/projects/-Users-emocute-Downloads/memory/*.md"
+      regex: '¥(\\d+,\\d+)|\\$(\\d+)'
+  - site:
+      file: "Sale/business/*.yaml or Site/data/albums.ts"
+      key: price_jpy / price_usd
+  - booth:
+      url: "https://emocute.booth.pm/items"
+      auth: cookie（.credentials_2026-05-20.md 参照）
+  - gumroad:
+      api: "https://api.gumroad.com/v2/products"
+      auth: access_token
+
+inputs:
+  - --json: machine-readable diff
+  - --fix-from <source>: 指定 source を正として他を更新提案（dry-run）
+
+behavior:
+  steps:
+    - "1. 全 source から (product_id, name, price_jpy, price_usd) 取得"
+    - "2. product_id でマージ → 不一致表示"
+    - "3. --fix-from 指定時は他 source 更新コマンドを提案（実行は別ツール経由）"
+
+outputs:
+  exit_codes:
+    0: 全一致
+    1: 警告（軽微）
+    2: error（要対応）
+
+dependencies:
+  python:
+    - httpx
+    - pyyaml
+
+related:
+  - sale-channel-sync
+  - audit-license-cross-check

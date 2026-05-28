@@ -1,0 +1,45 @@
+id: mem-auto-split
+name: MEMORY.md auto-split（200 行超で古い topic を archive）
+category: mem
+phase: 1
+priority: high
+status: planned
+difficulty: easy
+value: high
+
+description: |
+  MEMORY.md が 200 行を超えると後半が truncate される（システム制約）。
+  古い topic を `memory/_archive/<YYYYMM>/` に分離して MEMORY.md は
+  リンクのみ残す。drift 検出 + 古さスコア計算で対象を選定。
+
+cli: emocute mem auto-split [--apply] [--target-lines 180]
+
+inputs:
+  - --apply: 実書込（既定 dry-run）
+  - --target-lines: 何行に収めるか（既定 180、buffer 込み）
+
+behavior:
+  steps:
+    - "1. MEMORY.md を section 単位でパース"
+    - "2. 各 section の age（参照されている memory ファイルの mtime 最古）算出"
+    - "3. 200 行超過なら古い section から `memory/_archive/<YYYYMM>/MEMORY_split.md` に移送"
+    - "4. MEMORY.md には1行リンク `- [<title>](_archive/YYYYMM/MEMORY_split.md#section)` を残す"
+
+never:
+  - 単純な末尾切り詰め（古さ無視）
+  - 参照中（直近 30 日に編集された memory ファイル）の section 移動
+
+outputs:
+  - MEMORY.md（行数削減後）
+  - memory/_archive/<YYYYMM>/MEMORY_split.md（追記）
+
+dependencies:
+  python: []
+
+tests:
+  fixtures:
+    - "tests/fixtures/mem-split/MEMORY_257lines.md"
+
+related:
+  - mem-index-verify
+  - mem-stale-detect

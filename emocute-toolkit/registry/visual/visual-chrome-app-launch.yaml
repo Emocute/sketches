@@ -1,0 +1,36 @@
+id: visual-chrome-app-launch
+name: Chrome `--app=` 録画ランチャ
+category: visual
+phase: 1
+priority: high
+status: planned
+difficulty: easy
+value: high
+
+description: |
+  画面録画用に Chrome を --app= モード + --start-fullscreen で起動。
+  HTML のアスペクト比を自動判定して window-size 引数を切替（PC=fullscreen、
+  モバイル/縦動画=window-size 明示、feedback_html_open_window_size 準拠）。
+
+cli: emocute visual chrome-app-launch <html_path> [--aspect 16:9|9:16|1:1] [--no-fullscreen]
+
+behavior:
+  steps:
+    - "1. HTML を軽く scan して meta viewport / canvas size から aspect 推定"
+    - "2. PC（16:9）かつ --no-fullscreen 未指定 → --start-fullscreen"
+    - "3. モバイル/縦 → --window-size=540,960 等を計算"
+    - "4. Chrome を `open -n -a` ではなく直接バイナリ呼出: `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome --new-window --app=file://<abs>`"
+    - "5. recording_no_cursor 準拠で cursor 非表示の CSS が HTML 内にあるか warn"
+
+never:
+  - "`open -a 'Google Chrome' <path>` を使う（URL バー残る、feedback で禁則化済）"
+  - メインプロファイルを汚す（既定で --user-data-dir=$TMPDIR/emocute-toolkit-chrome）
+
+related:
+  - visual-silence-trim
+  - visual-thumbnail-multi-aspect
+  - visual-obs-remote
+
+config:
+  default_user_data_dir: "$TMPDIR/emocute-toolkit-chrome"
+  chrome_binary: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"

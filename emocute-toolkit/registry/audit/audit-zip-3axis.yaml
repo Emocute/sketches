@@ -1,0 +1,94 @@
+id: audit-zip-3axis
+name: 販売物 ZIP 3 軸監査
+category: audit
+phase: 1
+priority: high
+status: planned
+difficulty: med
+value: high
+
+description: |
+  販売物 ZIP を解凍し、CLAUDE.md「販売物リリース前監査（3軸チェック）」の
+  禁止語をワンショットで grep。法的・ブランド・個人情報の 3 軸 + 不適切表現で
+  audit report を生成。
+
+cli: emocute audit zip-3axis <zip_path> [--apply] [--json]
+
+inputs:
+  - zip_path: 解凍対象の販売物 ZIP
+  - --apply: 監査 NG を terminal-notifier で alert（デフォルト dry）
+  - --json: machine-readable
+
+behavior:
+  steps:
+    - "1. zip を `.audit_<date>/` に展開（NEVER /tmp/）"
+    - "2. 全ファイルから禁止語を grep。HTML は base64 埋込を `-vE octet-stream|application/|base64,` でフィルタ"
+    - "3. memory/MEMORY.md index と本体ファイル突合（除外漏れチェック）"
+    - "4. report.md を出力（hit 箇所・該当行・該当ファイル）"
+    - "5. `.audit_<date>/` を `_archive/loose_<date>/` 配下に移動"
+
+banned_words:
+  legal_third_party_ip:
+    - Stickerbush Symphony
+    - DKC2
+    - Hollow Knight
+    - Kikuo
+    - imoutoid
+    - Moe Shop
+    - Sweet William
+    - Burial
+  brand_drug_names:
+    - Cannabis
+    - LSD
+    - Ketamine
+    - Mushroom
+    - MDMA
+    - 大麻
+    - ザナックス
+    - ケタミン
+  personal_info_patterns:
+    - "/Users/emocute/"
+    - "\\d{3}-\\d{4}-\\d{4}"  # 電話
+    - "\\d{4}-\\d{2}-\\d{2}"  # 絶対日付（CHANGELOG 除外オプション）
+  inappropriate_expressions:
+    - 出来合いの目玉テンプレ
+    - 素材となる目玉パーツ
+    - いい感じのやつ
+    - ヤバい
+    - 業界を破壊する
+  internal_codenames:
+    - 溶けて
+    - keep it
+    - 肺MV
+
+allow_lists:
+  - support@emocutelab.com
+  - emocutelab.com
+  - 楽器・シンセ機種名（TR-808/909, MPC, Rhodes, DX7, MS-20, JP-8000 等）
+
+outputs:
+  report_path: "{zip_parent}/.audit_<date>/audit_report.md"
+  exit_codes:
+    0: 全項目クリア
+    1: warning（要確認）
+    2: error（NG ヒット）
+
+dependencies:
+  python:
+    - pyyaml
+    - rich
+
+tests:
+  fixtures:
+    - "tests/fixtures/clean.zip"
+    - "tests/fixtures/with_drug_name.zip"
+    - "tests/fixtures/with_personal_path.zip"
+
+related:
+  - audit-personal-info-scan
+  - audit-license-cross-check
+  - release-master-flow
+
+notes: |
+  CLAUDE.md § 販売物リリース前監査 を完全に CLI 化したもの。
+  実装後は release-master-flow から自動呼出。

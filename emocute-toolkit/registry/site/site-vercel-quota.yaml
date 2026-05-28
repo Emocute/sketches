@@ -1,0 +1,43 @@
+id: site-vercel-quota
+name: Vercel deploy quota monitor + bundle commit 提案
+category: site
+phase: 1
+priority: high
+status: planned
+difficulty: easy
+value: high
+
+description: |
+  Vercel Hobby 枠は月間 deploy 数に制約あり（feedback_vercel_deploy_quota）。
+  残数を取得して闘値以下なら警告 + 「現在 stage 中のコミットを bundle して 1 deploy に集約」
+  提案を表示。
+
+cli: emocute site vercel-quota [--threshold 30] [--json] [--notify]
+
+inputs:
+  - --threshold: 残数しきい値（既定 30、Hobby 月 100 想定）
+  - --json: machine-readable
+  - --notify: 残数 < threshold で terminal-notifier
+
+behavior:
+  steps:
+    - "1. Vercel REST API でチーム usage 取得（GET /v1/usage/<scope>）"
+    - "2. 当月 build count を計算"
+    - "3. しきい値判定 + 残日数考慮"
+    - "4. git status で未 push commit を数えて bundle 提案"
+
+api:
+  endpoint: "https://api.vercel.com/v1/usage"
+  auth: Bearer credentials.vercel.token
+
+triggers:
+  - "git-hook pre-push（Site PJ 限定）"
+  - "launchd daily-vercel-quota"
+
+dependencies:
+  python:
+    - httpx
+
+related:
+  - site-bundle-analyzer
+  - ops-pre-push-safety

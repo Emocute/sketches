@@ -1,0 +1,43 @@
+id: visual-silence-trim
+name: ffmpeg silencedetect → 自動 trim ワンショット
+category: visual
+phase: 1
+priority: high
+status: planned
+difficulty: easy
+value: high
+
+description: |
+  macOS 画面録画 MOV/MP4 の冒頭・末尾の無音区間を silencedetect で検出し、
+  -ss / -to 値を自動算出して trim。Visual/CLAUDE.md § 参考レシピで手動実行している
+  シーケンスを 1 コマンド化。
+
+cli: emocute visual silence-trim <input> [<output>] [--noise -40dB] [--duration 0.5] [--apply]
+
+inputs:
+  - input: 録画 MOV/MP4
+  - output: 出力パス（既定: <input>_trim.<ext>）
+  - --noise: silence しきい値（既定 -40dB）
+  - --duration: 最小無音長（既定 0.5s）
+  - --apply: 実書込（既定は計算のみ表示）
+
+behavior:
+  steps:
+    - "1. ffmpeg -af silencedetect=noise=<>:d=<> -f null - で出力 stderr 解析"
+    - "2. silence_end / silence_start から -ss / -to を算出"
+    - "3. ffmpeg -ss A -to B -i input -c copy output で trim（再エンコなし）"
+    - "4. ffprobe で出力 duration 検証"
+
+never:
+  - 全編無音だった時に黙って空ファイル出力（必ず error で abort）
+  - 再エンコード（情報損失防止のため -c copy）
+
+dependencies:
+  binary:
+    - ffmpeg
+    - ffprobe
+
+related:
+  - visual-scale-pad-even
+  - visual-ffprobe-verify
+  - visual-mvtool-autopilot

@@ -1,0 +1,60 @@
+id: release-bump-version
+name: 販売物 version bump + CHANGELOG + 旧 ZIP 退避
+category: release
+phase: 1
+priority: high
+status: planned
+difficulty: med
+value: high
+
+description: |
+  販売物 ZIP の中身が変わったらファイル名 version を必ず上げる
+  （CLAUDE.md § 販売物リビルド時のバージョン名規約）。
+  内容ハッシュ比較で差分検知 → patch/minor 判定 → CHANGELOG prepend →
+  旧 ZIP を `_superseded_<date>_<理由>/` に退避。同名上書き禁止を強制。
+
+cli: emocute release bump-version <zip_dir> [--target patch|minor] [--reason ...] [--apply]
+
+inputs:
+  - zip_dir: PJ の販売物 ZIP が並ぶフォルダ（例: Sale/dist/）
+  - --target: patch（既定）/ minor / major
+  - --reason: superseded 退避時のサフィックス（例: "license_typo_fix"）
+  - --apply: 実書込（既定 dry-run）
+
+behavior:
+  steps:
+    - "1. zip_dir 内の各 ZIP について VERSION ファイル（内部）の hash を計算"
+    - "2. 直前 release の VERSION hash と比較"
+    - "3. 差分あり → 新ファイル名 v{N+1} を提案 + CHANGELOG.md に prepend テンプレ"
+    - "4. 旧 ZIP を `_superseded_<date>_<reason>/` 配下に mv"
+    - "5. 新 ZIP の中身に VERSION ファイル埋込（toolkit が把握できる形）"
+
+bump_rules:
+  patch: バグ修正・OS 互換化・LICENSE 文言修正・README typo
+  minor: 機能追加・パラメータ追加
+  major: 後方互換破壊
+
+never:
+  - 同名ファイルの中身差替
+  - 旧 ZIP 削除（必ず `_superseded_*/` に保持）
+  - CHANGELOG の旧節削除（必ず prepend）
+
+outputs:
+  - 新 ZIP（提案 → --apply で実書込）
+  - CHANGELOG.md 更新
+  - SESSION_LOG.md 該当 PJ に 1 行追記
+
+dependencies:
+  python:
+    - pyyaml
+
+tests:
+  fixtures:
+    - "tests/fixtures/release-bump/v8.1.zip"
+    - "tests/fixtures/release-bump/v8.1_modified.zip"
+
+related:
+  - release-changelog-prepend
+  - release-old-zip-archive
+  - release-master-flow
+  - audit-zip-3axis

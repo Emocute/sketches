@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- emocute-toolkit launchd job: daily memory drift check.
+     `bin/emocute automation install` で ~/Library/LaunchAgents/ に symlink + bootstrap される。
+     手動登録: launchctl bootstrap gui/$(id -u) <path-to-plist> -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTD/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.emocute.toolkit.daily-mem-drift</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/emocute/Downloads/Sketches/emocute-toolkit/bin/emocute</string>
+    <string>mem</string>
+    <string>index-verify</string>
+    <string>--notify</string>
+  </array>
+  <key>StartCalendarInterval</key>
+  <dict>
+    <key>Hour</key>
+    <integer>8</integer>
+    <key>Minute</key>
+    <integer>0</integer>
+  </dict>
+  <key>StandardOutPath</key>
+  <string>/Users/emocute/Downloads/Sketches/emocute-toolkit/automation/logs/daily-mem-drift.out</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/emocute/Downloads/Sketches/emocute-toolkit/automation/logs/daily-mem-drift.err</string>
+  <key>RunAtLoad</key>
+  <false/>
+</dict>
+</plist>

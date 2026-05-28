@@ -1,0 +1,48 @@
+id: site-dl-integrity
+name: Site product.ts × R2 ファイル一覧 突合
+category: site
+phase: 1
+priority: high
+status: planned
+difficulty: med
+value: high
+
+description: |
+  Site の products に記載された DL リンク（R2 key）が実在するかを R2 list と突合。
+  「購入ボタン詐欺」（DL リンク未配置でも購入可）の再発防止。
+
+cli: emocute site dl-integrity [--json] [--notify]
+
+behavior:
+  steps:
+    - "1. Site/data/products.ts または Supabase products table から (id, name, r2_zip_key, preview_mp3_key) 取得"
+    - "2. R2 list-objects で全 key を取得（cf-cred 必要）"
+    - "3. 突合 → 未配置 / リンク切れ / ファイルサイズ 0 を検出"
+    - "4. 各 product に is_ready_for_sale 判定を表示"
+
+api:
+  r2:
+    endpoint: "S3-compatible: https://<account>.r2.cloudflarestorage.com"
+    auth: r2.access_key_id / r2.secret_access_key
+  supabase:
+    endpoint: "{supabase.url}/rest/v1/products"
+
+outputs:
+  exit_codes:
+    0: 全 product OK
+    1: 警告（preview のみ欠落等）
+    2: error（DL ZIP 欠落、即 is_ready_for_sale=false に）
+
+triggers:
+  - "git-hook pre-push（Site PJ）"
+  - "リリース後 manually"
+
+dependencies:
+  python:
+    - boto3
+    - httpx
+
+related:
+  - sale-channel-sync
+  - infra-r2-cost-estimator
+  - release-master-flow

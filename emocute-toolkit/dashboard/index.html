@@ -1,0 +1,179 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>emocute-toolkit dashboard</title>
+<style>
+:root {
+  --bg:#0b0b0d; --fg:#e9e9ec; --dim:#888; --warn:#e0a800; --err:#e0494a; --ok:#34c759; --info:#5ac8fa;
+  --card:#16161a; --line:#22232a;
+  font-family: -apple-system, "SF Mono", ui-monospace, monospace;
+}
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font-size:13px; line-height:1.5; }
+header { padding:10px 14px; background:var(--card); border-bottom:1px solid var(--line); display:flex; align-items:center; gap:14px; }
+h1 { font-size:14px; margin:0; }
+.muted { color:var(--dim); }
+main { display:grid; grid-template-columns: 1fr 1fr; gap:10px; padding:10px; }
+.card { background:var(--card); border:1px solid var(--line); border-radius:6px; padding:10px; min-height:160px; }
+.card h2 { font-size:12px; margin:0 0 8px 0; color:var(--dim); text-transform:uppercase; letter-spacing:.5px; }
+.row { display:flex; justify-content:space-between; padding:4px 0; border-bottom:1px solid var(--line); }
+.row:last-child { border-bottom:0; }
+.pill { display:inline-block; padding:1px 6px; border-radius:3px; font-size:11px; }
+.pill.ok { background:var(--ok); color:#000; }
+.pill.warn { background:var(--warn); color:#000; }
+.pill.err { background:var(--err); color:#fff; }
+.pill.info { background:var(--info); color:#000; }
+.pill.dim { background:var(--line); color:var(--dim); }
+.bar { height:6px; background:var(--line); border-radius:3px; overflow:hidden; margin:4px 0; }
+.bar .fill { height:100%; background:var(--info); }
+.log-line { font-family:"SF Mono", monospace; font-size:11px; padding:2px 0; border-bottom:1px solid var(--line); display:flex; gap:6px; }
+.log-line .ts { color:var(--dim); flex:0 0 auto; }
+.log-line .tag { flex:0 0 110px; }
+.log-line .msg { flex:1 1 auto; word-break:break-all; }
+.phase-grid { display:grid; grid-template-columns: 1fr auto auto; gap:4px; font-size:12px; }
+.phase-grid .ph-name { color:var(--fg); }
+.phase-grid .ph-count { color:var(--dim); text-align:right; }
+</style>
+</head>
+<body>
+<header>
+  <h1>emocute-toolkit</h1>
+  <span class="muted" id="last-update">―</span>
+  <span class="muted" id="total-tools">― tools</span>
+</header>
+<main>
+  <section class="card">
+    <h2>phase progress</h2>
+    <div id="phase-progress"></div>
+  </section>
+  <section class="card">
+    <h2>category status</h2>
+    <div id="category-status" class="phase-grid"></div>
+  </section>
+  <section class="card" style="grid-column:1/3;">
+    <h2>recent log (toolkit + claude notifications)</h2>
+    <div id="log"></div>
+  </section>
+</main>
+<script>
+const STATUS_PATH = "../registry/_status.yaml";
+const LOG_PATHS = [
+  "../automation/log.jsonl",
+  // fetch で file:// 越境はブラウザ依存。同一ディレクトリ配下のみ確実に読める
+];
+
+function pill(text, cls){ return `<span class="pill ${cls}">${text}</span>`; }
+
+// YAML を雑に JSON 化（_status.yaml は単純構造）
+function tinyYamlParse(text){
+  // 完全な YAML parser は重い。dashboard 用に必要最小限。
+  // ここでは status YAML の構造に合わせて簡易処理。
+  // 失敗したら空オブジェクトを返す。
+  try {
+    // 行ベース: status_counts と tools の集計だけ取れれば OK
+    const out = { meta:{status_counts:{}}, tools:{}, phases:{} };
+    const lines = text.split(/\r?\n/);
+    let mode = null;  // 'counts' | 'tools' | 'phases' | null
+    for (let i=0; i<lines.length; i++){
+      const ln = lines[i];
+      if (/^meta:/.test(ln)) { mode = null; continue; }
+      if (/^\s+status_counts:/.test(ln)) { mode = 'counts'; continue; }
+      if (/^phases:/.test(ln)) { mode = 'phases'; continue; }
+      if (/^tools:/.test(ln)) { mode = 'tools'; continue; }
+      if (mode === 'counts'){
+        const m = ln.match(/^\s+(\w+):\s*(\d+)/);
+        if (m) out.meta.status_counts[m[1]] = parseInt(m[2]);
+      }
+      if (mode === 'tools'){
+        // `  tool-id: { phase: 1, category: audit, priority: high, status: planned }`
+        const m = ln.match(/^\s+([a-z][a-z0-9-]+):\s*\{\s*phase:\s*(\d+),\s*category:\s*([a-z]+),\s*priority:\s*([a-z_]+),\s*status:\s*([a-z_]+)\s*\}/);
+        if (m) out.tools[m[1]] = { phase:+m[2], category:m[3], priority:m[4], status:m[5] };
+      }
+      if (mode === 'phases'){
+        const m = ln.match(/^\s+(phase_\w+):/);
+        if (m) out.phases[m[1]] = {};
+      }
+    }
+    return out;
+  } catch (e){ console.error(e); return {meta:{status_counts:{}}, tools:{}, phases:{}}; }
+}
+
+async function refresh(){
+  try {
+    const statusText = await fetch(STATUS_PATH + "?t=" + Date.now()).then(r => r.text());
+    const data = tinyYamlParse(statusText);
+    document.getElementById("last-update").textContent = new Date().toLocaleTimeString("ja-JP");
+    const total = Object.keys(data.tools).length;
+    document.getElementById("total-tools").textContent = `${total} tools`;
+
+    // phase progress
+    const phases = {};
+    for (const [id, t] of Object.entries(data.tools)){
+      const p = `phase ${t.phase}`;
+      phases[p] = phases[p] || { total:0, implemented:0, in_progress:0 };
+      phases[p].total++;
+      if (t.status === 'implemented') phases[p].implemented++;
+      if (t.status === 'in_progress') phases[p].in_progress++;
+    }
+    const pp = document.getElementById("phase-progress");
+    pp.innerHTML = "";
+    Object.entries(phases).sort().forEach(([name, c]) => {
+      const pct = c.total ? Math.round(c.implemented * 100 / c.total) : 0;
+      pp.insertAdjacentHTML("beforeend", `
+        <div style="margin-bottom:8px;">
+          <div style="display:flex; justify-content:space-between;">
+            <span>${name}</span>
+            <span class="muted">${c.implemented}/${c.total} (${pct}%) ${c.in_progress?'+'+c.in_progress+' WIP':''}</span>
+          </div>
+          <div class="bar"><div class="fill" style="width:${pct}%;"></div></div>
+        </div>`);
+    });
+
+    // category status
+    const cats = {};
+    for (const [id, t] of Object.entries(data.tools)){
+      cats[t.category] = cats[t.category] || { total:0, impl:0 };
+      cats[t.category].total++;
+      if (t.status === 'implemented') cats[t.category].impl++;
+    }
+    const cs = document.getElementById("category-status");
+    cs.innerHTML = "";
+    Object.entries(cats).sort().forEach(([name, c]) => {
+      cs.insertAdjacentHTML("beforeend", `
+        <div class="ph-name">${name}</div>
+        <div class="ph-count">${c.impl}/${c.total}</div>
+        <div>${pill(c.impl ? 'progress':'pending', c.impl ? 'info':'dim')}</div>`);
+    });
+
+    // log
+    try {
+      const logText = await fetch(LOG_PATHS[0] + "?t=" + Date.now()).then(r => r.text());
+      const lines = logText.trim().split(/\r?\n/).filter(Boolean).slice(-50).reverse();
+      const lg = document.getElementById("log");
+      lg.innerHTML = "";
+      lines.forEach(line => {
+        try {
+          const rec = JSON.parse(line);
+          const cls = ({info:'info',warn:'warn',error:'err',done:'ok'})[rec.type] || 'dim';
+          lg.insertAdjacentHTML("beforeend",
+            `<div class="log-line">
+              <span class="ts">${(rec.ts||'').slice(11,19)}</span>
+              <span class="tag">${pill(rec.type||'?', cls)} ${rec.tool||''}</span>
+              <span class="msg">[${rec.pj||'?'}] ${rec.message||rec.msg||''}</span>
+            </div>`);
+        } catch {}
+      });
+    } catch (e){
+      document.getElementById("log").innerHTML = `<div class="muted">log.jsonl 未生成（ツール実行で作られる）</div>`;
+    }
+  } catch (e){
+    console.error(e);
+  }
+}
+
+refresh();
+setInterval(refresh, 2000);
+</script>
+</body>
+</html>

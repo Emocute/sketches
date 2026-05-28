@@ -1,0 +1,46 @@
+id: mem-index-verify
+name: memory/MEMORY.md と各ファイルの整合性検証
+category: mem
+phase: 1
+priority: high
+status: planned
+difficulty: easy
+value: high
+
+description: |
+  memory/*.md と MEMORY.md index 行の整合性を双方向検証:
+  - MEMORY.md にあるリンク先ファイルが存在するか
+  - memory/*.md の中で MEMORY.md に index されてないものを検出
+  - 重複保持（drift の原因）検出
+
+cli: emocute mem index-verify [--json] [--notify]
+
+checks:
+  - "MEMORY.md の `[title](file.md)` 全リンクの存在確認"
+  - "memory/*.md のうち、MEMORY.md と _archive/ どちらにも載ってないものを「孤児」として警告"
+  - "type と内容のミスマッチ検出（user / feedback / project / reference）"
+  - "feedback / project の Why / How to apply 行抜けチェック（CLAUDE.md memory ルール準拠）"
+  - "重複検出: 同じ rule を別ファイルで持っていないか（タイトル類似度 + 内容 grep）"
+
+outputs:
+  report:
+    - orphan_files: []
+    - dead_links: []
+    - rule_violations: []
+    - duplicates: []
+  exit_codes:
+    0: clean
+    1: warning（孤児 or 軽微）
+    2: error（dead link or 重複）
+
+triggers:
+  - "git-hook pre-commit（memory/ 変更時のみ）"
+  - "launchd daily-mem-drift"
+
+dependencies:
+  python: []
+
+related:
+  - mem-auto-split
+  - mem-duplicate-detect
+  - mem-stale-detect
