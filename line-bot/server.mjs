@@ -109,14 +109,19 @@ async function fetchBotInfo() {
 // ---- ロジック ----
 const sourceId = (s) => s.groupId || s.roomId || s.userId;
 
+// 明確に呼ばれているか（メンション or 接頭辞）。DM も「呼ばれている」扱い。
+function isAddressed(ev) {
+  if (ev.source.type === 'user') return true;
+  if (BOT_USER_ID && ev.message.mention?.mentionees?.some((m) => m.userId === BOT_USER_ID)) return true;
+  const lower = (ev.message.text || '').toLowerCase();
+  return PREFIXES.some((p) => lower.includes(p.toLowerCase()));
+}
+
 function shouldRespond(ev) {
   if (ev.source.type === 'user') return true; // DM は常に反応
   // always / natural は全メッセージを受け取り claude 側で判断
   if (TRIGGER_MODE === 'always' || TRIGGER_MODE === 'natural') return true;
-  const text = ev.message.text || '';
-  if (BOT_USER_ID && ev.message.mention?.mentionees?.some((m) => m.userId === BOT_USER_ID)) return true;
-  const lower = text.toLowerCase();
-  return PREFIXES.some((p) => lower.includes(p.toLowerCase()));
+  return isAddressed(ev);
 }
 
 const SKIP = '[SKIP]';
@@ -135,8 +140,9 @@ function buildPrompt(sid, natural) {
       `【出力（厳守）】黙る場合は「${SKIP}」だけ。返事する場合は本文だけ。` +
       `思考・理由・独り言・英単語（Wait等）・「${BOT_NAME}:」等の接頭辞・${SKIP}との併記は禁止。どちらか一方だけ出力しろ。\n\n${convo}\n\n${BOT_NAME}:`;
   }
-  return `以下は LINE グループの会話ログ。最後の発言に対して ${BOT_NAME} として自然に短く返事しろ。` +
-    `返事の本文だけ出力すること（「${BOT_NAME}:」などの接頭辞は付けない）。\n\n${convo}\n\n${BOT_NAME}:`;
+  // 強制返事（明確に呼ばれた／メンション／DM）: SKIP の選択肢を与えない
+  return `以下は LINE グループの会話ログ。あなたは「${BOT_NAME}」。最後の発言はあなたに向けられている。必ず ${BOT_NAME} として短く返事しろ（黙る・スキップは禁止）。\n` +
+    `返事の本文だけ出力すること。「${BOT_NAME}:」などの接頭辞・思考・独り言は付けない。\n\n${convo}\n\n${BOT_NAME}:`;
 }
 
 function runClaude(prompt) {
@@ -192,13 +198,17 @@ async function handleEvent(ev) {
   saveHistory();
 
   const respond = shouldRespond(ev);
-  console.log(`[event] "${ev.message.text}" from ${name} → respond=${respond}`);
+  // 明確に呼ばれた時は強制返事（SKIP 不可）。それ以外の雑談だけ natural 判定。
+  const addressed = isAddressed(ev);
+  console.log(`[event] "${ev.message.text}" from ${name} → respond=${respond} addressed=${addressed}`);
   if (!respond) return;
-  const natural = TRIGGER_MODE === 'natural' && ev.source.type !== 'user';
+  const natural = TRIGGER_MODE === 'natural' && ev.source.type !== 'user' && !addressed;
   const answer = await runClaude(buildPrompt(sid, natural));
   console.log(`[claude] → ${answer ? JSON.stringify(answer.slice(0, 80)) : 'NULL'}`);
   if (!answer) return;
   let text = answer.trim();
+  // 念のため先頭の「CC:」「BOT_NAME:」接頭辞を除去（モデルが稀に付ける）
+  text = text.replace(new RegExp(`^(${BOT_NAME}|Emo ${BOT_NAME})\\s*[:：]\\s*`, 'i'), '').trim();
   if (natural) {
     if (text.replace(/[「」\[\]\s]/g, '').toUpperCase() === 'SKIP') { console.log('[natural] SKIP（黙る）'); return; }
     text = text.replace(/\[?SKIP\]?/gi, '').trim(); // 万一の混在を除去
