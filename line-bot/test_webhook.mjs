@@ -10,7 +10,7 @@ const body = JSON.stringify({
   destination: 'xxx',
   events: [{
     type: 'message',
-    message: { type: 'text', text: 'Emo、明日の天気どう思う？一言で', id: '1' },
+    message: { type: 'text', text: process.env.MSG || 'CC、好きな食べ物なに？一言で', id: '1' },
     replyToken: 'dummy-reply-token-0000000000',
     source: { type: 'group', groupId: 'Cdummygroup', userId: 'Udummyuser' },
     timestamp: 1700000000000,

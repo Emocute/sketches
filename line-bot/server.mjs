@@ -89,17 +89,31 @@ const sourceId = (s) => s.groupId || s.roomId || s.userId;
 
 function shouldRespond(ev) {
   if (ev.source.type === 'user') return true; // DM は常に反応
-  if (TRIGGER_MODE === 'always') return true;
+  // always / natural は全メッセージを受け取り claude 側で判断
+  if (TRIGGER_MODE === 'always' || TRIGGER_MODE === 'natural') return true;
   const text = ev.message.text || '';
   if (BOT_USER_ID && ev.message.mention?.mentionees?.some((m) => m.userId === BOT_USER_ID)) return true;
   const lower = text.toLowerCase();
   return PREFIXES.some((p) => lower.includes(p.toLowerCase()));
 }
 
-function buildPrompt(sid) {
+const SKIP = '[SKIP]';
+
+function buildPrompt(sid, natural) {
   const convo = (history[sid] || [])
     .map((m) => (m.role === 'assistant' ? `${BOT_NAME}: ${m.text}` : `${m.name}: ${m.text}`))
     .join('\n');
+  if (natural) {
+    return `以下は LINE グループの会話ログ。あなたは「${BOT_NAME}」としてこのグループの一員。\n` +
+      `基本は会話に参加する。次のどれかなら必ず短く返事しろ:\n` +
+      `・「${BOT_NAME}」と呼ばれている／名前が出ている\n` +
+      `・質問されている、意見を求められている\n` +
+      `・最後の発言が自分への返答や話しかけ\n` +
+      `・乗れる話題で一言あると会話が弾む\n` +
+      `逆に、明らかに他の人だけで込み入った話をしていて割り込むと邪魔な時だけ黙る。迷ったら返事する側に倒す。\n\n` +
+      `【出力ルール（厳守）】黙る場合は「${SKIP}」の5文字だけを出力。返事する場合は返事の本文だけを出力。` +
+      `思考・理由・独り言・英単語（Wait等）・「${BOT_NAME}:」のような接頭辞・${SKIP}との併記は一切禁止。どちらか一方だけ。\n\n${convo}\n\n${BOT_NAME}:`;
+  }
   return `以下は LINE グループの会話ログ。最後の発言に対して ${BOT_NAME} として自然に短く返事しろ。` +
     `返事の本文だけ出力すること（「${BOT_NAME}:」などの接頭辞は付けない）。\n\n${convo}\n\n${BOT_NAME}:`;
 }
@@ -138,20 +152,32 @@ function pushHistory(sid, entry) {
 }
 
 async function handleEvent(ev) {
+  console.log(`[event] type=${ev.type} msgType=${ev.message?.type} srcType=${ev.source?.type}`);
   if (ev.type !== 'message' || ev.message?.type !== 'text') return;
   const sid = sourceId(ev.source);
   const name = await resolveName(ev.source, ev.source.userId);
   pushHistory(sid, { role: 'user', name, text: ev.message.text });
   saveHistory();
 
-  if (!shouldRespond(ev)) return;
-  const answer = await runClaude(buildPrompt(sid));
+  const respond = shouldRespond(ev);
+  console.log(`[event] "${ev.message.text}" from ${name} → respond=${respond}`);
+  if (!respond) return;
+  const natural = TRIGGER_MODE === 'natural' && ev.source.type !== 'user';
+  const answer = await runClaude(buildPrompt(sid, natural));
+  console.log(`[claude] → ${answer ? JSON.stringify(answer.slice(0, 80)) : 'NULL'}`);
   if (!answer) return;
-  pushHistory(sid, { role: 'assistant', text: answer });
+  let text = answer.trim();
+  if (natural) {
+    if (text.replace(/[「」\[\]\s]/g, '').toUpperCase() === 'SKIP') { console.log('[natural] SKIP（黙る）'); return; }
+    text = text.replace(/\[?SKIP\]?/gi, '').trim(); // 万一の混在を除去
+    if (!text) { console.log('[natural] 除去後 空 → 黙る'); return; }
+  }
+  pushHistory(sid, { role: 'assistant', text });
   saveHistory();
 
-  const ok = await lineReply(ev.replyToken, answer); // 無料
-  if (!ok) await linePush(sid, answer); // token 失効時のみ（push は月200通枠）
+  const ok = await lineReply(ev.replyToken, text); // 無料
+  console.log(`[reply] ${ok ? 'ok' : 'failed → push fallback'}`);
+  if (!ok) await linePush(sid, text); // token 失効時のみ（push は月200通枠）
 }
 
 // ---- HTTP サーバ ----
@@ -162,9 +188,13 @@ const server = http.createServer((req, res) => {
     req.on('end', () => {
       const raw = Buffer.concat(chunks);
       const expected = crypto.createHmac('sha256', CHANNEL_SECRET).update(raw).digest('base64');
-      if (req.headers['x-line-signature'] !== expected) { res.writeHead(401); res.end('bad signature'); return; }
+      if (req.headers['x-line-signature'] !== expected) {
+        console.log('[webhook] BAD SIGNATURE (secret mismatch?)');
+        res.writeHead(401); res.end('bad signature'); return;
+      }
       res.writeHead(200); res.end('OK'); // LINE には即 200（処理は非同期）
       let body; try { body = JSON.parse(raw.toString('utf8')); } catch { return; }
+      console.log(`[webhook] received ${(body.events || []).length} event(s)`);
       for (const ev of body.events || []) handleEvent(ev).catch((e) => console.error('[handle]', e.message));
     });
     return;
