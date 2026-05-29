@@ -121,6 +121,24 @@ grep -oE "https://[a-z0-9-]+\.trycloudflare\.com" tunnel.log | head -1
 # 4. 上記 + "/webhook" を LINE Developers の Webhook URL に貼り直して「検証」
 ```
 
+### アクセス権モデル（FULL_ACCESS=true）
+
+究の指示により、ボットは「読みは全開・新規書き込み可・破壊と漏洩は不可」で動く。
+`claude -p` を **cwd=Downloads** で起動し、CLAUDE.md とメモリ索引を文脈に持つ。
+`guard.mjs`（PreToolUse フック）が毎ツール直前に検閲し、次を**拒否**する:
+
+| 操作 | 可否 |
+|---|---|
+| Read / Glob / Grep（資料・メモリ・ファイル読み）| ✅ |
+| Write（**新規パスのみ**）/ Edit（局所修正）| ✅ |
+| 既存ファイルの上書き・削除 | ❌ 破壊防止 |
+| Bash（シェル全般）| ❌ |
+| MCP（Stripe/Supabase/メール送信等）| ❌ |
+| 認証情報・鍵（.ssh/.env/.credentials 等）の Read | ❌ 漏洩防止 |
+| 金関連ファイル（stripe/決済/売上/口座/請求 等）の Read | ❌ 漏洩防止 |
+
+口調は CLAUDE.md 規約準拠（フレンドリー禁止）。`FULL_ACCESS=false` で tmp 隔離の安全モードに戻る。
+
 ### ローカル疎通テスト
 
 ```bash

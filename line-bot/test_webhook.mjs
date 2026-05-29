@@ -12,7 +12,9 @@ const body = JSON.stringify({
     type: 'message',
     message: { type: 'text', text: process.env.MSG || 'CC、好きな食べ物なに？一言で', id: '1' },
     replyToken: 'dummy-reply-token-0000000000',
-    source: { type: 'group', groupId: 'Cdummygroup', userId: 'Udummyuser' },
+    source: process.env.SRC === 'user'
+      ? { type: 'user', userId: 'Udummyuser' }
+      : { type: 'group', groupId: 'Cdummygroup', userId: 'Udummyuser' },
     timestamp: 1700000000000,
     mode: 'active',
   }],

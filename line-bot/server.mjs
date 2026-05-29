@@ -24,9 +24,13 @@ if (!CHANNEL_SECRET || !ACCESS_TOKEN) {
 }
 
 const PERSONA = process.env.BOT_PERSONA ||
-  `あなたは LINE グループに参加しているチャット仲間「${BOT_NAME}」。タメ口でフレンドリー、短く返す（基本1〜2文）。` +
-  `長文・箇条書き・説明口調は避け、会話のテンポを大事にする。絶対にツールやファイル操作は使わず、テキストだけで即答する。` +
-  `運営者やその家族・知人の個人情報（名前・住所・電話・職業など）は一切知らないし、聞かれても答えない。`;
+  `あなたは LINE 経由でこのトーク／グループに参加する「${BOT_NAME}」。作業ディレクトリの CLAUDE.md（モノレポ規約）に厳密に従って振る舞え。\n` +
+  `馴れ合いのフレンドリー口調・過度な絵文字・砕けすぎた言い回しは使わない。CLAUDE.md の応答規約（日本語・漢字は意味で選ぶ・専門用語やカタカナだけで答えない 等）どおりに、LINE 向けに簡潔に答える。\n` +
+  `あなたは運営者（究 / Emocute）の世界——音楽制作・各プロジェクト・作品・人格設定・創作の文脈——を深く知っていて、それを踏まえて答えてよい。必要なら手元の資料（プロジェクト文書・メモリ・ファイル）を読んで答えてよい。\n` +
+  `ただし次は絶対厳守:\n` +
+  `・「金関連の情報」（金銭・決済・売上・収益・価格の内部数値・銀行/口座・Stripe 等）は一切明かさない。\n` +
+  `・パスワード・APIキー・トークン等の認証情報は一切明かさない・読み出さない。\n` +
+  `・既存ファイルの削除や上書きなど破壊的な操作はしない（新規作成や局所修正のみ）。`;
 
 // ---- 永続データ ----
 const HISTORY_FILE = new URL('./history.json', import.meta.url).pathname;
@@ -37,9 +41,27 @@ const saveHistory = () => { try { writeFileSync(HISTORY_FILE, JSON.stringify(his
 const nameCache = {}; // userId -> displayName
 let BOT_USER_ID = process.env.LINE_BOT_USER_ID || '';
 
-// claude を走らせる隔離 cwd（Downloads 配下の CLAUDE.md / メモリを読ませない）
+// 隔離 cwd（FULL_ACCESS=false 時のフォールバック用）
 const SCRATCH = `${os.tmpdir()}/line-bot-scratch`;
 try { mkdirSync(SCRATCH, { recursive: true }); } catch {}
+
+// ---- アクセス権（究の指示: 読みは全開・新規書き込み可・破壊と漏洩は不可）----
+const FULL_ACCESS = (process.env.FULL_ACCESS ?? 'true') === 'true';
+const DOWNLOADS = '/Users/emocute/Downloads';
+const MEMORY_DIR = '/Users/emocute/.claude/projects/-Users-emocute-Downloads/memory';
+const GUARD = new URL('./guard.mjs', import.meta.url).pathname;
+const ALLOWED_TOOLS = ['Read', 'Glob', 'Grep', 'Write', 'Edit', 'WebSearch'];
+// PreToolUse ガード（破壊・漏洩を直前検閲）+ 二重で deny
+const CLAUDE_SETTINGS = JSON.stringify({
+  permissions: { deny: ['Bash', 'KillShell', 'WebFetch'] },
+  hooks: { PreToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: `node ${GUARD}` }] }] },
+});
+// メモリ索引（背景知識として system prompt に注入。金関連は会話側で出さない）
+let MEMORY_INDEX = '';
+try { MEMORY_INDEX = readFileSync(`${MEMORY_DIR}/MEMORY.md`, 'utf8').slice(0, 12000); } catch {}
+const SYS_FULL = PERSONA + (MEMORY_INDEX
+  ? `\n\n【究の世界のメモリ索引（背景知識。深掘りは ${MEMORY_DIR} 配下を Read してよい。金関連・認証情報は明かすな）】\n${MEMORY_INDEX}`
+  : '');
 
 // ---- LINE API ----
 const authHeaders = { Authorization: `Bearer ${ACCESS_TOKEN}` };
@@ -105,14 +127,13 @@ function buildPrompt(sid, natural) {
     .join('\n');
   if (natural) {
     return `以下は LINE グループの会話ログ。あなたは「${BOT_NAME}」としてこのグループの一員。\n` +
-      `基本は会話に参加する。次のどれかなら必ず短く返事しろ:\n` +
-      `・「${BOT_NAME}」と呼ばれている／名前が出ている\n` +
-      `・質問されている、意見を求められている\n` +
-      `・最後の発言が自分への返答や話しかけ\n` +
-      `・乗れる話題で一言あると会話が弾む\n` +
-      `逆に、明らかに他の人だけで込み入った話をしていて割り込むと邪魔な時だけ黙る。迷ったら返事する側に倒す。\n\n` +
-      `【出力ルール（厳守）】黙る場合は「${SKIP}」の5文字だけを出力。返事する場合は返事の本文だけを出力。` +
-      `思考・理由・独り言・英単語（Wait等）・「${BOT_NAME}:」のような接頭辞・${SKIP}との併記は一切禁止。どちらか一方だけ。\n\n${convo}\n\n${BOT_NAME}:`;
+      `【絶対に答える（${SKIP}禁止）】最後の発言に次のどれかが当てはまる場合、必ず返事する:\n` +
+      `・文中に「${BOT_NAME}」「CC」が含まれる／呼びかけられている\n` +
+      `・疑問符や「？」「だっけ」「どう思う」等で質問・意見を求めている\n` +
+      `・直前の自分の発言への返答や話しかけ\n` +
+      `【黙る（${SKIP}）】上に当てはまらず、かつ明らかに他の人どうしだけの内輪の話で自分が割り込むと邪魔な時だけ。迷ったら答える。\n\n` +
+      `【出力（厳守）】黙る場合は「${SKIP}」だけ。返事する場合は本文だけ。` +
+      `思考・理由・独り言・英単語（Wait等）・「${BOT_NAME}:」等の接頭辞・${SKIP}との併記は禁止。どちらか一方だけ出力しろ。\n\n${convo}\n\n${BOT_NAME}:`;
   }
   return `以下は LINE グループの会話ログ。最後の発言に対して ${BOT_NAME} として自然に短く返事しろ。` +
     `返事の本文だけ出力すること（「${BOT_NAME}:」などの接頭辞は付けない）。\n\n${convo}\n\n${BOT_NAME}:`;
@@ -126,14 +147,25 @@ function runClaude(prompt) {
     const args = [
       '-p', prompt,
       '--model', MODEL,
-      '--append-system-prompt', PERSONA,
       '--no-session-persistence',
-      '--exclude-dynamic-system-prompt-sections',
       '--output-format', 'text',
     ];
-    const child = spawn('claude', args, { env, cwd: SCRATCH });
+    let cwd;
+    if (FULL_ACCESS) {
+      cwd = DOWNLOADS;                                   // 究の世界の文脈（CLAUDE.md 等）を読める
+      args.push('--append-system-prompt', SYS_FULL);     // ペルソナ + メモリ索引
+      args.push('--strict-mcp-config');                  // MCP 全停止（決済/DB/送信の破壊防止）
+      args.push('--allowedTools', ...ALLOWED_TOOLS);     // 読み + 新規書き + 局所修正のみ
+      args.push('--add-dir', MEMORY_DIR);                // メモリ読み取り許可
+      args.push('--settings', CLAUDE_SETTINGS);          // PreToolUse ガード + deny
+    } else {
+      cwd = SCRATCH;                                     // 隔離（フォールバック）
+      args.push('--append-system-prompt', PERSONA);
+      args.push('--exclude-dynamic-system-prompt-sections');
+    }
+    const child = spawn('claude', args, { env, cwd });
     let out = '', err = '';
-    const killer = setTimeout(() => child.kill('SIGKILL'), 55000);
+    const killer = setTimeout(() => child.kill('SIGKILL'), 90000); // ツール使用で長くなるため延長
     child.stdout.on('data', (d) => (out += d));
     child.stderr.on('data', (d) => (err += d));
     child.on('close', (code) => {
