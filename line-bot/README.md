@@ -85,3 +85,44 @@ LINE Developers → 「Messaging API設定」→ **Webhook URL** に
 - **常時稼働**: Mac 起動中のみ動く。閉じると停止。自動起動したくなったら launchd 化（別途）
 - **会話文脈**: `history.json` に直近 `MAX_HISTORY` 件を保存。消せばリセット
 - **モデル**: 既定 `sonnet`（速さ・枠効率重視）。`CLAUDE_MODEL=opus` で賢くなるが枠を多く食う
+
+---
+
+## 現在の構成（セットアップ済み）
+
+| 項目 | 値 |
+|---|---|
+| アカウント名 | Emo CC |
+| Bot ベーシックID | @792ohjpx |
+| プロバイダー | Emocute (2005200720) |
+| Channel ID | 2010233158 |
+| 認証情報 | `.env`（gitignore）+ Apple Notes「PWs」フォルダ |
+| 反応条件 | mention_or_prefix（`Emo`/`emo`/`エモ`/`えも`/`CC` を含む発言・@メンション・DM）|
+| LINE 側設定 | Webhook ON / 応答メッセージ OFF / チャット OFF / グループ参加 許可 ✓ |
+
+### ⚠️ Cloudflare quick tunnel は URL が毎回変わる
+
+`cloudflared tunnel --url` は再起動のたびに別の `*.trycloudflare.com` URL を発行する。
+**Mac 再起動・トンネル再起動のたびに、LINE Developers の Webhook URL を貼り直す必要がある。**
+（恒久運用するなら emocutelab.com の named tunnel 化を推奨 → 別途）
+
+また QUIC が塞がれた回線では `--protocol http2` を付けないと 530 エラーになる。
+
+### 再起動手順（Mac 再起動後など）
+
+```bash
+cd ~/Downloads/Sketches/line-bot
+# 1. サーバー起動
+node --env-file=.env server.mjs > server.log 2>&1 &
+# 2. トンネル起動（http2 必須）
+cloudflared tunnel --url http://localhost:8787 --protocol http2 > tunnel.log 2>&1 &
+# 3. 新URLを確認
+grep -oE "https://[a-z0-9-]+\.trycloudflare\.com" tunnel.log | head -1
+# 4. 上記 + "/webhook" を LINE Developers の Webhook URL に貼り直して「検証」
+```
+
+### ローカル疎通テスト
+
+```bash
+node test_webhook.mjs   # 署名付き webhook を自サーバーに投げて claude 応答を確認
+```
