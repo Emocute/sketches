@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Emocute Theory Toys — hub</title>
+<style>
+  :root{--bg:#0e0e12;--panel:#16161d;--ink:#e9e9f0;--dim:#8a8a99;--accent:#c9a86a;--accent2:#6a9ec9;--line:#26262f;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:-apple-system,"Hiragino Kaku Gothic ProN",sans-serif;line-height:1.5;padding:32px 24px;max-width:1000px;margin:0 auto}
+  h1{font-size:24px;font-weight:700;letter-spacing:.01em}
+  .tagline{color:var(--dim);font-size:14px;margin:8px 0 28px}
+  .sec{font-size:12px;color:var(--accent);text-transform:uppercase;letter-spacing:.1em;margin:24px 0 12px}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
+  a.card{display:block;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;
+    text-decoration:none;color:var(--ink);transition:.15s}
+  a.card:hover{border-color:var(--accent);transform:translateY(-2px)}
+  .card .ic{font-size:22px;margin-bottom:8px}
+  .card .nm{font-weight:600;font-size:16px}
+  .card .desc{font-size:12px;color:var(--dim);margin-top:5px;line-height:1.45}
+  .card .tag{display:inline-block;font-size:10px;color:var(--accent2);border:1px solid var(--line);border-radius:20px;padding:2px 9px;margin-top:10px}
+  .footer{margin-top:32px;color:var(--dim);font-size:12px;border-top:1px solid var(--line);padding-top:16px}
+</style>
+</head>
+<body>
+  <h1>Emocute Theory Toys</h1>
+  <p class="tagline">エモスタ（Studio）の和声エンジン哲学を、ブラウザで触れて音が鳴る理論 toy に。すべて単一 HTML + Tone.js、依存ゼロ。</p>
+
+  <div class="sec">和声・コード</div>
+  <div class="grid">
+    <a class="card" href="../voicing-lab/index.html"><div class="ic">🎹</div><div class="nm">Voicing Lab</div><div class="desc">1 コードを Close / Drop2 / Rootless / Quartal / Shell / Spread の 7 種で鳴らし比べ</div><span class="tag">voicing</span></a>
+    <a class="card" href="../reharm-roulette/index.html"><div class="ic">🎲</div><div class="nm">Reharm Roulette</div><div class="desc">度数進行に REHARM 技 6 種を適用、凡庸判定＋ガチャで歪ませ before/after</div><span class="tag">reharm</span></a>
+    <a class="card" href="../negative-harmony/index.html"><div class="ic">🪞</div><div class="nm">Negative Harmony</div><div class="desc">トニック–ドミナント軸でコードを鏡映、裏の進行を聴き比べ</div><span class="tag">reharm</span></a>
+    <a class="card" href="../tension-stacker/index.html"><div class="ic">🧱</div><div class="nm">Tension Stacker</div><div class="desc">7th コアにテンションを積み、濁り計＋スイートスポット判定</div><span class="tag">voicing</span></a>
+    <a class="card" href="../chord-scale-mapper/index.html"><div class="ic">🪜</div><div class="nm">Chord-Scale Mapper</div><div class="desc">コードの上で吹けるスケールを提示、コード→スケール上行を発音</div><span class="tag">scale</span></a>
+  </div>
+
+  <div class="sec">スケール・調</div>
+  <div class="grid">
+    <a class="card" href="../circle-of-fifths/index.html"><div class="ic">🌀</div><div class="nm">Circle of Fifths</div><div class="desc">五度圏、キークリックでダイアトニック和音を順に発音、近親調表示</div><span class="tag">key</span></a>
+    <a class="card" href="../mode-mixer/index.html"><div class="ic">🎨</div><div class="nm">Mode Mixer</div><div class="desc">同トニックで 7 旋法を切替、特徴音ハイライト、明→暗の並び</div><span class="tag">mode</span></a>
+  </div>
+
+  <div class="sec">リズム</div>
+  <div class="grid">
+    <a class="card" href="../euclid-rhythm/index.html"><div class="ic">⭕</div><div class="nm">Euclid Rhythm</div><div class="desc">Bjorklund E(k,n) で 2 トラック生成、ステップ円可視化＋ループ再生</div><span class="tag">rhythm</span></a>
+    <a class="card" href="../groove-swing/index.html"><div class="ic">🌊</div><div class="nm">Groove Swing</div><div class="desc">同じパターンの swing 量を連続可変、ストレート↔ハネを耳で</div><span class="tag">rhythm</span></a>
+  </div>
+
+  <div class="sec">耳・終止</div>
+  <div class="grid">
+    <a class="card" href="../interval-ear-trainer/index.html"><div class="ic">👂</div><div class="nm">Interval Ear Trainer</div><div class="desc">2 音を鳴らして音程当て、正答率＋連続正解を記録</div><span class="tag">ear</span></a>
+    <a class="card" href="../cadence-lab/index.html"><div class="ic">🏁</div><div class="nm">Cadence Lab</div><div class="desc">正格 / 変格 / 半 / 偽の終止形を弾き比べ、解決感の強弱</div><span class="tag">cadence</span></a>
+  </div>
+
+  <div class="footer">
+    度数表記はすべて Studio v7 準拠（I=0 II=2 III=4 IV=5 V=7 VI=9 VII=11）。<br>
+    Built by Emocute. — backlog（chromatic-approach / degree-ear-trainer / voice-leading / polyrhythm-lab …）は <code>_ideas/browser-theory-toys.md</code>。
+  </div>
+</body>
+</html>

@@ -30,6 +30,8 @@ Sketches/
 
 ### ブラウザ理論 toy 連作（単一 HTML + Tone.js、依存ゼロ、エモスタのエンジン哲学を web 化）
 
+- **hub** — 全 toy の入口インデックス（`hub/index.html` を開けば全部に飛べる）
+
 - **voicing-lab** — 1 コードを Close / Drop2 / Drop3 / Rootless / Quartal / Shell / Spread の 7 種で鳴らし比べ
 - **reharm-roulette** — 度数進行に REHARM 技 6 種を適用、凡庸判定＋🎲ガチャで自動的に歪ませ、before/after 試聴
 - **circle-of-fifths** — 五度圏 SVG、キークリックでダイアトニック和音を順に発音、平行短調/近親調表示
