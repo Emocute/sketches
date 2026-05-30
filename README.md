@@ -25,3 +25,6 @@ Sketches/
 ## 現在の住人
 
 - **Geomonic** — Studio の和声知識と数理モデル（Tonnetz / Voice Leading Orbifold / 等分円 / Spectral / PC-Set）を組み合わせた MIDI 生成 VST3/CLAP
+- **voicing-lab** — ブラウザ単一 HTML の「ボイシング実験室」。1 コードを Close / Drop2 / Drop3 / Rootless / Quartal / Shell / Spread で鳴らし比べ（Tone.js）。Studio `voicing.py` 哲学の web 化。理論 toy 連作の第一弾
+- **emocute-toolkit** — 販売/運用の統一 CLI（監査・version bump・CHANGELOG 自動化等）
+- **line-bot** — LINE グループ参加ボット（`claude -p` ヘッドレス実行）
