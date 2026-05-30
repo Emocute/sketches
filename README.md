@@ -37,5 +37,9 @@ Sketches/
 - **negative-harmony** — トニック–ドミナント軸でコードを鏡映、裏の進行を生成して聴き比べ
 - **tension-stacker** — 7th コアにテンションを 1 つずつ積み、濁り計＋スイートスポット判定
 - **euclid-rhythm** — Bjorklund E(k,n) で 2 トラック生成、ステップ円可視化＋ループ再生
+- **chord-scale-mapper** — コードの上で吹けるスケールを提示、コード→スケール上行を発音
+- **interval-ear-trainer** — 2 音を鳴らして音程当て、正答率＋連続正解を記録
+- **groove-swing** — 同じパターンの swing 量を連続可変、ストレート↔ハネを耳で
+- **cadence-lab** — 正格/変格/半/偽の終止形を弾き比べ、解決感の強弱を可視化
 
 連作の backlog: `_ideas/browser-theory-toys.md`

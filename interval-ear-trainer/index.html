@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Interval Ear Trainer — Emocute</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<style>
+  :root{--bg:#0e0e12;--panel:#16161d;--ink:#e9e9f0;--dim:#8a8a99;--accent:#c9a86a;--accent2:#6a9ec9;--line:#26262f;--good:#6ac98f;--bad:#c96a6a;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:-apple-system,"Hiragino Kaku Gothic ProN",sans-serif;line-height:1.5;padding:24px;max-width:720px;margin:0 auto;text-align:center}
+  h1{font-size:20px;font-weight:600}h1 .sub{color:var(--dim);font-weight:400;font-size:13px;margin-left:10px}
+  .tagline{color:var(--dim);font-size:13px;margin:6px 0 20px}
+  .stats{display:flex;gap:16px;justify-content:center;margin-bottom:18px}
+  .stat{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 18px;min-width:90px}
+  .stat .n{font-size:22px;font-weight:700;color:var(--accent)}
+  .stat .l{font-size:11px;color:var(--dim);text-transform:uppercase}
+  .big{background:var(--accent);color:#1a1206;border:none;border-radius:12px;padding:16px 30px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;margin-bottom:8px}
+  .opts{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:18px}
+  .opts button{background:#1d1d26;color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:14px 8px;font-size:14px;cursor:pointer;font-family:inherit;transition:.12s}
+  .opts button:hover{border-color:var(--accent)}
+  .opts button.good{background:var(--good);color:#06180e;border-color:var(--good)}
+  .opts button.bad{background:var(--bad);color:#fff;border-color:var(--bad)}
+  .opts button:disabled{opacity:.6;cursor:default}
+  .msg{height:24px;margin:14px 0;font-size:14px}
+  .ctrls{display:flex;gap:10px;justify-content:center;margin-top:16px;flex-wrap:wrap}
+  .ctrls button{background:#1d1d26;color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 14px;cursor:pointer;font-family:inherit;font-size:13px}
+  .ctrls button.on{background:var(--accent2);color:#06121d;border-color:var(--accent2)}
+  .footer{margin-top:22px;color:var(--dim);font-size:12px;border-top:1px solid var(--line);padding-top:14px;text-align:left}
+</style>
+</head>
+<body>
+  <h1>Interval Ear Trainer <span class="sub">今のは、何度？</span></h1>
+  <p class="tagline">2 音を聴いて音程を当てる。連続正解を伸ばせ。</p>
+  <div class="stats">
+    <div class="stat"><div class="n" id="correct">0</div><div class="l">正解</div></div>
+    <div class="stat"><div class="n" id="total">0</div><div class="l">出題</div></div>
+    <div class="stat"><div class="n" id="streak">0</div><div class="l">連続</div></div>
+  </div>
+  <button class="big" id="play">▶ 出題（もう一度聴く）</button>
+  <div class="ctrls">
+    <span style="font-size:12px;color:var(--dim);align-self:center">方向:</span>
+    <button data-dir="up" class="on">上行</button>
+    <button data-dir="down">下行</button>
+    <button data-dir="harm">同時</button>
+  </div>
+  <div class="msg" id="msg"></div>
+  <div class="opts" id="opts"></div>
+  <div class="footer">
+    基準音はランダム（C3〜C4）。音程は半音 1〜12。発音は Tone.js。<br>
+    完全/長/短/増減の呼び分けは一般的な度数名で表示。
+  </div>
+<script>
+const INTERVALS=[
+  {s:1,n:"短2度"},{s:2,n:"長2度"},{s:3,n:"短3度"},{s:4,n:"長3度"},{s:5,n:"完全4度"},
+  {s:6,n:"増4/減5"},{s:7,n:"完全5度"},{s:8,n:"短6度"},{s:9,n:"長6度"},{s:10,n:"短7度"},{s:11,n:"長7度"},{s:12,n:"完全8度"}];
+let correct=0,total=0,streak=0,answer=null,base=60,dir="up",answered=false;
+// 疑似乱数（Date/Math.random は環境で禁止のことがあるので種から）
+let seed=20260530;
+function rnd(){seed=(seed*1103515245+12345)&0x7fffffff;return seed/0x7fffffff;}
+
+const $opts=document.getElementById("opts"),$msg=document.getElementById("msg");
+INTERVALS.forEach(iv=>{const b=document.createElement("button");b.textContent=iv.n;b.dataset.s=iv.s;
+  b.onclick=()=>guess(iv.s,b);$opts.appendChild(b);});
+document.querySelectorAll(".ctrls button[data-dir]").forEach(b=>b.onclick=()=>{
+  dir=b.dataset.dir;document.querySelectorAll(".ctrls button[data-dir]").forEach(x=>x.classList.toggle("on",x===b));});
+
+let synth=null;
+function ensure(){if(synth)return;synth=new Tone.PolySynth(Tone.Synth,{oscillator:{type:"triangle"},envelope:{attack:.01,decay:.2,sustain:.4,release:.6}}).toDestination();synth.volume.value=-11;}
+function fr(m){return 440*Math.pow(2,(m-69)/12);}
+function newQuestion(){
+  answered=false;
+  $opts.querySelectorAll("button").forEach(b=>{b.disabled=false;b.classList.remove("good","bad");});
+  base=55+Math.floor(rnd()*10);
+  answer=INTERVALS[Math.floor(rnd()*INTERVALS.length)].s;
+  $msg.textContent="";
+}
+async function playQ(){
+  await Tone.start();ensure();const t=Tone.now();
+  const n1=base, n2=base+answer;
+  if(dir==="harm"){synth.triggerAttackRelease([fr(n1),fr(n2)],1.0,t);}
+  else if(dir==="down"){synth.triggerAttackRelease(fr(n2),.5,t);synth.triggerAttackRelease(fr(n1),.7,t+.55);}
+  else{synth.triggerAttackRelease(fr(n1),.5,t);synth.triggerAttackRelease(fr(n2),.7,t+.55);}
+}
+function guess(s,btn){
+  if(answered)return;answered=true;total++;
+  const correctBtn=[...$opts.children].find(b=>+b.dataset.s===answer);
+  if(s===answer){correct++;streak++;btn.classList.add("good");$msg.innerHTML='<span style="color:var(--good)">正解！</span>';}
+  else{streak=0;btn.classList.add("bad");correctBtn.classList.add("good");
+    $msg.innerHTML='<span style="color:var(--bad)">'+INTERVALS.find(i=>i.s===s).n+' → 正解は '+INTERVALS.find(i=>i.s===answer).n+'</span>';}
+  $opts.querySelectorAll("button").forEach(b=>b.disabled=true);
+  document.getElementById("correct").textContent=correct;
+  document.getElementById("total").textContent=total;
+  document.getElementById("streak").textContent=streak;
+  setTimeout(()=>{newQuestion();playQ();},1100);
+}
+document.getElementById("play").onclick=async()=>{if(answer===null||answered)newQuestion();await playQ();};
+newQuestion();
+</script>
+</body>
+</html>

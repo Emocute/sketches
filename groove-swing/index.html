@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Groove Swing — Emocute</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<style>
+  :root{--bg:#0e0e12;--panel:#16161d;--ink:#e9e9f0;--dim:#8a8a99;--accent:#c9a86a;--accent2:#6a9ec9;--line:#26262f;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:-apple-system,"Hiragino Kaku Gothic ProN",sans-serif;line-height:1.5;padding:24px;max-width:720px;margin:0 auto}
+  h1{font-size:20px;font-weight:600}h1 .sub{color:var(--dim);font-weight:400;font-size:13px;margin-left:10px}
+  .tagline{color:var(--dim);font-size:13px;margin:6px 0 20px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px}
+  .grid{display:grid;grid-template-columns:60px repeat(16,1fr);gap:4px;margin-bottom:18px}
+  .lab{font-size:12px;color:var(--dim);display:flex;align-items:center}
+  .cell{aspect-ratio:1;border-radius:5px;background:#1d1d26;border:1px solid var(--line)}
+  .cell.on{background:var(--accent)}
+  .cell.beat{border-color:#3a3a48}
+  .cell.cur{outline:2px solid #fff}
+  .slider{display:flex;align-items:center;gap:12px;margin:12px 0}
+  .slider label{width:80px;color:var(--dim);font-size:13px}
+  input[type=range]{flex:1;accent-color:var(--accent)}
+  .slider .v{width:90px;text-align:right;font-family:ui-monospace,Menlo,monospace;color:var(--accent)}
+  .transport{display:flex;gap:12px;margin-top:16px}
+  button{background:var(--accent);color:#1a1206;border:none;border-radius:8px;padding:11px 22px;font-weight:600;cursor:pointer;font-family:inherit;font-size:14px}
+  button.stop{background:#1d1d26;color:var(--ink);border:1px solid var(--line)}
+  .feel{margin-top:14px;font-size:13px;color:var(--accent2)}
+  .footer{margin-top:20px;color:var(--dim);font-size:12px;border-top:1px solid var(--line);padding-top:14px}
+</style>
+</head>
+<body>
+  <h1>Groove Swing <span class="sub">ジャストと、ハネの間。</span></h1>
+  <p class="tagline">同じパターンの swing 量だけを動かす。50%＝ストレート、66%＝三連ハネ。</p>
+  <div class="panel">
+    <div class="grid" id="grid"></div>
+    <div class="slider"><label>swing</label><input type="range" id="swing" min="0" max="80" value="0"><span class="v" id="swingv"></span></div>
+    <div class="slider"><label>tempo</label><input type="range" id="bpm" min="60" max="160" value="92"><span class="v" id="bpmv"></span></div>
+    <div class="feel" id="feel"></div>
+    <div class="transport">
+      <button id="play">▶ Play</button>
+      <button class="stop" id="stop">■ Stop</button>
+    </div>
+  </div>
+  <div class="footer">
+    swing は 8 分の裏（off-beat）をどれだけ後ろへ溜めるか。<code>Tone.Transport.swing</code> + <code>swingSubdivision="8n"</code>。<br>
+    パターン: kick=1,3 拍頭系 / snare=2,4 / hat=16th。ハネは hat の裏に最も出る。
+  </div>
+<script>
+// パターン（16 step）: 1=hit
+const PAT={
+  kick: [1,0,0,0,0,0,1,0,0,0,1,0,0,0,0,0],
+  snare:[0,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0],
+  hat:  [1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0],
+};
+const ROWS=[["kick","Kick"],["snare","Snare"],["hat","Hat"]];
+const $grid=document.getElementById("grid");
+function buildGrid(){
+  $grid.innerHTML="";
+  ROWS.forEach(([k,lbl])=>{
+    const l=document.createElement("div");l.className="lab";l.textContent=lbl;$grid.appendChild(l);
+    PAT[k].forEach((v,s)=>{const c=document.createElement("div");
+      c.className="cell"+(v?" on":"")+((s%4===0)?" beat":"");c.dataset.row=k;c.dataset.s=s;$grid.appendChild(c);});
+  });
+}
+function highlight(step){
+  $grid.querySelectorAll(".cell").forEach(c=>c.classList.toggle("cur",+c.dataset.s===step));
+}
+const $sw=document.getElementById("swing"),$bpm=document.getElementById("bpm");
+function pct(){return 50+Math.round(+$sw.value/80*16);} // 50→66%
+function updFeel(){
+  const p=pct();
+  let f = p<=51?"ストレート（ジャスト）": p<58?"軽いシャッフル": p<64?"ハーフタイム・シャッフル":"三連ハネ（ブギー寄り）";
+  document.getElementById("feel").textContent=`swing ≒ ${p}%　— ${f}`;
+}
+$sw.oninput=()=>{document.getElementById("swingv").textContent=$sw.value+"%";Tone.Transport.swing=+$sw.value/80*0.5;updFeel();};
+$bpm.oninput=()=>{document.getElementById("bpmv").textContent=$bpm.value+" BPM";Tone.Transport.bpm.value=+$bpm.value;};
+
+let kick=null,snare=null,hat=null,rep=null,idx=0;
+function ensure(){if(kick)return;
+  kick=new Tone.MembraneSynth({octaves:5,pitchDecay:.05}).toDestination();kick.volume.value=-6;
+  snare=new Tone.NoiseSynth({noise:{type:"white"},envelope:{attack:.001,decay:.16,sustain:0}}).toDestination();snare.volume.value=-14;
+  hat=new Tone.MetalSynth({frequency:300,envelope:{attack:.001,decay:.07,release:.01},harmonicity:5.1,modulationIndex:32,resonance:5000,octaves:1.2}).toDestination();hat.volume.value=-24;
+}
+function start(){
+  ensure();if(rep!==null)return;idx=0;
+  Tone.Transport.bpm.value=+$bpm.value;
+  Tone.Transport.swingSubdivision="8n";
+  Tone.Transport.swing=+$sw.value/80*0.5;
+  rep=Tone.Transport.scheduleRepeat((time)=>{
+    const s=idx%16;
+    if(PAT.kick[s])kick.triggerAttackRelease("C2","16n",time);
+    if(PAT.snare[s])snare.triggerAttackRelease("16n",time);
+    if(PAT.hat[s])hat.triggerAttackRelease("16n",time);
+    Tone.Draw.schedule(()=>highlight(s),time);
+    idx++;
+  },"16n");
+  Tone.Transport.start();
+}
+function stop(){if(rep!==null){Tone.Transport.clear(rep);rep=null;}Tone.Transport.stop();highlight(-1);}
+document.getElementById("play").onclick=async()=>{await Tone.start();start();};
+document.getElementById("stop").onclick=stop;
+buildGrid();
+document.getElementById("swingv").textContent=$sw.value+"%";
+document.getElementById("bpmv").textContent=$bpm.value+" BPM";
+updFeel();
+</script>
+</body>
+</html>
