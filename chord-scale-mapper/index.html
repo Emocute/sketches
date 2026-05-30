@@ -33,13 +33,13 @@
     <div class="row">
       <div><label class="lbl">Root</label><select id="root"></select></div>
       <div><label class="lbl">Chord</label><select id="qual"></select></div>
-      <button class="chordbtn" id="playChord">▶ コードを鳴らす</button>
+      <button class="chordbtn" id="playChord"><svg viewBox="0 0 12 12" width="12" height="12" style="vertical-align:-1px"><path d="M3 2.2v7.6L9.5 6z" fill="currentColor"/></svg> コードを鳴らす</button>
     </div>
   </div>
   <div class="scales" id="scales"></div>
   <div class="footer">
     各スケールはコード構成音を必ず含む（<code>node</code> 検証済み）。度数 = メジャースケール準拠（Studio v7）。<br>
-    ▶ でコード → スケール上行を続けて発音。スケールの非コード音＝テンション／経過音。
+    <svg viewBox="0 0 12 12" width="12" height="12" style="vertical-align:-1px"><path d="M3 2.2v7.6L9.5 6z" fill="currentColor"/></svg> でコード → スケール上行を続けて発音。スケールの非コード音＝テンション／経過音。
   </div>
 <script>
 const NOTE=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
@@ -75,7 +75,7 @@ function render(){
     const degs=sc.map(iv=>{const isCt=ctones.has(iv%12);return `<span class="d ${isCt?'ct':''}">${DLABEL[iv]}</span>`;}).join("");
     const div=document.createElement("div");div.className="scale";
     div.innerHTML=`<div><div class="nm">${NOTE[rootPc]} ${scn}</div><div class="use">${USE[scn]||""}</div></div>`+
-      `<div class="degs">${degs}</div><button class="play">▶</button>`;
+      `<div class="degs">${degs}</div><button class="play"><svg viewBox="0 0 12 12" width="12" height="12" style="vertical-align:-1px"><path d="M3 2.2v7.6L9.5 6z" fill="currentColor"/></svg></button>`;
     div.querySelector(".play").onclick=()=>playChordScale(ch.iv,sc);
     $s.appendChild(div);
   });

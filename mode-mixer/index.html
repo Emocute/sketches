@@ -74,7 +74,7 @@ function render(){
       return `<span class="${cls}">${DLABEL[iv]}</span>`;
     }).join("");
     div.innerHTML=`<div><div class="nm">${mo.nm}</div><div class="bright">${mo.bright}</div></div>`+
-      `<div class="degs">${degs}</div><button class="play">▶</button>`;
+      `<div class="degs">${degs}</div><button class="play"><svg viewBox="0 0 12 12" width="12" height="12" style="vertical-align:-1px"><path d="M3 2.2v7.6L9.5 6z" fill="currentColor"/></svg></button>`;
     div.querySelector(".play").onclick=(e)=>{e.stopPropagation();playMode(mo);};
     div.onclick=()=>{[...$m.children].forEach(c=>c.classList.remove("active"));div.classList.add("active");playMode(mo);};
     $m.appendChild(div);

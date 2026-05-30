@@ -56,7 +56,7 @@ function render(){
   CADS.forEach(cd=>{
     const div=document.createElement("div");div.className="cad";
     div.innerHTML=`<div><div class="nm">${cd.nm}</div><div class="prog">${cd.prog}</div><div class="desc">${cd.desc}</div></div>`+
-      `<div class="res"><div class="bar"><i style="width:${cd.res}%"></i></div><button class="play">▶</button></div>`;
+      `<div class="res"><div class="bar"><i style="width:${cd.res}%"></i></div><button class="play"><svg viewBox="0 0 12 12" width="12" height="12" style="vertical-align:-1px"><path d="M3 2.2v7.6L9.5 6z" fill="currentColor"/></svg></button></div>`;
     const play=()=>playCad(cd.seq);
     div.querySelector(".play").onclick=(e)=>{e.stopPropagation();play();};
     div.onclick=play;

@@ -3,59 +3,126 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Emocute Theory Toys — hub</title>
+<title>Emocute Theory Toys</title>
 <style>
-  :root{--bg:#0e0e12;--panel:#16161d;--ink:#e9e9f0;--dim:#8a8a99;--accent:#c9a86a;--accent2:#6a9ec9;--line:#26262f;}
+  :root{
+    --bg:#0b0b0f;--bg2:#0f0f15;--surface:#15151c;--surface2:#1b1b24;
+    --ink:#ececf2;--ink-dim:#8c8c9a;--line:#262630;
+    --accent:#cfac6e;--accent-soft:#e0c894;--accent2:#6fa3cf;
+    --good:#6fc996;--mag:#cf6f9e;
+    --radius:14px;--radius-sm:9px;--ease:cubic-bezier(.2,.7,.3,1);
+  }
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--ink);font-family:-apple-system,"Hiragino Kaku Gothic ProN",sans-serif;line-height:1.5;padding:32px 24px;max-width:1000px;margin:0 auto}
-  h1{font-size:24px;font-weight:700;letter-spacing:.01em}
-  .tagline{color:var(--dim);font-size:14px;margin:8px 0 28px}
-  .sec{font-size:12px;color:var(--accent);text-transform:uppercase;letter-spacing:.1em;margin:24px 0 12px}
-  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:14px}
-  a.card{display:block;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:18px;
-    text-decoration:none;color:var(--ink);transition:.15s}
-  a.card:hover{border-color:var(--accent);transform:translateY(-2px)}
-  .card .ic{font-size:22px;margin-bottom:8px}
-  .card .nm{font-weight:600;font-size:16px}
-  .card .desc{font-size:12px;color:var(--dim);margin-top:5px;line-height:1.45}
-  .card .tag{display:inline-block;font-size:10px;color:var(--accent2);border:1px solid var(--line);border-radius:20px;padding:2px 9px;margin-top:10px}
-  .footer{margin-top:32px;color:var(--dim);font-size:12px;border-top:1px solid var(--line);padding-top:16px}
+  html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  body{
+    min-height:100vh;color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Segoe UI",sans-serif;
+    line-height:1.55;padding:56px 24px 48px;
+    background:
+      radial-gradient(120% 80% at 50% -10%, #16131c 0%, var(--bg2) 38%, var(--bg) 75%);
+  }
+  .shell{max-width:1040px;margin:0 auto}
+
+  /* hero */
+  .hero{margin-bottom:40px}
+  .eyebrow{display:inline-flex;align-items:center;gap:8px;font-size:11px;letter-spacing:.16em;
+    text-transform:uppercase;color:var(--accent);margin-bottom:14px}
+  .eyebrow::before{content:"";width:22px;height:1px;background:linear-gradient(90deg,var(--accent),transparent)}
+  h1{font-size:clamp(28px,5vw,40px);font-weight:700;letter-spacing:-.01em;line-height:1.08}
+  h1 em{font-style:normal;color:var(--accent);}
+  .lede{color:var(--ink-dim);font-size:15px;margin-top:14px;max-width:60ch}
+  .lede code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px;color:var(--accent-soft);
+    background:var(--surface2);padding:1px 6px;border-radius:6px}
+
+  /* section */
+  section{margin-top:34px}
+  .sechead{display:flex;align-items:center;gap:14px;margin-bottom:16px}
+  .sechead .label{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink-dim);white-space:nowrap}
+  .sechead .rule{flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
+  .sechead .count{font-size:11px;color:var(--ink-dim);font-family:ui-monospace,Menlo,monospace}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(296px,1fr));gap:14px}
+
+  a.card{
+    position:relative;display:flex;gap:14px;align-items:flex-start;overflow:hidden;
+    background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);
+    padding:18px 18px 18px 20px;text-decoration:none;color:var(--ink);
+    transition:transform .22s var(--ease),border-color .22s var(--ease),box-shadow .22s var(--ease);
+  }
+  a.card::before{ /* 左に育つアクセントバー */
+    content:"";position:absolute;left:0;top:0;bottom:0;width:3px;
+    background:linear-gradient(180deg,var(--accent),var(--accent2));
+    transform:scaleY(0);transform-origin:top;transition:transform .26s var(--ease);
+  }
+  a.card:hover{transform:translateY(-3px);border-color:#3a3340;
+    box-shadow:0 10px 30px -12px rgba(0,0,0,.7), 0 0 0 1px rgba(207,172,110,.18)}
+  a.card:hover::before{transform:scaleY(1)}
+  a.card:focus-visible{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(207,172,110,.55)}
+
+  .ic{flex:none;width:42px;height:42px;border-radius:11px;display:grid;place-items:center;color:var(--accent);
+    background:radial-gradient(120% 120% at 30% 20%, #23202a, #14131a);
+    border:1px solid var(--line);box-shadow:inset 0 1px 0 rgba(255,255,255,.04)}
+  a.card:hover .ic{color:var(--accent-soft)}
+  .body{min-width:0}
+  .nm{font-weight:600;font-size:16px;letter-spacing:.005em;display:flex;align-items:center;gap:8px}
+  .nm .ver{font-size:10px;color:var(--accent2);border:1px solid var(--line);border-radius:20px;padding:1px 7px;font-weight:500}
+  .desc{font-size:12.5px;color:var(--ink-dim);margin-top:5px;line-height:1.5}
+  .tag{display:inline-block;margin-top:11px;font-size:10px;letter-spacing:.04em;color:var(--accent);
+    background:rgba(207,172,110,.08);border:1px solid rgba(207,172,110,.2);border-radius:20px;padding:2px 9px}
+
+  footer{margin-top:44px;padding-top:18px;border-top:1px solid var(--line);color:var(--ink-dim);font-size:12px;line-height:1.7}
+  footer code{font-family:ui-monospace,Menlo,monospace;font-size:11px;background:var(--surface2);padding:1px 5px;border-radius:5px}
+  footer .by{color:var(--accent)}
+  @media(max-width:560px){body{padding:40px 16px}.grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
-  <h1>Emocute Theory Toys</h1>
-  <p class="tagline">エモスタ（Studio）の和声エンジン哲学を、ブラウザで触れて音が鳴る理論 toy に。すべて単一 HTML + Tone.js、依存ゼロ。</p>
+<div class="shell">
+  <header class="hero">
+    <div class="eyebrow">Emocute · Studio engine, in the browser</div>
+    <h1>Theory <em>Toys</em></h1>
+    <p class="lede">エモスタ（Studio）の和声エンジン哲学を、触れて音が鳴る理論 toy に。すべて単一 <code>HTML</code> + <code>Tone.js</code>、依存ゼロ、度数表記は Studio v7 準拠。</p>
+  </header>
 
-  <div class="sec">和声・コード</div>
-  <div class="grid">
-    <a class="card" href="../voicing-lab/index.html"><div class="ic">🎹</div><div class="nm">Voicing Lab</div><div class="desc">1 コードを Close / Drop2 / Rootless / Quartal / Shell / Spread の 7 種で鳴らし比べ</div><span class="tag">voicing</span></a>
-    <a class="card" href="../reharm-roulette/index.html"><div class="ic">🎲</div><div class="nm">Reharm Roulette</div><div class="desc">度数進行に REHARM 技 6 種を適用、凡庸判定＋ガチャで歪ませ before/after</div><span class="tag">reharm</span></a>
-    <a class="card" href="../negative-harmony/index.html"><div class="ic">🪞</div><div class="nm">Negative Harmony</div><div class="desc">トニック–ドミナント軸でコードを鏡映、裏の進行を聴き比べ</div><span class="tag">reharm</span></a>
-    <a class="card" href="../tension-stacker/index.html"><div class="ic">🧱</div><div class="nm">Tension Stacker</div><div class="desc">7th コアにテンションを積み、濁り計＋スイートスポット判定</div><span class="tag">voicing</span></a>
-    <a class="card" href="../chord-scale-mapper/index.html"><div class="ic">🪜</div><div class="nm">Chord-Scale Mapper</div><div class="desc">コードの上で吹けるスケールを提示、コード→スケール上行を発音</div><span class="tag">scale</span></a>
-  </div>
+  <section>
+    <div class="sechead"><span class="label">和声 · コード</span><span class="rule"></span><span class="count">05</span></div>
+    <div class="grid">
+      <a class="card" href="../voicing-lab/index.html"><div class="ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="13" height="3.2" rx="1"/><rect x="7.5" y="11" width="13" height="3.2" rx="1"/><rect x="5" y="16" width="13" height="3.2" rx="1"/></svg></div><div class="body"><div class="nm">Voicing Lab <span class="ver">v2</span></div><div class="desc">1 コードを Close / Drop2 / Rootless A·B / Quartal / Shell / Spread の 8 種＋転回形で鳴らし比べ</div><span class="tag">voicing</span></div></a>
+      <a class="card" href="../reharm-roulette/index.html"><div class="ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 9a6 6 0 0 1 10-2.5"/><path d="M17 15a6 6 0 0 1-10 2.5"/><path d="M16.5 4v3.2h-3.2"/><path d="M7.5 20v-3.2h3.2"/></svg></div><div class="body"><div class="nm">Reharm Roulette <span class="ver">v2</span></div><div class="desc">度数進行に REHARM 技 9 種、個別リハモ・機能ラベル・新鮮度で before/after</div><span class="tag">reharm</span></div></a>
+      <a class="card" href="../negative-harmony/index.html"><div class="ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5v17"/><path d="M9 9l-3.2 3 3.2 3"/><path d="M15 9l3.2 3-3.2 3"/></svg></div><div class="body"><div class="nm">Negative Harmony</div><div class="desc">トニック–ドミナント軸でコードを鏡映、裏の進行を聴き比べ</div><span class="tag">reharm</span></div></a>
+      <a class="card" href="../tension-stacker/index.html"><div class="ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="14.5" width="14" height="4.5" rx="1"/><rect x="7.5" y="9.5" width="9" height="4.5" rx="1"/><rect x="9.5" y="4.5" width="5" height="4.5" rx="1"/></svg></div><div class="body"><div class="nm">Tension Stacker</div><div class="desc">7th コアにテンションを積み、濁り計＋スイートスポット判定</div><span class="tag">voicing</span></div></a>
+      <a class="card" href="../chord-scale-mapper/index.html"><div class="ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 19.5h4v-4h4v-4h4v-4h4"/></svg></div><div class="body"><div class="nm">Chord-Scale Mapper</div><div class="desc">コードの上で吹けるスケールを提示、コード→スケール上行を発音</div><span class="tag">scale</span></div></a>
+    </div>
+  </section>
 
-  <div class="sec">スケール・調</div>
-  <div class="grid">
-    <a class="card" href="../circle-of-fifths/index.html"><div class="ic">🌀</div><div class="nm">Circle of Fifths</div><div class="desc">五度圏、キークリックでダイアトニック和音を順に発音、近親調表示</div><span class="tag">key</span></a>
-    <a class="card" href="../mode-mixer/index.html"><div class="ic">🎨</div><div class="nm">Mode Mixer</div><div class="desc">同トニックで 7 旋法を切替、特徴音ハイライト、明→暗の並び</div><span class="tag">mode</span></a>
-  </div>
+  <section>
+    <div class="sechead"><span class="label">スケール · 調</span><span class="rule"></span><span class="count">02</span></div>
+    <div class="grid">
+      <a class="card" href="../circle-of-fifths/index.html"><div class="ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 4.4v2M19.6 12h-2M12 19.6v-2M4.4 12h2"/></svg></div><div class="body"><div class="nm">Circle of Fifths <span class="ver">v2</span></div><div class="desc">Major/minor 切替・調号・ダイアトニック発音、進行を圏上に軌跡描画</div><span class="tag">key</span></div></a>
+      <a class="card" href="../mode-mixer/index.html"><div class="ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 18v-3M10.5 18v-6.5M15.5 18v-9M19.5 18v-11.5"/></svg></div><div class="body"><div class="nm">Mode Mixer</div><div class="desc">同トニックで 7 旋法を切替、特徴音ハイライト、明→暗の並び</div><span class="tag">mode</span></div></a>
+    </div>
+  </section>
 
-  <div class="sec">リズム</div>
-  <div class="grid">
-    <a class="card" href="../euclid-rhythm/index.html"><div class="ic">⭕</div><div class="nm">Euclid Rhythm</div><div class="desc">Bjorklund E(k,n) で 2 トラック生成、ステップ円可視化＋ループ再生</div><span class="tag">rhythm</span></a>
-    <a class="card" href="../groove-swing/index.html"><div class="ic">🌊</div><div class="nm">Groove Swing</div><div class="desc">同じパターンの swing 量を連続可変、ストレート↔ハネを耳で</div><span class="tag">rhythm</span></a>
-  </div>
+  <section>
+    <div class="sechead"><span class="label">リズム</span><span class="rule"></span><span class="count">02</span></div>
+    <div class="grid">
+      <a class="card" href="../euclid-rhythm/index.html"><div class="ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="4" r="1.5" fill="currentColor" stroke="none"/><circle cx="19" cy="15" r="1.5" fill="currentColor" stroke="none"/><circle cx="6.5" cy="17" r="1.5" fill="currentColor" stroke="none"/></svg></div><div class="body"><div class="nm">Euclid Rhythm</div><div class="desc">Bjorklund E(k,n) で 2 トラック生成、ステップ円可視化＋ループ再生</div><span class="tag">rhythm</span></div></a>
+      <a class="card" href="../groove-swing/index.html"><div class="ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 13c2-5 4-5 6 0s4 5 6 0"/></svg></div><div class="body"><div class="nm">Groove Swing</div><div class="desc">同じパターンの swing 量を連続可変、ストレート↔ハネを耳で</div><span class="tag">rhythm</span></div></a>
+    </div>
+  </section>
 
-  <div class="sec">耳・終止</div>
-  <div class="grid">
-    <a class="card" href="../interval-ear-trainer/index.html"><div class="ic">👂</div><div class="nm">Interval Ear Trainer</div><div class="desc">2 音を鳴らして音程当て、正答率＋連続正解を記録</div><span class="tag">ear</span></a>
-    <a class="card" href="../cadence-lab/index.html"><div class="ic">🏁</div><div class="nm">Cadence Lab</div><div class="desc">正格 / 変格 / 半 / 偽の終止形を弾き比べ、解決感の強弱</div><span class="tag">cadence</span></a>
-  </div>
+  <section>
+    <div class="sechead"><span class="label">耳 · 終止</span><span class="rule"></span><span class="count">02</span></div>
+    <div class="grid">
+      <a class="card" href="../interval-ear-trainer/index.html"><div class="ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 16a5 5 0 0 1 10 0"/><circle cx="7" cy="16" r="1.6" fill="currentColor" stroke="none"/><circle cx="17" cy="16" r="1.6" fill="currentColor" stroke="none"/></svg></div><div class="body"><div class="nm">Interval Ear Trainer</div><div class="desc">2 音を鳴らして音程当て、正答率＋連続正解を記録</div><span class="tag">ear</span></div></a>
+      <a class="card" href="../cadence-lab/index.html"><div class="ic"><svg viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4v16"/><path d="M7 5h10l-2.6 3.5L17 12H7"/></svg></div><div class="body"><div class="nm">Cadence Lab</div><div class="desc">正格 / 変格 / 半 / 偽の終止形を弾き比べ、解決感の強弱</div><span class="tag">cadence</span></div></a>
+    </div>
+  </section>
 
-  <div class="footer">
-    度数表記はすべて Studio v7 準拠（I=0 II=2 III=4 IV=5 V=7 VI=9 VII=11）。<br>
-    Built by Emocute. — backlog（chromatic-approach / degree-ear-trainer / voice-leading / polyrhythm-lab …）は <code>_ideas/browser-theory-toys.md</code>。
-  </div>
+  <footer>
+    度数表記はすべて Studio v7 準拠（I=0 II=2 III=4 IV=5 V=7 VI=9 VII=11）。音源は Salamander Grand Piano（CDN）、未読込時は三角波へ自動フォールバック。<br>
+    <span class="by">Built by Emocute.</span> — デザイン言語は <code>_ideas/design-language.md</code>、backlog は <code>_ideas/browser-theory-toys.md</code>。
+  </footer>
+</div>
 </body>
 </html>

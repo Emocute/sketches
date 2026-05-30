@@ -6,54 +6,72 @@
 <title>Voicing Lab — Emocute</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
 <style>
-  :root{--bg:#0e0e12;--panel:#16161d;--ink:#e9e9f0;--dim:#8a8a99;
-    --accent:#c9a86a;--accent2:#6a9ec9;--line:#26262f;--hit:#c9a86a;--warn:#c96a6a;--good:#6ac98f;}
+  :root{--bg:#0b0b0f;--bg2:#0f0f15;--panel:#15151c;--surface2:#1b1b24;
+    --ink:#ececf2;--dim:#8c8c9a;--line:#262630;
+    --accent:#cfac6e;--accent-soft:#e0c894;--accent2:#6fa3cf;--hit:#cfac6e;--warn:#cf6f6f;--good:#6fc996;
+    --radius:14px;--radius-sm:9px;--ease:cubic-bezier(.2,.7,.3,1);}
   *{box-sizing:border-box;margin:0;padding:0}
-  body{background:var(--bg);color:var(--ink);font-family:-apple-system,"Hiragino Kaku Gothic ProN",sans-serif;
-    line-height:1.5;padding:24px;max-width:1120px;margin:0 auto}
-  h1{font-size:20px;font-weight:600;letter-spacing:.02em}
+  html{-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility}
+  body{color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Hiragino Kaku Gothic ProN","Segoe UI",sans-serif;
+    line-height:1.55;padding:40px 24px 48px;max-width:1120px;margin:0 auto;
+    background:radial-gradient(120% 80% at 50% -10%, #16131c 0%, var(--bg2) 38%, var(--bg) 75%);}
+  h1{font-size:clamp(22px,3.4vw,26px);font-weight:700;letter-spacing:-.01em}
   h1 .sub{color:var(--dim);font-weight:400;font-size:13px;margin-left:10px}
-  .tagline{color:var(--dim);font-size:13px;margin:6px 0 18px}
-  .controls{display:flex;flex-wrap:wrap;gap:14px;align-items:flex-end;
-    background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:14px}
-  .field{display:flex;flex-direction:column;gap:6px}
-  .field label{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em}
-  select,button{background:#1d1d26;color:var(--ink);border:1px solid var(--line);
-    border-radius:8px;padding:9px 12px;font-size:14px;font-family:inherit;cursor:pointer}
-  select:hover,button:hover{border-color:var(--accent)}
-  button.primary{background:var(--accent);color:#1a1206;border-color:var(--accent);font-weight:600}
+  .tagline{color:var(--dim);font-size:13.5px;margin:8px 0 22px}
+  .controls{display:flex;flex-wrap:wrap;gap:16px;align-items:flex-end;
+    background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px;margin-bottom:14px;
+    box-shadow:0 1px 0 rgba(255,255,255,.02) inset}
+  .field{display:flex;flex-direction:column;gap:7px}
+  .field label{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.1em}
+  select,button{background:var(--surface2);color:var(--ink);border:1px solid var(--line);
+    border-radius:var(--radius-sm);padding:9px 13px;font-size:14px;font-family:inherit;cursor:pointer;
+    transition:border-color .18s var(--ease),transform .18s var(--ease),box-shadow .18s var(--ease),background .18s var(--ease)}
+  select:hover,button:hover{border-color:var(--accent);transform:translateY(-1px)}
+  select:focus-visible,button:focus-visible{outline:none;border-color:var(--accent);box-shadow:0 0 0 2px rgba(207,172,110,.5)}
+  button.primary{background:linear-gradient(180deg,var(--accent-soft),var(--accent));color:#1a1206;border-color:var(--accent);font-weight:600;
+    box-shadow:0 1px 0 rgba(255,255,255,.25) inset}
   .seg{display:flex;gap:6px;flex-wrap:wrap}
   .seg button{font-size:12px;padding:6px 11px}
-  .seg button.active{background:var(--accent2);color:#06121d;border-color:var(--accent2)}
-  .status{font-size:11px;color:var(--dim);margin-bottom:14px}
+  .seg button.active{background:var(--accent2);color:#06121d;border-color:var(--accent2);font-weight:600}
+  .status{font-size:11.5px;color:var(--dim);margin-bottom:16px;font-family:ui-monospace,Menlo,monospace}
   .status b{color:var(--good)}
-  .chordname{font-size:15px;color:var(--accent);margin:0 0 12px;font-weight:600}
+  .chordname{font-size:16px;color:var(--accent);margin:0 0 12px;font-weight:600;letter-spacing:.01em}
   .chordname .deg{color:var(--dim);font-weight:400;font-size:13px;margin-left:8px}
-  .sechead{font-size:12px;color:var(--accent);text-transform:uppercase;letter-spacing:.1em;margin:20px 0 10px}
+  .sechead{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.14em;margin:24px 0 12px;
+    display:flex;align-items:center;gap:12px}
+  .sechead::after{content:"";flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
   .grid{display:flex;flex-direction:column;gap:10px}
-  .voicing{background:var(--panel);border:1px solid var(--line);border-radius:12px;
-    padding:13px 16px;display:grid;grid-template-columns:170px 1fr auto;gap:16px;align-items:center;transition:border-color .15s}
+  .voicing{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
+    padding:14px 16px;display:grid;grid-template-columns:176px 1fr auto;gap:18px;align-items:center;
+    transition:border-color .2s var(--ease),box-shadow .2s var(--ease),transform .2s var(--ease)}
+  .voicing:hover{transform:translateY(-2px);border-color:#3a3340;box-shadow:0 8px 24px -14px rgba(0,0,0,.7)}
   .voicing.highlight{border-color:var(--accent2);box-shadow:0 0 0 1px var(--accent2) inset}
+  .voicing.pulse{animation:pulse .42s var(--ease)}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(207,172,110,0)}30%{box-shadow:0 0 0 2px rgba(207,172,110,.55),0 0 22px -2px rgba(207,172,110,.5)}100%{box-shadow:0 0 0 0 rgba(207,172,110,0)}}
   .voicing .vname{font-size:15px;font-weight:600}
-  .voicing .vdesc{font-size:12px;color:var(--dim);margin-top:2px}
-  .voicing .badge{display:inline-block;font-size:10px;padding:2px 7px;border-radius:20px;
-    background:var(--accent2);color:#06121d;margin-left:8px;vertical-align:middle}
+  .voicing .vdesc{font-size:12px;color:var(--dim);margin-top:3px;line-height:1.5}
+  .voicing .badge{display:inline-block;font-size:10px;padding:2px 8px;border-radius:20px;
+    background:var(--accent2);color:#06121d;margin-left:8px;vertical-align:middle;font-weight:600}
   .voicing .badge.warn{background:var(--warn);color:#fff}
-  .tensions{font-size:12px;color:var(--accent);font-family:ui-monospace,Menlo,monospace;margin-top:5px;word-spacing:2px}
-  .meta{font-size:10px;color:var(--dim);font-family:ui-monospace,Menlo,monospace;margin-top:4px}
-  .kbd{position:relative;height:64px;user-select:none}
-  .key{position:absolute;top:0;bottom:0;border:1px solid #000;border-radius:0 0 3px 3px}
-  .key.white{background:#1b1b22}
-  .key.black{background:#0a0a0e;height:62%;z-index:2;border-radius:0 0 2px 2px}
-  .key.on{background:var(--hit)}.key.on.black{background:var(--hit)}
-  .key.bass{background:var(--accent2)}.key.bass.black{background:var(--accent2)}
+  .tensions{font-size:12.5px;color:var(--accent);font-family:ui-monospace,Menlo,monospace;margin-top:6px;word-spacing:2px}
+  .meta{font-size:10px;color:var(--dim);font-family:ui-monospace,Menlo,monospace;margin-top:5px;letter-spacing:.02em}
+  .kbd{position:relative;height:66px;user-select:none}
+  .key{position:absolute;top:0;bottom:0;border:1px solid #000;border-radius:0 0 3px 3px;transition:background .16s var(--ease)}
+  .key.white{background:linear-gradient(180deg,#1f1f28,#191920)}
+  .key.black{background:linear-gradient(180deg,#101016,#08080c);height:62%;z-index:2;border-radius:0 0 2px 2px}
+  .key.on{background:linear-gradient(180deg,var(--accent-soft),var(--accent))}.key.on.black{background:linear-gradient(180deg,var(--accent-soft),var(--accent))}
+  .key.bass{background:linear-gradient(180deg,#8cb8de,var(--accent2))}.key.bass.black{background:linear-gradient(180deg,#8cb8de,var(--accent2))}
   .key.root{background:#fff}.key.root.black{background:#fff}
   .key .dot{position:absolute;bottom:4px;left:50%;transform:translateX(-50%);font-size:8px;color:#1a1206;font-weight:700}
-  .playbtn{background:#1d1d26;border:1px solid var(--line);border-radius:8px;
-    width:42px;height:42px;font-size:16px;display:flex;align-items:center;justify-content:center}
-  .footer{margin-top:22px;color:var(--dim);font-size:12px;border-top:1px solid var(--line);padding-top:14px}
-  .footer code{background:#1d1d26;padding:1px 5px;border-radius:4px;font-size:11px}
+  .playbtn{background:var(--surface2);border:1px solid var(--line);border-radius:var(--radius-sm);
+    width:44px;height:44px;font-size:16px;display:flex;align-items:center;justify-content:center;color:var(--ink);
+    transition:border-color .18s var(--ease),transform .12s var(--ease)}
+  .playbtn:hover{border-color:var(--accent);transform:translateY(-1px)}
+  .playbtn:active{transform:scale(.94)}
+  .footer{margin-top:26px;color:var(--dim);font-size:12px;border-top:1px solid var(--line);padding-top:16px;line-height:1.7}
+  .footer code{background:var(--surface2);padding:1px 5px;border-radius:5px;font-size:11px;font-family:ui-monospace,Menlo,monospace}
   .playall{margin-left:auto}
+  @media(max-width:680px){body{padding:28px 16px}.voicing{grid-template-columns:1fr;gap:10px}.playall{margin-left:0;width:100%}}
 </style>
 </head>
 <body>
@@ -86,7 +104,7 @@
         <button data-mode="arp">アルペジオ</button>
       </div>
     </div>
-    <button class="primary playall" id="playAll">▶ 順に鳴らす</button>
+    <button class="primary playall" id="playAll"><svg viewBox="0 0 12 12" width="12" height="12" style="vertical-align:-1px"><path d="M3 2.2v7.6L9.5 6z" fill="currentColor"/></svg> 順に鳴らす</button>
   </div>
   <div class="status" id="status">音源を読み込み中…（読み込み前は三角波で代用）</div>
 
@@ -205,8 +223,8 @@ function card(v,iv,pc,hl,warn){
   div.className="voicing"+(hl?" highlight":"");
   div.innerHTML=`<div><div class="vname">${v.name}${hl?`<span class="badge ${warn?'warn':''}">${warn?'単独だと薄い':'この文脈◎'}</span>`:''}</div>
       <div class="vdesc">${v.desc}</div><div class="tensions">${tens}</div><div class="meta">${metaOf(rel)}</div></div>
-    <div>${keyboard(abs,pc)}</div><button class="playbtn">▶</button>`;
-  div.querySelector(".playbtn").onclick=()=>playChord(abs);
+    <div>${keyboard(abs,pc)}</div><button class="playbtn"><svg viewBox="0 0 12 12" width="12" height="12" style="vertical-align:-1px"><path d="M3 2.2v7.6L9.5 6z" fill="currentColor"/></svg></button>`;
+  div.querySelector(".playbtn").onclick=()=>{playChord(abs);div.classList.remove("pulse");void div.offsetWidth;div.classList.add("pulse");};
   return div;
 }
 function render(){
