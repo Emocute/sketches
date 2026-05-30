@@ -27,6 +27,8 @@ Sketches/
 - **Geomonic** — Studio の和声知識と数理モデル（Tonnetz / Voice Leading Orbifold / 等分円 / Spectral / PC-Set）を組み合わせた MIDI 生成 VST3/CLAP
 - **emocute-toolkit** — 販売/運用の統一 CLI（監査・version bump・CHANGELOG 自動化等）
 - **line-bot** — LINE グループ参加ボット（`claude -p` ヘッドレス実行）
+- **voice-rooms** — Yay! だれ通（匿名グループ通話）の最小再現プロトタイプ。Node + `ws` シグナリング + WebRTC mesh、`npm start` で `localhost:8800`
+- **chord-forge** — 唸るコード進行を厳選カタログから量産→ボイスリーディング最適化→MIDI→Pianoteq 9 で WAV 化→`index.html` で聴き比べる蛇口。Studio の `harmony_utils` を直接 import（総動員）。`python3 forge.py all`
 
 ### ブラウザ理論 toy 連作（単一 HTML + Tone.js、依存ゼロ、エモスタのエンジン哲学を web 化）
 
