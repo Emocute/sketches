@@ -25,6 +25,17 @@ Sketches/
 ## 現在の住人
 
 - **Geomonic** — Studio の和声知識と数理モデル（Tonnetz / Voice Leading Orbifold / 等分円 / Spectral / PC-Set）を組み合わせた MIDI 生成 VST3/CLAP
-- **voicing-lab** — ブラウザ単一 HTML の「ボイシング実験室」。1 コードを Close / Drop2 / Drop3 / Rootless / Quartal / Shell / Spread で鳴らし比べ（Tone.js）。Studio `voicing.py` 哲学の web 化。理論 toy 連作の第一弾
 - **emocute-toolkit** — 販売/運用の統一 CLI（監査・version bump・CHANGELOG 自動化等）
 - **line-bot** — LINE グループ参加ボット（`claude -p` ヘッドレス実行）
+
+### ブラウザ理論 toy 連作（単一 HTML + Tone.js、依存ゼロ、エモスタのエンジン哲学を web 化）
+
+- **voicing-lab** — 1 コードを Close / Drop2 / Drop3 / Rootless / Quartal / Shell / Spread の 7 種で鳴らし比べ
+- **reharm-roulette** — 度数進行に REHARM 技 6 種を適用、凡庸判定＋🎲ガチャで自動的に歪ませ、before/after 試聴
+- **circle-of-fifths** — 五度圏 SVG、キークリックでダイアトニック和音を順に発音、平行短調/近親調表示
+- **mode-mixer** — 同トニックで 7 旋法を切り替え、特徴音ハイライト、明→暗の並び
+- **negative-harmony** — トニック–ドミナント軸でコードを鏡映、裏の進行を生成して聴き比べ
+- **tension-stacker** — 7th コアにテンションを 1 つずつ積み、濁り計＋スイートスポット判定
+- **euclid-rhythm** — Bjorklund E(k,n) で 2 トラック生成、ステップ円可視化＋ループ再生
+
+連作の backlog: `_ideas/browser-theory-toys.md`
