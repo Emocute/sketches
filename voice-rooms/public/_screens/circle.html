@@ -1,0 +1,301 @@
+<style>
+[data-screen="circle"] .circle-icon-wrap {
+  position: relative;
+  z-index: 1;
+  margin-top: -36px;
+  margin-left: 14px;
+  margin-bottom: 0;
+  display: inline-block;
+}
+
+[data-screen="circle"] .circle-icon-wrap .user-icon {
+  border: 3px solid var(--bg);
+  background: var(--rose-dim);
+  color: var(--rose);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+[data-screen="circle"] .circle-meta-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 0 14px;
+}
+
+[data-screen="circle"] .circle-name-block {
+  flex: 1;
+  min-width: 0;
+}
+
+[data-screen="circle"] .circle-name {
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--fg);
+}
+
+[data-screen="circle"] .circle-count {
+  font-size: 12px;
+  color: var(--mut);
+  margin-top: 3px;
+}
+
+[data-screen="circle"] .circle-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+  padding: 0 14px;
+}
+
+[data-screen="circle"] .circle-desc {
+  font-size: 13px;
+  color: var(--mut);
+  line-height: 1.65;
+  margin-top: 10px;
+  padding: 0 14px;
+}
+
+[data-screen="circle"] .circle-join-row {
+  margin: 12px 14px 4px;
+}
+
+[data-screen="circle"] .seg-tabs {
+  margin-top: 12px;
+}
+
+[data-screen="circle"] .room-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line2);
+}
+
+[data-screen="circle"] .room-row:last-child {
+  border-bottom: none;
+}
+
+[data-screen="circle"] .room-info {
+  flex: 1;
+  min-width: 0;
+}
+
+[data-screen="circle"] .room-name {
+  font-weight: 600;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--fg);
+}
+
+[data-screen="circle"] .room-sub {
+  font-size: 12px;
+  color: var(--mut);
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+[data-screen="circle"] .room-live-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--rose);
+  letter-spacing: 0.3px;
+}
+
+[data-screen="circle"] .room-participants {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--dim);
+}
+</style>
+<section class="screen" data-screen="circle">
+
+  <div class="appbar">
+    <button class="appbar-back">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+    </button>
+    <span class="appbar-title">lo-fi beats</span>
+    <button class="appbar-act">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="5" r="1.2" fill="currentColor" stroke="none"/>
+        <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/>
+        <circle cx="12" cy="19" r="1.2" fill="currentColor" stroke="none"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="scroll">
+
+    <!-- カバーバナー -->
+    <div class="cover banner" style="background:linear-gradient(135deg,#1a0d12 0%,#2b0f1a 40%,#1c0a0f 100%);position:relative;">
+    </div>
+
+    <!-- サークルアイコン（バナー端に半被せ） -->
+    <div class="circle-icon-wrap">
+      <div class="user-icon lg">L</div>
+    </div>
+
+    <!-- 名前・メンバー数・参加ボタン -->
+    <div class="circle-meta-row">
+      <div class="circle-name-block">
+        <div class="circle-name">lo-fi beats</div>
+        <div class="circle-count">メンバー 1,204人</div>
+      </div>
+      <button class="btn ghost" style="flex-shrink:0;margin-top:4px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        参加中
+      </button>
+    </div>
+
+    <!-- タグ -->
+    <div class="circle-tags">
+      <span class="chip mini">#lofi</span>
+      <span class="chip mini">#チルホップ</span>
+      <span class="chip mini">#作業BGM</span>
+      <span class="chip mini">#ビートメイク</span>
+      <span class="chip mini">#深夜</span>
+    </div>
+
+    <!-- 説明文 -->
+    <p class="circle-desc">
+      lo-fi・チルホップ好きが集まるサークル。制作中のビートを流したり、黙って作業通話するのも歓迎。深夜枠が特に活発です。
+    </p>
+
+    <!-- セグメントタブ -->
+    <div class="seg-tabs">
+      <span class="seg-tab on">通話</span>
+      <span class="seg-tab">投稿</span>
+      <span class="seg-tab">メンバー</span>
+    </div>
+
+    <!-- 通話中の部屋 -->
+    <div class="section-lbl" style="padding:12px 14px 6px;">通話中の部屋</div>
+    <div style="border-top:1px solid var(--line2);border-bottom:1px solid var(--line2);">
+
+      <div class="room-row">
+        <div class="user-icon" style="background:var(--rose-dim);color:var(--rose-soft);">さ</div>
+        <div class="room-info">
+          <div class="room-name">深夜作業部屋</div>
+          <div class="room-sub">
+            <span class="dot rose"></span>
+            <span class="room-live-label">LIVE</span>
+            <span class="dim">·</span>
+            <span class="room-participants">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              5
+            </span>
+            <span class="chip mini" style="margin-left:2px;">#チル</span>
+          </div>
+        </div>
+        <button class="btn mini">入る</button>
+      </div>
+
+      <div class="room-row">
+        <div class="user-icon" style="background:#12181a;color:#6acfe0;">r</div>
+        <div class="room-info">
+          <div class="room-name">ビート聴かせて</div>
+          <div class="room-sub">
+            <span class="dot rose"></span>
+            <span class="room-live-label">LIVE</span>
+            <span class="dim">·</span>
+            <span class="room-participants">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              3
+            </span>
+            <span class="chip mini" style="margin-left:2px;">#制作</span>
+          </div>
+        </div>
+        <button class="btn mini">入る</button>
+      </div>
+
+      <div class="room-row">
+        <div class="user-icon" style="background:#131a12;color:#7ad16a;">み</div>
+        <div class="room-info">
+          <div class="room-name">黙作業（BGMあり）</div>
+          <div class="room-sub">
+            <span class="dot rose"></span>
+            <span class="room-live-label">LIVE</span>
+            <span class="dim">·</span>
+            <span class="room-participants">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              8
+            </span>
+            <span class="chip mini" style="margin-left:2px;">#作業BGM</span>
+          </div>
+        </div>
+        <button class="btn mini">入る</button>
+      </div>
+
+    </div>
+
+    <!-- 最近の投稿 -->
+    <div class="section-lbl" style="padding:14px 14px 6px;">最近の投稿</div>
+
+    <div class="post">
+      <a><div class="user-icon" style="background:var(--rose-dim);color:var(--rose-soft);">r</div></a>
+      <div class="pbody">
+        <div class="phead">
+          <span class="pname">r4in</span>
+          <time class="ptime">2時間前</time>
+        </div>
+        <div class="ptext">昨夜の作業部屋で流してたビート完成しました。SoundCloudに上げたので聴いてもらえると嬉しいです。フィードバックも歓迎。</div>
+        <div class="post-actions">
+          <span class="pa liked">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            24
+          </span>
+          <span class="pa">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            7
+          </span>
+          <span class="pa">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V22H4V12"/><path d="M22 7H2v5h20V7z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+            1
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="post">
+      <a><div class="user-icon" style="background:#1a1612;color:#c8b06a;">lo</div></a>
+      <div class="pbody">
+        <div class="phead">
+          <span class="pname">lo-fi廃人</span>
+          <time class="ptime">6時間前</time>
+        </div>
+        <div class="ptext">サンプリング素材おすすめあったら教えてください。フリー素材メインで作ってるんですが、もう少しクオリティ上げたくて。</div>
+        <div class="post-actions">
+          <span class="pa">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            11
+          </span>
+          <span class="pa">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            15
+          </span>
+          <span class="pa">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V22H4V12"/><path d="M22 7H2v5h20V7z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+            0
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div style="height:24px;"></div>
+
+  </div>
+
+</section>

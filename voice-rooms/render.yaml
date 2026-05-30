@@ -1,0 +1,22 @@
+# Render Free でそのままデプロイするための設定（コード書き換えゼロ）
+# 使い方: GitHub に push → Render dashboard で New > Blueprint → このリポを選ぶ
+# 無料枠は 15分無通信でスリープ→次アクセスで復帰に約1分（プロト用途は可）。常時起動は Starter($7/月)。
+services:
+  - type: web
+    name: voice-rooms
+    runtime: node
+    plan: free
+    region: singapore        # 日本から近いリージョン
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /ice
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      # TURN を使う場合のみ（Cloudflare Realtime TURN 等の発行値を入れる）。未設定なら STUN のみ。
+      # - key: TURN_URLS
+      #   sync: false
+      # - key: TURN_USERNAME
+      #   sync: false
+      # - key: TURN_CREDENTIAL
+      #   sync: false

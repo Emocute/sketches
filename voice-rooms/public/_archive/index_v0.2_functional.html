@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>voice rooms</title>
+<style>
+  :root {
+    --bg:#0a0a0a; --panel:#121212; --panel2:#171717; --line:#242424;
+    --fg:#e8e8e8; --mut:#9a9da3; --dim:#6a6d73; --rose:#ff5e7e; --rose-d:#3a1a22;
+    --ok:#5ad17e;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg);
+    font-family:-apple-system,"Helvetica Neue","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+    font-size:15px; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:760px; margin:0 auto; padding:18px 14px 80px; }
+  h1 { font-size:17px; font-weight:600; letter-spacing:.06em; margin:0; display:flex; align-items:center; gap:8px; }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--rose); display:inline-block; }
+  .tagline { color:var(--dim); font-size:12px; margin:5px 0 20px; }
+
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:12px; }
+  .lbl { font-size:11px; color:var(--dim); letter-spacing:.1em; margin-bottom:8px; text-transform:uppercase; }
+  input, .pseudo-input { background:#0e0e0e; border:1px solid var(--line); color:var(--fg);
+    border-radius:8px; padding:9px 11px; font:inherit; font-size:14px; outline:none; width:100%; }
+  input:focus { border-color:var(--dim); }
+  input::placeholder { color:var(--dim); }
+  .row { display:flex; gap:8px; align-items:center; }
+  .row > input { flex:1; }
+  button { font:inherit; cursor:pointer; border:none; border-radius:8px; }
+  .btn { background:var(--rose); color:#1a0a0e; font-weight:600; font-size:14px; padding:9px 16px; white-space:nowrap; transition:filter .12s; }
+  .btn:hover { filter:brightness(1.08); }
+  .btn.ghost { background:#1c1c1c; color:var(--fg); }
+  .btn.ghost:hover { background:#252525; }
+  .btn:disabled { opacity:.4; cursor:default; filter:none; }
+
+  /* identity bar */
+  .idbar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  .idbar .seg { display:flex; align-items:center; gap:7px; background:var(--panel2); border:1px solid var(--line); border-radius:9px; padding:6px 10px; }
+  .idbar .seg input { background:transparent; border:none; padding:2px; width:120px; font-size:14px; }
+  .hima { display:flex; align-items:center; gap:8px; background:var(--panel2); border:1px solid var(--line);
+    border-radius:9px; padding:6px 12px; cursor:pointer; color:var(--mut); }
+  .hima.on { border-color:var(--rose); color:var(--rose); }
+  .hima .dot { background:var(--dim); }
+  .hima.on .dot { background:var(--rose); box-shadow:0 0 8px var(--rose); }
+
+  /* tags */
+  .tags { display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+  .chip { font-size:12px; background:#1c1c1c; border:1px solid var(--line); color:var(--mut);
+    border-radius:20px; padding:4px 10px; display:inline-flex; align-items:center; gap:6px; }
+  .chip.sel { border-color:var(--rose); color:var(--rose); }
+  .chip .x { cursor:pointer; color:var(--dim); }
+  .chip.add { cursor:pointer; color:var(--dim); }
+  .chip.add:hover { color:var(--fg); border-color:var(--dim); }
+
+  /* room list */
+  .filterbar { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
+  .filterbar .chip { cursor:pointer; }
+  .rooms { display:flex; flex-direction:column; gap:8px; }
+  .roomrow { display:flex; align-items:center; gap:12px; background:var(--panel2); border:1px solid var(--line);
+    border-radius:10px; padding:11px 13px; }
+  .roomrow .rn { font-weight:600; font-size:15px; }
+  .roomrow .rtags { display:flex; gap:5px; flex-wrap:wrap; flex:1; }
+  .roomrow .cnt { color:var(--mut); font-size:12px; white-space:nowrap; }
+  .empty { color:var(--dim); font-size:13px; padding:10px 2px; }
+  .mini { font-size:11px; padding:2px 8px; }
+
+  /* call room */
+  .rmhead { display:flex; align-items:center; gap:10px; margin-bottom:18px; }
+  .rmhead .rn { font-size:18px; font-weight:600; }
+  .rmhead .rtags { display:flex; gap:5px; flex-wrap:wrap; flex:1; }
+  .conn { font-size:11px; color:var(--mut); display:flex; align-items:center; gap:6px; }
+  .conn .dot { background:var(--dim); }
+  .conn.live .dot { background:var(--ok); }
+
+  .grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(118px,1fr)); gap:12px; margin-bottom:18px; }
+  .tile { background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px 10px; text-align:center; position:relative; transition:border-color .15s; }
+  .tile.talking { border-color:var(--rose); }
+  .ava { width:46px; height:46px; border-radius:50%; margin:0 auto 9px; background:#222; border:2px solid #2c2c2c;
+    display:flex; align-items:center; justify-content:center; font-weight:700; color:var(--mut); transition:border-color .12s,box-shadow .12s; }
+  .tile.talking .ava { border-color:var(--rose); box-shadow:0 0 0 4px rgba(255,94,126,.16); color:var(--fg); }
+  .tile.muted .ava { border-style:dashed; opacity:.6; }
+  .nm { font-size:13px; font-weight:500; word-break:break-all; }
+  .nm.none { color:var(--dim); font-weight:400; }
+  .st { font-size:10px; color:var(--dim); margin-top:3px; letter-spacing:.04em; }
+  .badge { position:absolute; top:7px; font-size:9px; padding:2px 6px; border-radius:6px; letter-spacing:.06em; }
+  .badge.host { left:7px; background:var(--rose-d); color:var(--rose); }
+  .badge.hand { right:7px; background:#2a2410; color:#e8c84a; display:flex; align-items:center; gap:3px; }
+  .tileacts { display:flex; justify-content:center; gap:8px; margin-top:9px; }
+  .tileacts button { background:transparent; color:var(--dim); padding:3px; display:flex; }
+  .tileacts button:hover { color:var(--rose); }
+
+  /* chat */
+  .chat { background:var(--panel); border:1px solid var(--line); border-radius:12px; overflow:hidden; margin-bottom:14px; }
+  .chatlog { height:148px; overflow-y:auto; padding:10px 12px; display:flex; flex-direction:column; gap:7px; font-size:13px; }
+  .msg { line-height:1.45; }
+  .msg .who { color:var(--rose); font-weight:600; margin-right:6px; }
+  .msg.sys { color:var(--dim); font-style:italic; }
+  .msg .who.none { color:var(--dim); }
+  .chatin { display:flex; gap:8px; border-top:1px solid var(--line); padding:8px; }
+  .chatin input { flex:1; }
+
+  /* controls */
+  .controls { display:flex; justify-content:center; gap:14px; }
+  .cbtn { width:54px; height:54px; border-radius:50%; border:1px solid var(--line); background:var(--panel2);
+    color:var(--mut); display:flex; align-items:center; justify-content:center; transition:all .14s; }
+  .cbtn:hover { color:var(--fg); border-color:var(--dim); }
+  .cbtn.on { color:var(--rose); border-color:var(--rose); }
+  .cbtn.leave:hover { color:var(--rose); border-color:var(--rose); }
+  .cbtn.raised { color:#e8c84a; border-color:#e8c84a; }
+  .clabel { text-align:center; font-size:10px; color:var(--dim); margin-top:6px; letter-spacing:.08em; }
+  .cwrap { display:flex; gap:14px; justify-content:center; }
+  .cwrap > div { display:flex; flex-direction:column; align-items:center; }
+
+  .hint { color:var(--dim); font-size:11px; line-height:1.8; margin-top:30px; }
+  .alone { text-align:center; color:var(--dim); font-size:13px; margin:14px 0; }
+  .hidden { display:none !important; }
+  svg { display:block; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- ── ロビー ── -->
+  <section id="lobby">
+    <h1><span class="dot"></span>voice rooms</h1>
+    <p class="tagline">ブラウザだけ。匿名で、開いてる部屋に入って声で話す。</p>
+
+    <div class="panel">
+      <div class="idbar">
+        <div class="seg">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--dim)" stroke-width="1.6"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>
+          <input id="nick" maxlength="24" placeholder="名前（任意）">
+        </div>
+        <div class="hima" id="himaBtn" title="今ひま＝みんなが集まる部屋に入る">
+          <span class="dot"></span><span>今ひま</span>
+        </div>
+      </div>
+      <div style="margin-top:12px;">
+        <div class="lbl">あなたのタグ</div>
+        <div class="tags" id="myTags"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="lbl">部屋をつくる</div>
+      <div class="row">
+        <input id="newroom" maxlength="40" placeholder="部屋名">
+        <input id="newtags" maxlength="60" placeholder="#タグ（カンマ区切り）" style="flex:1.2;">
+        <button class="btn" id="createBtn">作る</button>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="lbl">開いてる部屋</div>
+      <div class="filterbar" id="filterBar"></div>
+      <div class="rooms" id="roomList"></div>
+      <div class="empty hidden" id="noRooms">まだ部屋がない。作るか「今ひま」で入れる。</div>
+    </div>
+
+    <p class="hint">
+      マイク許可が要る。localhost ならそのまま、別端末は HTTPS が要る。<br>
+      もう一枚タブで同じ部屋に入ると通話できる。連絡先の交換は要らない。
+    </p>
+  </section>
+
+  <!-- ── 通話ルーム ── -->
+  <section id="room" class="hidden">
+    <div class="rmhead">
+      <span class="rn" id="roomTitle"></span>
+      <span class="rtags" id="roomTags"></span>
+      <span class="conn" id="conn"><span class="dot"></span><span id="connTxt">接続中</span></span>
+    </div>
+
+    <div class="grid" id="tiles"></div>
+    <div class="alone hidden" id="aloneNote">まだひとり。誰か入ると声がつながる。</div>
+
+    <div class="chat">
+      <div class="chatlog" id="chatlog"></div>
+      <div class="chatin">
+        <input id="chatInput" maxlength="500" placeholder="メッセージ">
+        <button class="btn ghost" id="chatSend">送る</button>
+      </div>
+    </div>
+
+    <div class="cwrap">
+      <div><button class="cbtn on" id="muteBtn" title="ミュート"></button><div class="clabel" id="muteLbl">声 ON</div></div>
+      <div><button class="cbtn" id="handBtn" title="手を挙げる">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 0 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>
+      </button><div class="clabel">手を挙げる</div></div>
+      <div><button class="cbtn leave" id="leaveBtn" title="退出">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M10 19H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </button><div class="clabel">退出</div></div>
+    </div>
+  </section>
+</div>
+
+<script>
+// ── SVG icons (絵文字は使わない) ──
+const ICON = {
+  micOn:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>',
+  micOff:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="2" x2="22" y2="22"/><path d="M9 9v3a3 3 0 0 0 5.1 2.1M15 9.3V4a3 3 0 0 0-5.9-.6"/><path d="M17 16.9A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.1 1.2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>',
+  flag:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>',
+  kick:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="4"/><path d="M3 20c0-3.3 2.7-5 6-5"/><line x1="17" y1="8" x2="22" y2="13"/><line x1="22" y1="8" x2="17" y2="13"/></svg>',
+  hand:'<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 0 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>',
+};
+const ICE = { iceServers:[{ urls:'stun:stun.l.google.com:19302' }] };
+const $ = (id) => document.getElementById(id);
+
+let ws, myId=null, myNick='', myTags=[], hima=false;
+let localStream=null, muted=false, handRaised=false, currentRoom=null, currentTags=[], hostId=null;
+let filterTag=null;
+const pcs=new Map(), nicks=new Map(), raised=new Set();
+const audioCtx = window.AudioContext ? new AudioContext() : null;
+const meters=new Map();
+let lastRooms=[];
+
+// ── identity tags ──
+function renderMyTags(){
+  const c=$('myTags'); c.innerHTML='';
+  myTags.forEach((t,i)=>{ const el=document.createElement('span'); el.className='chip sel';
+    el.innerHTML=`#${esc(t)} <span class="x">×</span>`;
+    el.querySelector('.x').onclick=()=>{ myTags.splice(i,1); renderMyTags(); };
+    c.appendChild(el); });
+  const add=document.createElement('span'); add.className='chip add'; add.textContent='＋ タグ';
+  add.onclick=()=>{ const v=prompt('タグ（例: lofi, ゲーム, 雑談）'); if(v){ v.split(',').map(s=>s.trim()).filter(Boolean).slice(0,6).forEach(t=>{ if(myTags.length<6&&!myTags.includes(t)) myTags.push(t); }); renderMyTags(); } };
+  c.appendChild(add);
+}
+renderMyTags();
+
+// ── connect ──
+function connect(){
+  const proto = location.protocol==='https:'?'wss':'ws';
+  ws = new WebSocket(`${proto}://${location.host}`);
+  ws.onmessage = (e)=>handle(JSON.parse(e.data));
+  ws.onclose = ()=>{ if(currentRoom) setConn(false,'再接続中'); setTimeout(connect,1000); };
+}
+const wsSend=(o)=>{ if(ws&&ws.readyState===1) ws.send(JSON.stringify(o)); };
+
+function handle(msg){
+  switch(msg.type){
+    case 'welcome': myId=msg.id; renderRooms(msg.rooms); break;
+    case 'rooms': renderRooms(msg.rooms); break;
+    case 'peers':
+      hostId=msg.host;
+      for(const p of msg.peers){ nicks.set(p.id,p.nick); createPeer(p.id,true); addTile(p.id,p.nick); }
+      refreshTileBadges(); updateAlone(); setConn(true,'接続済み'); break;
+    case 'peer-joined':
+      nicks.set(msg.id,msg.nick); addTile(msg.id,msg.nick);
+      sysMsg(`${disp(msg.nick)} が入室`); updateAlone(); break;
+    case 'peer-left':
+      sysMsg(`${disp(nicks.get(msg.id))} が退出`); removePeer(msg.id); updateAlone(); break;
+    case 'host': hostId=msg.id; refreshTileBadges(); break;
+    case 'signal': onSignal(msg.from,msg.data); break;
+    case 'room':
+      if(msg.kind==='chat') chatMsg(msg.from,msg.nick,msg.text);
+      else { if(msg.raised) raised.add(msg.from); else raised.delete(msg.from); refreshTileBadges(); }
+      break;
+    case 'kicked': sysMsg('ホストにより退出させられました'); doLeave(true); break;
+  }
+}
+
+// ── lobby render ──
+function renderRooms(rooms){
+  lastRooms=rooms;
+  // filter bar (tags present)
+  const allTags=[...new Set(rooms.flatMap(r=>r.tags||[]))];
+  const fb=$('filterBar'); fb.innerHTML='';
+  if(allTags.length){
+    const all=document.createElement('span'); all.className='chip'+(filterTag?'':' sel'); all.textContent='全部';
+    all.onclick=()=>{ filterTag=null; renderRooms(lastRooms); }; fb.appendChild(all);
+    allTags.forEach(t=>{ const c=document.createElement('span'); c.className='chip'+(filterTag===t?' sel':'');
+      c.textContent='#'+t; c.onclick=()=>{ filterTag=t; renderRooms(lastRooms); }; fb.appendChild(c); });
+  }
+  const list=$('roomList'); list.innerHTML='';
+  const shown=rooms.filter(r=>!filterTag||(r.tags||[]).includes(filterTag));
+  $('noRooms').classList.toggle('hidden', rooms.length>0);
+  for(const r of shown){
+    const row=document.createElement('div'); row.className='roomrow';
+    const tags=(r.tags||[]).map(t=>`<span class="chip mini">#${esc(t)}</span>`).join('');
+    row.innerHTML=`<span class="rn">${esc(r.name)}</span><span class="rtags">${tags}</span>
+      <span class="cnt">${r.count}人</span><button class="btn mini">入る</button>`;
+    row.querySelector('button').onclick=()=>joinRoom(r.name);
+    list.appendChild(row);
+  }
+}
+
+$('createBtn').onclick=()=>{ const n=$('newroom').value.trim(); if(!n) return;
+  const tags=$('newtags').value.split(',').map(s=>s.replace(/^#/,'').trim()).filter(Boolean).slice(0,4);
+  joinRoom(n,tags); };
+$('newroom').addEventListener('keydown',e=>{ if(e.key==='Enter')$('createBtn').click(); });
+$('himaBtn').onclick=()=>{ hima=!hima; $('himaBtn').classList.toggle('on',hima); if(hima) joinRoom('ひまなう',['雑談']); };
+
+// ── join / leave ──
+async function joinRoom(room, tags){
+  if(!localStream){
+    try{ localStream=await navigator.mediaDevices.getUserMedia({audio:true,video:false}); }
+    catch(err){ setConn(false,'マイク不可: '+err.message); alert('マイクが使えない: '+err.message); return; }
+    setupMeter('me',localStream);
+  }
+  if(audioCtx&&audioCtx.state==='suspended') audioCtx.resume();
+  myNick=$('nick').value.trim();
+  currentRoom=room; currentTags=tags||myTags.slice(0,4);
+  raised.clear(); handRaised=false;
+  $('lobby').classList.add('hidden'); $('room').classList.remove('hidden');
+  $('roomTitle').textContent=room;
+  $('roomTags').innerHTML=(currentTags).map(t=>`<span class="chip mini">#${esc(t)}</span>`).join('');
+  $('tiles').innerHTML=''; $('chatlog').innerHTML='';
+  $('handBtn').classList.remove('raised');
+  addTile('me',myNick,true);
+  setConn(false,'接続中'); updateAlone();
+  wsSend({type:'join',room,nick:myNick,tags:currentTags});
+}
+$('leaveBtn').onclick=()=>doLeave();
+function doLeave(kicked){
+  if(!kicked) wsSend({type:'leave'});
+  for(const id of [...pcs.keys()]) removePeer(id);
+  currentRoom=null; hostId=null; raised.clear();
+  $('room').classList.add('hidden'); $('lobby').classList.remove('hidden');
+  if(hima){ hima=false; $('himaBtn').classList.remove('on'); }
+}
+
+$('muteBtn').onclick=()=>{ muted=!muted;
+  if(localStream) localStream.getAudioTracks().forEach(t=>t.enabled=!muted);
+  $('muteBtn').innerHTML=muted?ICON.micOff:ICON.micOn; $('muteBtn').classList.toggle('on',!muted);
+  $('muteLbl').textContent=muted?'声 OFF':'声 ON';
+  document.querySelector('.tile.me')?.classList.toggle('muted',muted); };
+$('muteBtn').innerHTML=ICON.micOn;
+
+$('handBtn').onclick=()=>{ handRaised=!handRaised; $('handBtn').classList.toggle('raised',handRaised);
+  if(handRaised) raised.add('me'); else raised.delete('me'); refreshTileBadges();
+  wsSend({type:'room',kind:'hand',raised:handRaised}); };
+
+// ── chat ──
+$('chatSend').onclick=sendChat;
+$('chatInput').addEventListener('keydown',e=>{ if(e.key==='Enter') sendChat(); });
+function sendChat(){ const t=$('chatInput').value.trim(); if(!t) return; $('chatInput').value='';
+  chatMsg('me',myNick,t); wsSend({type:'room',kind:'chat',text:t}); }
+function chatMsg(from,nick,text){ const log=$('chatlog'); const d=document.createElement('div'); d.className='msg';
+  const me=from==='me'?'（あなた）':''; const none=!nick||!nick.trim();
+  d.innerHTML=`<span class="who${none?' none':''}">${none?'名なし':esc(nick)}${me}</span>${esc(text)}`;
+  log.appendChild(d); log.scrollTop=log.scrollHeight; }
+function sysMsg(t){ const log=$('chatlog'); const d=document.createElement('div'); d.className='msg sys'; d.textContent=t;
+  log.appendChild(d); log.scrollTop=log.scrollHeight; }
+
+// ── WebRTC ──
+function createPeer(peerId,isInit){
+  if(pcs.has(peerId)) return pcs.get(peerId);
+  const pc=new RTCPeerConnection(ICE); pcs.set(peerId,pc);
+  localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
+  pc.onicecandidate=e=>{ if(e.candidate) wsSend({type:'signal',to:peerId,data:{candidate:e.candidate}}); };
+  pc.ontrack=e=>{ let a=$('audio-'+peerId); if(!a){ a=document.createElement('audio'); a.id='audio-'+peerId; a.autoplay=true; document.body.appendChild(a);} a.srcObject=e.streams[0]; setupMeter(peerId,e.streams[0]); };
+  pc.onconnectionstatechange=()=>{ const st=document.querySelector(`#tile-${peerId} .st`);
+    if(st) st.textContent = pc.connectionState==='connected'?'通話中':(pc.connectionState==='connecting'?'接続中':pc.connectionState);
+    if(['failed','closed','disconnected'].includes(pc.connectionState)) removePeer(peerId);
+    const anyLive=[...pcs.values()].some(p=>p.connectionState==='connected'); if(anyLive) setConn(true,'接続済み'); };
+  if(isInit){ pc.onnegotiationneeded=async()=>{ const o=await pc.createOffer(); await pc.setLocalDescription(o);
+    wsSend({type:'signal',to:peerId,data:{sdp:pc.localDescription}}); }; }
+  return pc;
+}
+async function onSignal(from,data){
+  let pc=pcs.get(from);
+  if(data.sdp){ if(!pc) pc=createPeer(from,false); await pc.setRemoteDescription(data.sdp);
+    if(data.sdp.type==='offer'){ const a=await pc.createAnswer(); await pc.setLocalDescription(a);
+      wsSend({type:'signal',to:from,data:{sdp:pc.localDescription}}); } }
+  else if(data.candidate&&pc){ try{ await pc.addIceCandidate(data.candidate); }catch(e){} }
+}
+function removePeer(peerId){ const pc=pcs.get(peerId); if(pc){ pc.close(); pcs.delete(peerId);} meters.delete(peerId); raised.delete(peerId);
+  $('audio-'+peerId)?.remove(); $('tile-'+peerId)?.remove(); }
+
+// ── tiles ──
+function addTile(id,nick,isMe=false){
+  const key=isMe?'me':id; if($('tile-'+key)) return;
+  const none=!nick||!nick.trim();
+  const label=isMe?(none?'あなた':esc(nick)+'（あなた）'):(none?'名なし':esc(nick));
+  const d=document.createElement('div'); d.id='tile-'+key; d.className='tile'+(isMe?' me':'');
+  d.innerHTML=`<div class="badge host hidden">HOST</div><div class="badge hand hidden">${ICON.hand}挙手</div>
+    <div class="ava">${none?'?':esc((nick||'?').trim()[0].toUpperCase())}</div>
+    <div class="nm${none?' none':''}">${label}</div>
+    <div class="st">${isMe?'あなた':'接続中'}</div>
+    <div class="tileacts"></div>`;
+  $('tiles').appendChild(d);
+  refreshTileBadges();
+}
+function refreshTileBadges(){
+  document.querySelectorAll('.tile').forEach(t=>{
+    const key=t.id.replace('tile-','');
+    const realId = key==='me'?myId:key;
+    t.querySelector('.badge.host').classList.toggle('hidden', realId!==hostId);
+    t.querySelector('.badge.hand').classList.toggle('hidden', !raised.has(key));
+    // actions: 自分以外に通報、ホストなら kick
+    const acts=t.querySelector('.tileacts'); acts.innerHTML='';
+    if(key!=='me'){
+      const rep=document.createElement('button'); rep.title='通報'; rep.innerHTML=ICON.flag;
+      rep.onclick=()=>{ sysMsg(`${disp(nicks.get(key))} を通報しました（試作：記録のみ）`); }; acts.appendChild(rep);
+      if(myId===hostId){ const k=document.createElement('button'); k.title='退出させる'; k.innerHTML=ICON.kick;
+        k.onclick=()=>{ if(confirm('この人を退出させる？')) wsSend({type:'kick',id:key}); }; acts.appendChild(k); }
+    }
+  });
+}
+function updateAlone(){ const others=document.querySelectorAll('.tile:not(.me)').length;
+  $('aloneNote').classList.toggle('hidden',others>0); }
+function setConn(live,txt){ const c=$('conn'); c.classList.toggle('live',live); $('connTxt').textContent=txt; }
+
+// ── voice level (軽量) ──
+function setupMeter(key,stream){ if(!audioCtx) return;
+  try{ const src=audioCtx.createMediaStreamSource(stream); const an=audioCtx.createAnalyser(); an.fftSize=256;
+    src.connect(an); meters.set(key,{an,data:new Uint8Array(an.frequencyBinCount),env:0}); }catch(e){} }
+let raf;
+function tick(){
+  for(const [key,m] of meters){
+    m.an.getByteTimeDomainData(m.data); let s=0;
+    for(let i=0;i<m.data.length;i++){ const v=(m.data[i]-128)/128; s+=v*v; }
+    let rms=Math.sqrt(s/m.data.length); if(key==='me'&&muted) rms=0;
+    m.env=rms>m.env?rms:m.env*0.85+rms*0.15;
+    const tile=$('tile-'+key); if(tile) tile.classList.toggle('talking', m.env>0.05);
+  }
+  raf=requestAnimationFrame(tick);
+}
+raf=requestAnimationFrame(tick);
+
+const disp=(n)=>(!n||!n.trim())?'名なし':n;
+function esc(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+connect();
+</script>
+</body>
+</html>

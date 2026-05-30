@@ -1,0 +1,472 @@
+<style>
+/* ── call 画面専用スタイル ── */
+
+[data-screen="call"] .call-appbar-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  line-height: 1.2;
+}
+[data-screen="call"] .call-room-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+[data-screen="call"] .call-room-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--mut);
+}
+[data-screen="call"] .call-conn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--ok);
+}
+[data-screen="call"] .call-conn .dot {
+  background: var(--ok);
+  box-shadow: 0 0 6px var(--ok);
+}
+
+/* ── 参加者グリッド ── */
+[data-screen="call"] .call-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+[data-screen="call"] .call-tile {
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 8px 10px;
+  text-align: center;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+/* 発話中リング */
+[data-screen="call"] .call-tile.talking {
+  border-color: var(--rose);
+}
+[data-screen="call"] .call-tile.talking .avatar {
+  box-shadow:
+    0 0 0 3px rgba(255, 94, 126, 0.25),
+    0 0 12px 2px rgba(255, 94, 126, 0.35);
+  border: 2px solid var(--rose);
+}
+
+/* ミュート：点線アバター */
+[data-screen="call"] .call-tile.muted .avatar {
+  border: 2px dashed var(--dim);
+  opacity: 0.55;
+}
+
+/* 接続中：薄くパルス風 */
+[data-screen="call"] .call-tile.connecting .avatar {
+  border: 2px solid var(--dim);
+  opacity: 0.6;
+}
+
+/* あなた自身 */
+[data-screen="call"] .call-tile.self {
+  border-color: var(--rose);
+  border-style: solid;
+}
+[data-screen="call"] .call-tile.self .avatar {
+  border: 2px solid var(--rose);
+}
+
+/* HOSTバッジ */
+[data-screen="call"] .call-badge-host {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  background: var(--rose-dim);
+  color: var(--rose);
+  border-radius: 5px;
+  padding: 2px 5px;
+}
+/* 挙手バッジ */
+[data-screen="call"] .call-badge-hand {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: #2a2410;
+  color: var(--gold);
+  border-radius: 5px;
+  padding: 2px 5px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9px;
+  font-weight: 600;
+}
+/* 通報アイコン（他人タイル右下） */
+[data-screen="call"] .call-tile-report {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  background: transparent;
+  color: var(--dim);
+  border: none;
+  padding: 3px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  line-height: 1;
+}
+[data-screen="call"] .call-tile-report:hover {
+  color: var(--rose);
+}
+
+/* タイル名前・状態 */
+[data-screen="call"] .call-tile-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg);
+  margin-top: 8px;
+  word-break: break-all;
+  max-width: 100%;
+}
+[data-screen="call"] .call-tile-name.anonymous {
+  color: var(--dim);
+  font-weight: 400;
+}
+[data-screen="call"] .call-tile-status {
+  font-size: 10px;
+  color: var(--dim);
+  margin-top: 3px;
+  letter-spacing: 0.04em;
+}
+
+/* ── チャット小窓 ── */
+[data-screen="call"] .call-chat {
+  margin-bottom: 16px;
+}
+[data-screen="call"] .call-chat-log {
+  height: 140px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+[data-screen="call"] .call-chat-log .bubble {
+  align-self: flex-start;
+  max-width: 78%;
+  padding: 7px 10px;
+  border-radius: 10px;
+  line-height: 1.45;
+  font-size: 13px;
+}
+[data-screen="call"] .call-chat-log .bubble.me {
+  align-self: flex-end;
+  background: var(--rose-dim);
+  border: 1px solid var(--rose);
+  color: var(--fg);
+}
+[data-screen="call"] .call-chat-sender {
+  font-size: 10px;
+  color: var(--mut);
+  margin-bottom: 2px;
+}
+[data-screen="call"] .call-chat-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border-top: 1px solid var(--line);
+  padding: 8px 12px;
+}
+[data-screen="call"] .call-chat-input-row .input {
+  flex: 1;
+  font-size: 13px;
+}
+
+/* ── 通話コントロールバー（固定下部） ── */
+[data-screen="call"] .call-controls {
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+  padding: 14px 0 18px;
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  z-index: 10;
+  margin: 0 -14px -14px;
+}
+[data-screen="call"] .call-ctrl-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+[data-screen="call"] .call-ctrl-btn {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  background: var(--surface2);
+  color: var(--mut);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.14s, color 0.14s, background 0.14s;
+}
+[data-screen="call"] .call-ctrl-btn.active {
+  border-color: var(--rose);
+  color: var(--rose);
+}
+[data-screen="call"] .call-ctrl-btn.raised {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+[data-screen="call"] .call-ctrl-btn.leave {
+  background: #1c0a0d;
+  border-color: var(--rose);
+  color: var(--rose);
+}
+[data-screen="call"] .call-ctrl-label {
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+</style>
+
+<section class="screen" data-screen="call">
+
+  <!-- ── appbar ── -->
+  <div class="appbar">
+    <button class="appbar-back">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+    </button>
+
+    <div class="call-appbar-center">
+      <span class="call-room-name">夜の雑談部屋</span>
+      <div class="call-room-meta">
+        <span class="chip tag" style="font-size:10px; padding:1px 7px;">#lo-fi</span>
+        <span class="chip tag" style="font-size:10px; padding:1px 7px;">#雑談</span>
+        <span style="color:var(--dim);">6人</span>
+      </div>
+    </div>
+
+    <div class="call-conn">
+      <span class="dot"></span>
+      <span>接続済み</span>
+    </div>
+  </div>
+
+  <!-- ── スクロール領域 ── -->
+  <div class="scroll">
+
+    <!-- 参加者グリッド -->
+    <div class="section-lbl">参加者</div>
+    <div class="call-grid">
+
+      <!-- (1) 発話中 -->
+      <div class="call-tile talking">
+        <div class="avatar">さ</div>
+        <div class="call-tile-name">さく</div>
+        <div class="call-tile-status">発話中</div>
+        <button class="call-tile-report" title="通報">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+            <line x1="4" y1="22" x2="4" y2="15"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- (2) HOST + 発話中 -->
+      <div class="call-tile talking">
+        <div class="call-badge-host">HOST</div>
+        <div class="avatar">み</div>
+        <div class="call-tile-name">みお</div>
+        <div class="call-tile-status">発話中</div>
+        <button class="call-tile-report" title="通報">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+            <line x1="4" y1="22" x2="4" y2="15"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- (3) 挙手バッジ -->
+      <div class="call-tile">
+        <div class="call-badge-hand">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/>
+            <path d="M18 8a2 2 0 0 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>
+          </svg>
+          挙手
+        </div>
+        <div class="avatar">r</div>
+        <div class="call-tile-name">r4in</div>
+        <div class="call-tile-status">聴いてる</div>
+        <button class="call-tile-report" title="通報">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+            <line x1="4" y1="22" x2="4" y2="15"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- (4) ミュート -->
+      <div class="call-tile muted">
+        <div class="avatar">?</div>
+        <div class="call-tile-name anonymous">名なし</div>
+        <div class="call-tile-status">ミュート</div>
+        <button class="call-tile-report" title="通報">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+            <line x1="4" y1="22" x2="4" y2="15"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- (5) あなた自身 -->
+      <div class="call-tile self">
+        <div class="avatar" style="color:var(--rose);">あ</div>
+        <div class="call-tile-name" style="color:var(--rose);">あなた</div>
+        <div class="call-tile-status">声 ON</div>
+      </div>
+
+      <!-- (6) 接続中 -->
+      <div class="call-tile connecting">
+        <div class="avatar">l</div>
+        <div class="call-tile-name">lo-fi廃人</div>
+        <div class="call-tile-status">接続中…</div>
+        <button class="call-tile-report" title="通報">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+            <line x1="4" y1="22" x2="4" y2="15"/>
+          </svg>
+        </button>
+      </div>
+
+    </div>
+    <!-- /call-grid -->
+
+    <!-- ── 部屋チャット小窓 ── -->
+    <div class="section-lbl">チャット</div>
+    <div class="card call-chat" style="padding:0; overflow:hidden;">
+      <div class="call-chat-log">
+
+        <!-- システムメッセージ -->
+        <div style="font-size:11px; color:var(--dim); font-style:italic; text-align:center;">みおが部屋を開きました</div>
+
+        <!-- 他人の発言 -->
+        <div>
+          <div class="call-chat-sender">さく</div>
+          <div class="bubble">こんばー</div>
+        </div>
+
+        <!-- 他人の発言 -->
+        <div>
+          <div class="call-chat-sender">みお</div>
+          <div class="bubble">今日暑いね</div>
+        </div>
+
+        <!-- 自分の発言 -->
+        <div>
+          <div class="call-chat-sender" style="text-align:right; color:var(--rose);">あなた</div>
+          <div class="bubble me">ほんとに〜</div>
+        </div>
+
+        <!-- 他人の発言 -->
+        <div>
+          <div class="call-chat-sender">r4in</div>
+          <div class="bubble">ちょっと質問していい？</div>
+        </div>
+
+      </div>
+
+      <div class="call-chat-input-row">
+        <input class="input" type="text" placeholder="メッセージを入力" maxlength="300">
+        <button class="btn ghost" style="padding:8px 14px; font-size:13px; border-radius:8px;">送る</button>
+      </div>
+    </div>
+    <!-- /call-chat -->
+
+    <!-- 下部コントロールバーの余白確保 -->
+    <div style="height:8px;"></div>
+
+    <!-- ── 通話コントロールバー ── -->
+    <div class="call-controls">
+
+      <!-- マイク：声 ON -->
+      <div class="call-ctrl-item">
+        <button class="call-ctrl-btn active" title="マイク（声 ON）">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+          </svg>
+        </button>
+        <span class="call-ctrl-label">声 ON</span>
+      </div>
+
+      <!-- 手を挙げる -->
+      <div class="call-ctrl-item">
+        <button class="call-ctrl-btn" title="手を挙げる">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/>
+            <path d="M18 8a2 2 0 0 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>
+          </svg>
+        </button>
+        <span class="call-ctrl-label">手を挙げる</span>
+      </div>
+
+      <!-- スピーカー -->
+      <div class="call-ctrl-item">
+        <button class="call-ctrl-btn" title="スピーカー">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+          </svg>
+        </button>
+        <span class="call-ctrl-label">スピーカー</span>
+      </div>
+
+      <!-- 退出 -->
+      <div class="call-ctrl-item">
+        <button class="call-ctrl-btn leave" title="退出">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 19H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+        </button>
+        <span class="call-ctrl-label">退出</span>
+      </div>
+
+    </div>
+    <!-- /call-controls -->
+
+  </div>
+  <!-- /scroll -->
+
+</section>

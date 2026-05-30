@@ -1,0 +1,268 @@
+<style>
+/* ── カバー + アバター被せ ── */
+[data-screen="profile"] .profile-cover-wrap {
+  position: relative;
+  margin-bottom: 40px;
+}
+[data-screen="profile"] .profile-avatar-row {
+  position: absolute;
+  bottom: -40px;
+  left: 0;
+  right: 0;
+  padding: 0 14px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+[data-screen="profile"] .profile-avatar-row .user-icon.lg {
+  border: 3px solid var(--bg);
+  flex-shrink: 0;
+}
+
+/* ── 名前・ID・bio ── */
+[data-screen="profile"] .profile-info {
+  padding: 6px 14px 0;
+}
+[data-screen="profile"] .profile-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--fg);
+  line-height: 1.2;
+  margin-bottom: 2px;
+}
+[data-screen="profile"] .profile-id {
+  font-size: 12px;
+  color: var(--dim);
+  margin-bottom: 6px;
+}
+[data-screen="profile"] .profile-age {
+  margin-right: 4px;
+}
+[data-screen="profile"] .profile-bio {
+  font-size: 13px;
+  color: var(--mut);
+  line-height: 1.55;
+  margin-top: 8px;
+}
+
+/* ── 統計3カラム ── */
+[data-screen="profile"] .stats-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  margin: 14px 0 0;
+}
+[data-screen="profile"] .stat-cell {
+  text-align: center;
+  padding: 12px 4px;
+  cursor: pointer;
+}
+[data-screen="profile"] .stat-cell + .stat-cell {
+  border-left: 1px solid var(--line);
+}
+[data-screen="profile"] .stat-val {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--fg);
+  line-height: 1;
+}
+[data-screen="profile"] .stat-lbl {
+  font-size: 11px;
+  color: var(--dim);
+  margin-top: 3px;
+}
+
+/* ── タグ群 ── */
+[data-screen="profile"] .tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 12px 14px 0;
+}
+
+/* ── ボタン群 ── */
+[data-screen="profile"] .profile-btns {
+  display: flex;
+  gap: 8px;
+  padding: 12px 14px 0;
+}
+[data-screen="profile"] .profile-btns .btn.gray {
+  flex: 1;
+}
+[data-screen="profile"] .profile-btns .btn.ghost {
+  flex: 1;
+}
+
+/* ── seg-tabs ── */
+[data-screen="profile"] .seg-tabs {
+  margin-top: 14px;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 2;
+}
+
+/* ── 投稿フィード（枠線区切り、padding なし） ── */
+[data-screen="profile"] .post {
+  border-bottom: 1px solid var(--line2);
+}
+[data-screen="profile"] .post:last-child {
+  border-bottom: none;
+}
+</style>
+<section class="screen" data-screen="profile" data-tab="profile">
+
+  <!-- appbar -->
+  <div class="appbar">
+    <span class="appbar-title">プロフィール</span>
+    <button class="appbar-act" aria-label="設定">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- scroll -->
+  <div class="scroll">
+
+    <!-- カバー + アバター被せ -->
+    <div class="profile-cover-wrap">
+      <div class="cover banner"></div>
+      <div class="profile-avatar-row">
+        <div class="user-icon lg">さく</div>
+        <button class="btn ghost" style="margin-bottom:6px;padding:6px 16px;font-size:13px;">編集</button>
+      </div>
+    </div>
+
+    <!-- 名前・ID・bio -->
+    <div class="profile-info">
+      <div class="profile-name">さくら夜想</div>
+      <div class="profile-id">@sakura_yasooo <span class="chip mini profile-age">20代前半</span></div>
+      <div class="profile-bio">深夜の音楽垢。ドローンとアンビエントが好き。眠れない夜によく通話してます。</div>
+    </div>
+
+    <!-- 統計3カラム -->
+    <div class="stats-row">
+      <div class="stat-cell">
+        <div class="stat-val">247</div>
+        <div class="stat-lbl">投稿</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-val">182</div>
+        <div class="stat-lbl">フォロー</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-val">1,043</div>
+        <div class="stat-lbl">フォロワー</div>
+      </div>
+    </div>
+
+    <!-- タグ -->
+    <div class="tags-row">
+      <span class="chip mini">#アンビエント</span>
+      <span class="chip mini">#ドローン</span>
+      <span class="chip mini">#深夜通話</span>
+      <span class="chip mini">#映画</span>
+      <span class="chip mini">#電子音楽</span>
+      <span class="chip mini">#雑談歓迎</span>
+    </div>
+
+    <!-- ボタン群 -->
+    <div class="profile-btns">
+      <button class="btn gray">プロフィールを編集</button>
+      <button class="btn ghost" style="display:flex;align-items:center;justify-content:center;gap:5px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+        メッセージ
+      </button>
+    </div>
+
+    <!-- seg-tabs -->
+    <div class="seg-tabs">
+      <span class="seg-tab on">投稿</span>
+      <span class="seg-tab">メディア</span>
+      <span class="seg-tab">いいね</span>
+    </div>
+
+    <!-- 投稿フィード -->
+    <div class="post">
+      <a><div class="user-icon">さく</div></a>
+      <div class="pbody">
+        <div class="phead">
+          <span class="pname">さくら夜想</span>
+          <time class="ptime">14分</time>
+        </div>
+        <div class="ptext">夜3時のアンビエント、窓開けて外の雨音と混ぜながら聴くとめちゃくちゃいい。滲んだテープ的な質感になる</div>
+        <div class="post-actions">
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            8
+          </span>
+          <span class="pa liked">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            34
+          </span>
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+            3
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="post">
+      <a><div class="user-icon">さく</div></a>
+      <div class="pbody">
+        <div class="phead">
+          <span class="pname">さくら夜想</span>
+          <time class="ptime">2時間</time>
+        </div>
+        <div class="ptext">最近の深夜通話がまじで楽しい。音楽の話だけで2時間飛んでいく。また来週もやりたい</div>
+        <div class="post-actions">
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            21
+          </span>
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            67
+          </span>
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+            5
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="post">
+      <a><div class="user-icon">さく</div></a>
+      <div class="pbody">
+        <div class="phead">
+          <span class="pname">さくら夜想</span>
+          <time class="ptime">昨日</time>
+        </div>
+        <div class="ptext">眠れなさすぎて「深夜のダメ人間部屋」開いたら10人も来てくれた。みんな同じか〜と思って少し救われた気持ち</div>
+        <div class="post-actions">
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            43
+          </span>
+          <span class="pa liked">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            158
+          </span>
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+            12
+          </span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>

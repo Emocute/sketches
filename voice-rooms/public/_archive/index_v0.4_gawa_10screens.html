@@ -1,0 +1,2999 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>voice rooms</title>
+<style>
+  :root {
+    --bg:#0a0a0a; --surface:#121212; --surface2:#171717; --line:#242424; --line2:#1b1b1b;
+    --fg:#ececec; --mut:#9a9da3; --dim:#6a6d73;
+    --rose:#ff5e7e; --rose-dim:#3a1a22; --rose-soft:#ff8aa3; --gold:#e8c84a; --ok:#5ad17e; --red:#ff4d4d;
+    --radius:14px; --appbar-h:50px; --tabbar-h:58px;
+  }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; background:#000; }
+  body {
+    font-family:"Roboto",-apple-system,"Helvetica Neue","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+    font-size:15px; color:var(--fg); -webkit-font-smoothing:antialiased;
+    display:flex; justify-content:center;
+  }
+  .app { position:relative; width:100%; max-width:430px; background:var(--bg);
+    height:100vh; overflow:hidden; display:flex; flex-direction:column;
+    border-left:1px solid #1a1a1a; border-right:1px solid #1a1a1a; }
+  svg { display:block; }
+  button { font:inherit; cursor:pointer; border:none; background:none; color:inherit; }
+  a { color:inherit; text-decoration:none; }
+
+  /* ── 画面 ── */
+  /* 表示はルーターが排他制御する。各画面の [data-screen] が display を付けても勝てるよう !important */
+  .screen { position:absolute; inset:0; display:none !important; flex-direction:column; background:var(--bg); overflow:hidden; }
+  .screen.active { display:flex !important; }
+  /* 画面内の固定要素はビューポートでなく .app 枠内に収める */
+  .screen [style*="position:fixed"], .screen .input-bar { position:absolute !important; }
+  .scroll { flex:1; overflow-y:auto; overflow-x:hidden; -webkit-overflow-scrolling:touch; }
+  .scroll-pad { padding:14px; }
+  .has-tabbar .scroll { padding-bottom:calc(var(--tabbar-h) + 12px); }
+
+  /* ── appbar ── */
+  .appbar { height:var(--appbar-h); flex:0 0 var(--appbar-h); display:flex; align-items:center; gap:6px;
+    padding:0 8px; border-bottom:1px solid var(--line); background:rgba(10,10,10,.95);
+    backdrop-filter:blur(8px); position:relative; z-index:5; }
+  .appbar-title { flex:1; text-align:center; font-weight:700; font-size:16px; white-space:nowrap;
+    overflow:hidden; text-overflow:ellipsis; }
+  .appbar-title small { display:block; font-weight:400; font-size:11px; color:var(--dim); margin-top:1px; }
+  .appbar-act, .appbar-back { width:40px; height:40px; border-radius:50%; display:flex; align-items:center;
+    justify-content:center; color:var(--mut); flex:0 0 40px; }
+  .appbar-act:hover, .appbar-back:hover { color:var(--fg); background:#1a1a1a; }
+  .appbar > .spacer { width:40px; flex:0 0 40px; }
+
+  /* ── 基本コンポーネント ── */
+  .card { background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:14px; }
+  .card + .card { margin-top:10px; }
+  .row { display:flex; align-items:center; gap:12px; padding:12px 0; border-bottom:1px solid var(--line2); }
+  .row:last-child { border-bottom:none; }
+  .avatar, .user-icon { width:44px; height:44px; border-radius:50%; background:var(--surface2);
+    border:1px solid var(--line); display:flex; align-items:center; justify-content:center; font-weight:700;
+    color:var(--mut); flex:0 0 auto; overflow:hidden; font-size:16px; background-size:cover; background-position:center; }
+  .avatar.lg, .user-icon.lg { width:72px; height:72px; font-size:24px; }
+  .avatar.sm, .user-icon.sm { width:30px; height:30px; font-size:12px; }
+  .chip { display:inline-flex; align-items:center; gap:5px; font-size:13px; background:var(--surface2);
+    border:1px solid var(--line); color:var(--mut); border-radius:18px; padding:6px 13px; white-space:nowrap; }
+  .chip.sel { border-color:var(--rose); color:var(--rose); background:var(--rose-dim); }
+  .chip.tag { color:var(--mut); }
+  .chip.mini { font-size:11px; padding:3px 9px; }
+  .btn { background:var(--rose); color:#1a0a0e; font-weight:700; font-size:14px; padding:9px 18px;
+    border-radius:22px; white-space:nowrap; transition:filter .12s; }
+  .btn:hover { filter:brightness(1.08); }
+  .btn:active { filter:brightness(.95); }
+  .btn.ghost { background:transparent; color:var(--rose); border:1.5px solid var(--rose); }
+  .btn.ghost:hover { background:var(--rose-dim); filter:none; }
+  .btn.gray { background:var(--surface2); color:var(--fg); border:1px solid var(--line); }
+  .btn.mini { font-size:12px; padding:6px 14px; }
+  .btn.block { display:block; width:100%; text-align:center; padding:13px; border-radius:24px; }
+  .btn.block + .btn.block { margin-top:9px; }
+  .input { width:100%; background:#0e0e0e; border:1px solid var(--line); color:var(--fg);
+    border-radius:20px; padding:10px 14px; font:inherit; font-size:14px; outline:none; }
+  .input:focus { border-color:var(--dim); }
+  .input::placeholder { color:var(--dim); }
+  .field { display:flex; flex-direction:column; gap:7px; }
+  .lbl { font-size:11px; color:var(--dim); letter-spacing:.06em; }
+  .section-lbl { font-size:13px; color:var(--fg); font-weight:700; margin:18px 2px 10px; }
+  .section-lbl:first-child { margin-top:2px; }
+  .muted { color:var(--mut); } .dim { color:var(--dim); }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--dim); display:inline-block; flex:0 0 auto; }
+  .dot.rose { background:var(--rose); } .dot.ok { background:var(--ok); }
+  .badge { font-size:9px; padding:2px 7px; border-radius:8px; background:var(--surface2); color:var(--mut); }
+  .fab { position:absolute; right:16px; bottom:calc(var(--tabbar-h) + 16px); width:56px; height:56px;
+    border-radius:50%; background:var(--rose); color:#1a0a0e; display:flex; align-items:center; justify-content:center;
+    box-shadow:0 6px 20px rgba(255,94,126,.3); z-index:6; }
+  .screen:not(.has-tabbar) .fab { bottom:16px; }
+  .toggle { width:42px; height:25px; border-radius:13px; background:#2a2a2a; position:relative; flex:0 0 auto; transition:background .15s; }
+  .toggle::after { content:""; position:absolute; top:3px; left:3px; width:19px; height:19px; border-radius:50%; background:#888; transition:transform .15s,background .15s; }
+  .toggle.on { background:var(--rose-dim); } .toggle.on::after { transform:translateX(17px); background:var(--rose); }
+  .bubble { max-width:76%; padding:9px 13px; border-radius:18px; background:var(--surface2); font-size:14px; line-height:1.45; align-self:flex-start; }
+  .bubble.me { align-self:flex-end; background:var(--rose-dim); color:#ffd8e0; }
+
+  /* ── SNS流: セグメントタブ（フォロー中/オープン 等） ── */
+  .seg-tabs { display:flex; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--bg); z-index:3; }
+  .seg-tab { flex:1; text-align:center; padding:13px 0; font-size:14px; font-weight:600; color:var(--dim); position:relative; }
+  .seg-tab.on { color:var(--fg); }
+  .seg-tab.on::after { content:""; position:absolute; left:50%; transform:translateX(-50%); bottom:-1px; width:44%; height:2.5px; background:var(--rose); border-radius:2px; }
+
+  /* ── SNS流: 投稿（アバター左 + 本文 + アクション） ── */
+  .post { display:flex; gap:11px; padding:13px 14px; border-bottom:1px solid var(--line2); }
+  .post .pbody { flex:1; min-width:0; }
+  .post .phead { display:flex; align-items:baseline; gap:7px; }
+  .post .pname { font-weight:700; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .post .ptime { color:var(--dim); font-size:12px; margin-left:auto; flex:0 0 auto; }
+  .post .ptext { font-size:14px; line-height:1.55; margin:4px 0 2px; word-break:break-word; }
+  .post-actions { display:flex; gap:24px; margin-top:8px; color:var(--dim); }
+  .post-actions .pa { display:flex; align-items:center; gap:6px; font-size:12px; }
+  .post-actions .pa svg { width:17px; height:17px; }
+  .post-actions .pa.liked { color:var(--rose); }
+
+  /* ── SNS流: カバー画像（画像が無いのでブランドのグラデ面） ── */
+  .cover { background:linear-gradient(135deg,var(--rose-dim),var(--surface2) 70%); position:relative; }
+  .cover.banner { height:104px; }
+
+  /* ── 下タブ（参考: タイムライン/サークル/チャット/通知/プロフィール） ── */
+  .tabbar { position:absolute; left:0; right:0; bottom:0; height:var(--tabbar-h); display:flex;
+    border-top:1px solid var(--line); background:rgba(10,10,10,.96); backdrop-filter:blur(8px); z-index:10; }
+  .tab { flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; color:var(--dim); font-size:10px; }
+  .tab.active { color:var(--rose); }
+  .tab svg { width:23px; height:23px; }
+  .tabbar.hidden { display:none; }
+</style>
+</head>
+<body>
+<div class="app" id="app">
+
+<!-- ── screen: onboarding ── -->
+<style>
+[data-screen="onboarding"] {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  background: var(--bg);
+}
+
+[data-screen="onboarding"] .scroll {
+  flex: 1;
+}
+
+[data-screen="onboarding"] .ob-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 52px 0 28px;
+}
+
+[data-screen="onboarding"] .ob-logo-mark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+[data-screen="onboarding"] .ob-dot {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--rose);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #1a0a0e;
+  flex-shrink: 0;
+}
+
+[data-screen="onboarding"] .ob-wordmark {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  color: var(--fg);
+}
+
+[data-screen="onboarding"] .ob-tagline {
+  font-size: 13px;
+  color: var(--mut);
+  text-align: center;
+  line-height: 1.55;
+}
+
+[data-screen="onboarding"] .ob-section {
+  margin-top: 22px;
+}
+
+[data-screen="onboarding"] .ob-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+[data-screen="onboarding"] .ob-cta {
+  margin-top: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 8px;
+}
+
+[data-screen="onboarding"] .ob-notice {
+  font-size: 11px;
+  color: var(--dim);
+  text-align: center;
+  line-height: 1.7;
+}
+</style>
+<section class="screen" data-screen="onboarding">
+  <div class="scroll">
+    <div class="scroll-pad">
+
+      <!-- ヒーロー -->
+      <div class="ob-hero">
+        <div class="ob-logo-mark">
+          <div class="ob-dot">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </div>
+          <span class="ob-wordmark">voice rooms</span>
+        </div>
+        <p class="ob-tagline">ブラウザだけ。匿名で、声でつながる。</p>
+      </div>
+
+      <!-- 名前（任意） -->
+      <div class="field">
+        <span class="lbl">名前（任意）</span>
+        <input class="input" type="text" placeholder="名乗らなくてもいい" maxlength="24" />
+      </div>
+
+      <!-- 年齢帯 -->
+      <div class="ob-section">
+        <div class="section-lbl">年齢帯</div>
+        <div class="ob-chips">
+          <span class="chip">〜15</span>
+          <span class="chip">16–18</span>
+          <span class="chip">19–22</span>
+          <span class="chip sel">23+</span>
+        </div>
+      </div>
+
+      <!-- 興味・タグ -->
+      <div class="ob-section">
+        <div class="section-lbl">興味・タグ</div>
+        <div class="ob-chips">
+          <span class="chip tag sel">lofi</span>
+          <span class="chip tag">ゲーム</span>
+          <span class="chip tag">アニメ</span>
+          <span class="chip tag">雑談</span>
+          <span class="chip tag sel">深夜</span>
+          <span class="chip tag">音楽</span>
+          <span class="chip tag">勉強</span>
+          <span class="chip tag">恋バナ</span>
+          <span class="chip tag sel">弾き語り</span>
+          <span class="chip tag">ボカロ</span>
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <div class="ob-cta">
+        <button class="btn block">はじめる</button>
+        <p class="ob-notice dim">連絡先の交換も電話番号も要らない。</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+
+<!-- ── screen: timeline ── -->
+<style>
+/* ---- room strip ---- */
+[data-screen="timeline"] .room-strip {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding: 12px 14px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  border-bottom: 1px solid var(--line);
+}
+[data-screen="timeline"] .room-strip::-webkit-scrollbar { display: none; }
+
+[data-screen="timeline"] .room-card {
+  flex: 0 0 120px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 10px 10px 8px;
+  cursor: pointer;
+  transition: border-color .15s;
+}
+[data-screen="timeline"] .room-card:active { border-color: var(--rose); }
+
+[data-screen="timeline"] .room-card-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 6px;
+}
+[data-screen="timeline"] .room-card-name {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+[data-screen="timeline"] .room-card-count {
+  font-size: 11px;
+  color: var(--mut);
+  white-space: nowrap;
+}
+[data-screen="timeline"] .room-card-speakers {
+  display: flex;
+  align-items: center;
+}
+[data-screen="timeline"] .room-card-speakers .user-icon.sm {
+  margin-left: -8px;
+  border: 2px solid var(--surface2);
+  box-sizing: content-box;
+}
+[data-screen="timeline"] .room-card-speakers .user-icon.sm:first-child { margin-left: 0; }
+
+/* ---- composer ---- */
+[data-screen="timeline"] .composer-wrap {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+[data-screen="timeline"] .composer-right {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+[data-screen="timeline"] .composer-right .input {
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 14px;
+  resize: none;
+}
+[data-screen="timeline"] .composer-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* ---- post overrides for timeline ---- */
+[data-screen="timeline"] .post {
+  padding: 13px 14px;
+  border-bottom: 1px solid var(--line);
+}
+[data-screen="timeline"] .post-img {
+  border-radius: 12px;
+  overflow: hidden;
+  margin: 8px 0;
+}
+[data-screen="timeline"] .post-img .cover {
+  height: 150px;
+  border-radius: 0;
+}
+[data-screen="timeline"] .apex-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 6px;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
+}
+[data-screen="timeline"] .apex-tag {
+  font-size: 12px;
+  color: var(--mut);
+}
+
+/* ---- load more ---- */
+[data-screen="timeline"] .load-more {
+  text-align: center;
+  padding: 18px 0 32px;
+  font-size: 14px;
+  color: var(--dim);
+}
+</style>
+
+<section class="screen" data-screen="timeline" data-tab="timeline">
+
+  <!-- appbar -->
+  <div class="appbar">
+    <div class="user-icon sm appbar-back" style="font-size:11px;">わ</div>
+    <span class="appbar-title">タイムライン</span>
+    <button class="appbar-act" aria-label="投稿を作成">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 20h9"/>
+        <path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4z"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="scroll">
+
+    <!-- 1. セグメントタブ -->
+    <div class="seg-tabs" style="padding:0 14px; border-bottom:1px solid var(--line);">
+      <button class="seg-tab on">フォロー中</button>
+      <button class="seg-tab">オープン</button>
+    </div>
+
+    <!-- 2. 通話中の部屋ストリップ -->
+    <div class="room-strip">
+
+      <div class="room-card" data-go="call">
+        <div class="room-card-header">
+          <span class="dot rose" style="flex-shrink:0;"></span>
+          <span class="room-card-name">深夜雑談</span>
+          <span class="room-card-count">4人</span>
+        </div>
+        <div class="room-card-speakers">
+          <div class="user-icon sm" style="font-size:11px;">さ</div>
+          <div class="user-icon sm" style="font-size:11px;">み</div>
+          <div class="user-icon sm" style="font-size:11px;background:var(--surface);">r</div>
+        </div>
+      </div>
+
+      <div class="room-card" data-go="call">
+        <div class="room-card-header">
+          <span class="dot rose" style="flex-shrink:0;"></span>
+          <span class="room-card-name">作業部屋</span>
+          <span class="room-card-count">2人</span>
+        </div>
+        <div class="room-card-speakers">
+          <div class="user-icon sm" style="font-size:11px;">き</div>
+          <div class="user-icon sm" style="font-size:11px;">な</div>
+        </div>
+      </div>
+
+      <div class="room-card" data-go="call">
+        <div class="room-card-header">
+          <span class="dot rose" style="flex-shrink:0;"></span>
+          <span class="room-card-name">APEX募集</span>
+          <span class="room-card-count">3人</span>
+        </div>
+        <div class="room-card-speakers">
+          <div class="user-icon sm" style="font-size:11px;">lo</div>
+          <div class="user-icon sm" style="font-size:11px;">も</div>
+          <div class="user-icon sm" style="font-size:11px;">す</div>
+        </div>
+      </div>
+
+      <div class="room-card" data-go="call">
+        <div class="room-card-header">
+          <span class="dot rose" style="flex-shrink:0;"></span>
+          <span class="room-card-name">音楽かけ流し</span>
+          <span class="room-card-count">7人</span>
+        </div>
+        <div class="room-card-speakers">
+          <div class="user-icon sm" style="font-size:11px;">わ</div>
+          <div class="user-icon sm" style="font-size:11px;">さ</div>
+          <div class="user-icon sm" style="font-size:11px;">r</div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- 3. 投稿コンポーザ -->
+    <div class="composer-wrap">
+      <div class="user-icon sm" style="font-size:11px;">わ</div>
+      <div class="composer-right">
+        <input class="input" type="text" placeholder="いまどうしてる？">
+        <div class="composer-actions">
+          <button class="btn mini">投稿</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 4. 投稿フィード -->
+
+    <!-- 投稿1: 画像付き -->
+    <div class="post">
+      <a><div class="user-icon sm">さ</div></a>
+      <div class="pbody">
+        <div class="phead">
+          <span class="pname">さく</span>
+          <span class="chip mini tag" style="margin-left:5px;">日常</span>
+          <time class="ptime">3分</time>
+        </div>
+        <div class="ptext">今日の夕焼けがすごすぎた。写真じゃ伝わらないけど撮ってしまった</div>
+        <div class="post-img">
+          <div class="cover" style="background: linear-gradient(135deg, #1a0a1e 0%, #3a1a22 40%, #ff5e7e33 70%, #e8c84a22 100%);"></div>
+        </div>
+        <div class="post-actions">
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            5
+          </span>
+          <span class="pa liked">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            28
+          </span>
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6"/><polyline points="14.5 2 22 2 22 9.5"/><line x1="11" y1="13" x2="22" y2="2"/></svg>
+            2
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 投稿2: APEX通話募集 -->
+    <div class="post">
+      <a><div class="user-icon sm">r</div></a>
+      <div class="pbody">
+        <div class="phead">
+          <span class="pname">r4in</span>
+          <span class="chip mini tag" style="margin-left:5px;">ゲーム</span>
+          <time class="ptime">12分</time>
+        </div>
+        <div class="ptext">@APEX 一緒にやる人 オープン通話開いてる。ランク上げたい</div>
+        <div class="apex-row">
+          <span class="apex-tag">
+            <span class="dot rose" style="vertical-align:middle;"></span>
+            LIVE · 通話中3人
+          </span>
+          <button class="btn mini" data-go="call">入る</button>
+        </div>
+        <div class="post-actions" style="margin-top:10px;">
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            4
+          </span>
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            12
+          </span>
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6"/><polyline points="14.5 2 22 2 22 9.5"/><line x1="11" y1="13" x2="22" y2="2"/></svg>
+            1
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 投稿3 -->
+    <div class="post">
+      <a><div class="user-icon sm">み</div></a>
+      <div class="pbody">
+        <div class="phead">
+          <span class="pname">みお</span>
+          <time class="ptime">34分</time>
+        </div>
+        <div class="ptext">眠れなくて3時に起きてパスタ茹でてる。作ってる間は静かで好き</div>
+        <div class="post-actions">
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            9
+          </span>
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            41
+          </span>
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6"/><polyline points="14.5 2 22 2 22 9.5"/><line x1="11" y1="13" x2="22" y2="2"/></svg>
+            3
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 投稿4 -->
+    <div class="post">
+      <a><div class="user-icon sm">lo</div></a>
+      <div class="pbody">
+        <div class="phead">
+          <span class="pname">lo-fi廃人</span>
+          <span class="chip mini tag" style="margin-left:5px;">音楽</span>
+          <time class="ptime">1時間</time>
+        </div>
+        <div class="ptext">プレイリスト作り始めたら3時間経ってた。1曲も聴いてない</div>
+        <div class="post-actions">
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            16
+          </span>
+          <span class="pa liked">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            74
+          </span>
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6"/><polyline points="14.5 2 22 2 22 9.5"/><line x1="11" y1="13" x2="22" y2="2"/></svg>
+            6
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 投稿5 -->
+    <div class="post">
+      <a><div class="user-icon sm">な</div></a>
+      <div class="pbody">
+        <div class="phead">
+          <span class="pname">名なし</span>
+          <time class="ptime">昨日</time>
+        </div>
+        <div class="ptext">深夜の通話って何話してるわけでもないのになんか落ち着く</div>
+        <div class="post-actions">
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            22
+          </span>
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            109
+          </span>
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6"/><polyline points="14.5 2 22 2 22 9.5"/><line x1="11" y1="13" x2="22" y2="2"/></svg>
+            14
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 投稿6 -->
+    <div class="post">
+      <a><div class="user-icon sm">き</div></a>
+      <div class="pbody">
+        <div class="phead">
+          <span class="pname">きりしま</span>
+          <span class="chip mini tag" style="margin-left:5px;">作業通話</span>
+          <time class="ptime">昨日</time>
+        </div>
+        <div class="ptext">締め切り前日にいちばん部屋がきれいになる法則、まじで何</div>
+        <div class="post-actions">
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            37
+          </span>
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            201
+          </span>
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12v6a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h6"/><polyline points="14.5 2 22 2 22 9.5"/><line x1="11" y1="13" x2="22" y2="2"/></svg>
+            31
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 5. もっと見る -->
+    <div class="load-more">もっと見る</div>
+
+  </div>
+
+</section>
+
+
+<!-- ── screen: call ── -->
+<style>
+/* ── call 画面専用スタイル ── */
+
+[data-screen="call"] .call-appbar-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  line-height: 1.2;
+}
+[data-screen="call"] .call-room-name {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 180px;
+}
+[data-screen="call"] .call-room-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--mut);
+}
+[data-screen="call"] .call-conn {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: var(--ok);
+}
+[data-screen="call"] .call-conn .dot {
+  background: var(--ok);
+  box-shadow: 0 0 6px var(--ok);
+}
+
+/* ── 参加者グリッド ── */
+[data-screen="call"] .call-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 10px;
+  margin-bottom: 16px;
+}
+[data-screen="call"] .call-tile {
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 14px 8px 10px;
+  text-align: center;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+/* 発話中リング */
+[data-screen="call"] .call-tile.talking {
+  border-color: var(--rose);
+}
+[data-screen="call"] .call-tile.talking .avatar {
+  box-shadow:
+    0 0 0 3px rgba(255, 94, 126, 0.25),
+    0 0 12px 2px rgba(255, 94, 126, 0.35);
+  border: 2px solid var(--rose);
+}
+
+/* ミュート：点線アバター */
+[data-screen="call"] .call-tile.muted .avatar {
+  border: 2px dashed var(--dim);
+  opacity: 0.55;
+}
+
+/* 接続中：薄くパルス風 */
+[data-screen="call"] .call-tile.connecting .avatar {
+  border: 2px solid var(--dim);
+  opacity: 0.6;
+}
+
+/* あなた自身 */
+[data-screen="call"] .call-tile.self {
+  border-color: var(--rose);
+  border-style: solid;
+}
+[data-screen="call"] .call-tile.self .avatar {
+  border: 2px solid var(--rose);
+}
+
+/* HOSTバッジ */
+[data-screen="call"] .call-badge-host {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  background: var(--rose-dim);
+  color: var(--rose);
+  border-radius: 5px;
+  padding: 2px 5px;
+}
+/* 挙手バッジ */
+[data-screen="call"] .call-badge-hand {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  background: #2a2410;
+  color: var(--gold);
+  border-radius: 5px;
+  padding: 2px 5px;
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9px;
+  font-weight: 600;
+}
+/* 通報アイコン（他人タイル右下） */
+[data-screen="call"] .call-tile-report {
+  position: absolute;
+  bottom: 6px;
+  right: 6px;
+  background: transparent;
+  color: var(--dim);
+  border: none;
+  padding: 3px;
+  border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  line-height: 1;
+}
+[data-screen="call"] .call-tile-report:hover {
+  color: var(--rose);
+}
+
+/* タイル名前・状態 */
+[data-screen="call"] .call-tile-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fg);
+  margin-top: 8px;
+  word-break: break-all;
+  max-width: 100%;
+}
+[data-screen="call"] .call-tile-name.anonymous {
+  color: var(--dim);
+  font-weight: 400;
+}
+[data-screen="call"] .call-tile-status {
+  font-size: 10px;
+  color: var(--dim);
+  margin-top: 3px;
+  letter-spacing: 0.04em;
+}
+
+/* ── チャット小窓 ── */
+[data-screen="call"] .call-chat {
+  margin-bottom: 16px;
+}
+[data-screen="call"] .call-chat-log {
+  height: 140px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  font-size: 13px;
+}
+[data-screen="call"] .call-chat-log .bubble {
+  align-self: flex-start;
+  max-width: 78%;
+  padding: 7px 10px;
+  border-radius: 10px;
+  line-height: 1.45;
+  font-size: 13px;
+}
+[data-screen="call"] .call-chat-log .bubble.me {
+  align-self: flex-end;
+  background: var(--rose-dim);
+  border: 1px solid var(--rose);
+  color: var(--fg);
+}
+[data-screen="call"] .call-chat-sender {
+  font-size: 10px;
+  color: var(--mut);
+  margin-bottom: 2px;
+}
+[data-screen="call"] .call-chat-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  border-top: 1px solid var(--line);
+  padding: 8px 12px;
+}
+[data-screen="call"] .call-chat-input-row .input {
+  flex: 1;
+  font-size: 13px;
+}
+
+/* ── 通話コントロールバー（固定下部） ── */
+[data-screen="call"] .call-controls {
+  position: sticky;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--bg);
+  border-top: 1px solid var(--line);
+  padding: 14px 0 18px;
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  z-index: 10;
+  margin: 0 -14px -14px;
+}
+[data-screen="call"] .call-ctrl-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 5px;
+}
+[data-screen="call"] .call-ctrl-btn {
+  width: 54px;
+  height: 54px;
+  border-radius: 50%;
+  border: 1.5px solid var(--line);
+  background: var(--surface2);
+  color: var(--mut);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: border-color 0.14s, color 0.14s, background 0.14s;
+}
+[data-screen="call"] .call-ctrl-btn.active {
+  border-color: var(--rose);
+  color: var(--rose);
+}
+[data-screen="call"] .call-ctrl-btn.raised {
+  border-color: var(--gold);
+  color: var(--gold);
+}
+[data-screen="call"] .call-ctrl-btn.leave {
+  background: #1c0a0d;
+  border-color: var(--rose);
+  color: var(--rose);
+}
+[data-screen="call"] .call-ctrl-label {
+  font-size: 10px;
+  color: var(--dim);
+  letter-spacing: 0.06em;
+  white-space: nowrap;
+}
+</style>
+
+<section class="screen" data-screen="call">
+
+  <!-- ── appbar ── -->
+  <div class="appbar">
+    <button class="appbar-back">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+    </button>
+
+    <div class="call-appbar-center">
+      <span class="call-room-name">夜の雑談部屋</span>
+      <div class="call-room-meta">
+        <span class="chip tag" style="font-size:10px; padding:1px 7px;">#lo-fi</span>
+        <span class="chip tag" style="font-size:10px; padding:1px 7px;">#雑談</span>
+        <span style="color:var(--dim);">6人</span>
+      </div>
+    </div>
+
+    <div class="call-conn">
+      <span class="dot"></span>
+      <span>接続済み</span>
+    </div>
+  </div>
+
+  <!-- ── スクロール領域 ── -->
+  <div class="scroll">
+
+    <!-- 参加者グリッド -->
+    <div class="section-lbl">参加者</div>
+    <div class="call-grid">
+
+      <!-- (1) 発話中 -->
+      <div class="call-tile talking">
+        <div class="avatar">さ</div>
+        <div class="call-tile-name">さく</div>
+        <div class="call-tile-status">発話中</div>
+        <button class="call-tile-report" title="通報">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+            <line x1="4" y1="22" x2="4" y2="15"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- (2) HOST + 発話中 -->
+      <div class="call-tile talking">
+        <div class="call-badge-host">HOST</div>
+        <div class="avatar">み</div>
+        <div class="call-tile-name">みお</div>
+        <div class="call-tile-status">発話中</div>
+        <button class="call-tile-report" title="通報">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+            <line x1="4" y1="22" x2="4" y2="15"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- (3) 挙手バッジ -->
+      <div class="call-tile">
+        <div class="call-badge-hand">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/>
+            <path d="M18 8a2 2 0 0 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>
+          </svg>
+          挙手
+        </div>
+        <div class="avatar">r</div>
+        <div class="call-tile-name">r4in</div>
+        <div class="call-tile-status">聴いてる</div>
+        <button class="call-tile-report" title="通報">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+            <line x1="4" y1="22" x2="4" y2="15"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- (4) ミュート -->
+      <div class="call-tile muted">
+        <div class="avatar">?</div>
+        <div class="call-tile-name anonymous">名なし</div>
+        <div class="call-tile-status">ミュート</div>
+        <button class="call-tile-report" title="通報">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+            <line x1="4" y1="22" x2="4" y2="15"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- (5) あなた自身 -->
+      <div class="call-tile self">
+        <div class="avatar" style="color:var(--rose);">あ</div>
+        <div class="call-tile-name" style="color:var(--rose);">あなた</div>
+        <div class="call-tile-status">声 ON</div>
+      </div>
+
+      <!-- (6) 接続中 -->
+      <div class="call-tile connecting">
+        <div class="avatar">l</div>
+        <div class="call-tile-name">lo-fi廃人</div>
+        <div class="call-tile-status">接続中…</div>
+        <button class="call-tile-report" title="通報">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/>
+            <line x1="4" y1="22" x2="4" y2="15"/>
+          </svg>
+        </button>
+      </div>
+
+    </div>
+    <!-- /call-grid -->
+
+    <!-- ── 部屋チャット小窓 ── -->
+    <div class="section-lbl">チャット</div>
+    <div class="card call-chat" style="padding:0; overflow:hidden;">
+      <div class="call-chat-log">
+
+        <!-- システムメッセージ -->
+        <div style="font-size:11px; color:var(--dim); font-style:italic; text-align:center;">みおが部屋を開きました</div>
+
+        <!-- 他人の発言 -->
+        <div>
+          <div class="call-chat-sender">さく</div>
+          <div class="bubble">こんばー</div>
+        </div>
+
+        <!-- 他人の発言 -->
+        <div>
+          <div class="call-chat-sender">みお</div>
+          <div class="bubble">今日暑いね</div>
+        </div>
+
+        <!-- 自分の発言 -->
+        <div>
+          <div class="call-chat-sender" style="text-align:right; color:var(--rose);">あなた</div>
+          <div class="bubble me">ほんとに〜</div>
+        </div>
+
+        <!-- 他人の発言 -->
+        <div>
+          <div class="call-chat-sender">r4in</div>
+          <div class="bubble">ちょっと質問していい？</div>
+        </div>
+
+      </div>
+
+      <div class="call-chat-input-row">
+        <input class="input" type="text" placeholder="メッセージを入力" maxlength="300">
+        <button class="btn ghost" style="padding:8px 14px; font-size:13px; border-radius:8px;">送る</button>
+      </div>
+    </div>
+    <!-- /call-chat -->
+
+    <!-- 下部コントロールバーの余白確保 -->
+    <div style="height:8px;"></div>
+
+    <!-- ── 通話コントロールバー ── -->
+    <div class="call-controls">
+
+      <!-- マイク：声 ON -->
+      <div class="call-ctrl-item">
+        <button class="call-ctrl-btn active" title="マイク（声 ON）">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+            <line x1="12" y1="19" x2="12" y2="23"/>
+          </svg>
+        </button>
+        <span class="call-ctrl-label">声 ON</span>
+      </div>
+
+      <!-- 手を挙げる -->
+      <div class="call-ctrl-item">
+        <button class="call-ctrl-btn" title="手を挙げる">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/>
+            <path d="M18 8a2 2 0 0 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/>
+          </svg>
+        </button>
+        <span class="call-ctrl-label">手を挙げる</span>
+      </div>
+
+      <!-- スピーカー -->
+      <div class="call-ctrl-item">
+        <button class="call-ctrl-btn" title="スピーカー">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14"/>
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>
+          </svg>
+        </button>
+        <span class="call-ctrl-label">スピーカー</span>
+      </div>
+
+      <!-- 退出 -->
+      <div class="call-ctrl-item">
+        <button class="call-ctrl-btn leave" title="退出">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 19H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+        </button>
+        <span class="call-ctrl-label">退出</span>
+      </div>
+
+    </div>
+    <!-- /call-controls -->
+
+  </div>
+  <!-- /scroll -->
+
+</section>
+
+
+<!-- ── screen: circles ── -->
+<style>
+/* ─── 並び替えチップ行 ─── */
+[data-screen="circles"] .sort-row {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-bottom: 12px;
+}
+
+/* ─── カテゴリ横スクロール ─── */
+[data-screen="circles"] .cat-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 14px;
+}
+[data-screen="circles"] .cat-strip::-webkit-scrollbar { display: none; }
+
+/* ─── グループカードグリッド ─── */
+[data-screen="circles"] .group-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+[data-screen="circles"] .group-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* カード上部カバー */
+[data-screen="circles"] .group-card .cover {
+  height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.9);
+  letter-spacing: -.5px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* カード下部情報エリア */
+[data-screen="circles"] .gc-body {
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+[data-screen="circles"] .gc-row1 {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+[data-screen="circles"] .gc-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+  line-height: 1.25;
+}
+[data-screen="circles"] .gc-count {
+  font-size: 11px;
+  color: var(--dim);
+  margin-top: 1px;
+}
+[data-screen="circles"] .gc-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* FAB 配置 */
+[data-screen="circles"] .circles-fab {
+  position: fixed;
+  bottom: 88px;
+  right: calc(50% - 215px + 16px);
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--rose);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #1a0a0e;
+  box-shadow: 0 4px 16px rgba(255,94,126,0.35);
+  cursor: pointer;
+  border: none;
+  z-index: 100;
+}
+</style>
+
+<section class="screen" data-screen="circles" data-tab="circles">
+
+  <!-- アプリバー -->
+  <div class="appbar">
+    <span class="appbar-title">サークル</span>
+    <button class="appbar-act" aria-label="検索">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="7"/>
+        <line x1="17" y1="17" x2="22" y2="22"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="scroll">
+    <div class="scroll-pad">
+
+      <!-- 並び替え行 -->
+      <div class="sort-row">
+        <span class="chip sel">新着順</span>
+        <span class="chip">メンバー数順</span>
+      </div>
+
+      <!-- カテゴリ横スクロール -->
+      <div class="cat-strip">
+        <span class="chip sel">つながりたい</span>
+        <span class="chip">ふぁぼ</span>
+        <span class="chip">雑談しょう</span>
+        <span class="chip">ゲーム</span>
+        <span class="chip">占い</span>
+        <span class="chip">音楽</span>
+      </div>
+
+      <!-- みつける -->
+      <p class="section-lbl">みつける</p>
+
+      <div class="group-grid">
+
+        <!-- lo-fi beats -->
+        <div class="group-card">
+          <div class="cover" style="background:linear-gradient(135deg,#1a0d14 0%,#3a1020 50%,#5c1830 100%);">
+            lo&#x2011;fi
+          </div>
+          <div class="gc-body">
+            <div class="gc-row1">
+              <div>
+                <div class="gc-name">lo-fi beats</div>
+                <div class="gc-count">1,204人</div>
+              </div>
+              <button class="btn mini">参加</button>
+            </div>
+            <div class="gc-tags">
+              <span class="chip mini">#音楽</span>
+              <span class="chip mini">#作業BGM</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- レトロゲーム部 -->
+        <div class="group-card">
+          <div class="cover" style="background:linear-gradient(135deg,#0d0d1e 0%,#151535 50%,#1e1e50 100%);">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="6" width="20" height="12" rx="2"/>
+              <path d="M6 12h4M8 10v4"/>
+              <circle cx="15" cy="12" r="1.2" fill="rgba(255,255,255,0.85)"/>
+              <circle cx="18" cy="12" r="1.2" fill="rgba(255,255,255,0.85)"/>
+            </svg>
+          </div>
+          <div class="gc-body">
+            <div class="gc-row1">
+              <div>
+                <div class="gc-name">レトロゲーム部</div>
+                <div class="gc-count">3,817人</div>
+              </div>
+              <button class="btn mini">参加</button>
+            </div>
+            <div class="gc-tags">
+              <span class="chip mini">#ゲーム</span>
+              <span class="chip mini">#FC/SFC</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 深夜作業組 -->
+        <div class="group-card">
+          <div class="cover" style="background:linear-gradient(135deg,#0a0a0f 0%,#111118 50%,#1a1a28 100%);">
+            <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.75)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/>
+            </svg>
+          </div>
+          <div class="gc-body">
+            <div class="gc-row1">
+              <div>
+                <div class="gc-name">深夜作業組</div>
+                <div class="gc-count">1,089人</div>
+              </div>
+              <button class="btn mini">参加</button>
+            </div>
+            <div class="gc-tags">
+              <span class="chip mini">#深夜</span>
+              <span class="chip mini">#作業</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ボカロ語り -->
+        <div class="group-card">
+          <div class="cover" style="background:linear-gradient(135deg,#130e1e 0%,#22133a 50%,#2e1850 100%);">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="22"/>
+              <line x1="8" y1="22" x2="16" y2="22"/>
+            </svg>
+          </div>
+          <div class="gc-body">
+            <div class="gc-row1">
+              <div>
+                <div class="gc-name">ボカロ語り</div>
+                <div class="gc-count">638人</div>
+              </div>
+              <button class="btn mini">参加</button>
+            </div>
+            <div class="gc-tags">
+              <span class="chip mini">#音楽</span>
+              <span class="chip mini">#ボカロ</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 弾き語り集会所 -->
+        <div class="group-card">
+          <div class="cover" style="background:linear-gradient(135deg,#0e1a0a 0%,#162810 50%,#1e3614 100%);">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 18V5l12-2v13"/>
+              <circle cx="6" cy="18" r="3"/>
+              <circle cx="18" cy="16" r="3"/>
+            </svg>
+          </div>
+          <div class="gc-body">
+            <div class="gc-row1">
+              <div>
+                <div class="gc-name">弾き語り集会所</div>
+                <div class="gc-count">421人</div>
+              </div>
+              <button class="btn mini">参加</button>
+            </div>
+            <div class="gc-tags">
+              <span class="chip mini">#音楽</span>
+              <span class="chip mini">#ギター</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 眠れない夜の会 -->
+        <div class="group-card">
+          <div class="cover" style="background:linear-gradient(135deg,#110a1e 0%,#1e1030 50%,#2a1440 100%);">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.75)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="4"/>
+              <path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+            </svg>
+          </div>
+          <div class="gc-body">
+            <div class="gc-row1">
+              <div>
+                <div class="gc-name">眠れない夜の会</div>
+                <div class="gc-count">956人</div>
+              </div>
+              <button class="btn mini">参加</button>
+            </div>
+            <div class="gc-tags">
+              <span class="chip mini">#深夜</span>
+              <span class="chip mini">#雑談</span>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /group-grid -->
+
+      <!-- FAB 下余白 -->
+      <div style="height:80px;"></div>
+    </div><!-- /scroll-pad -->
+  </div><!-- /scroll -->
+
+  <!-- FAB: サークルをつくる -->
+  <button class="circles-fab" aria-label="サークルをつくる">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="12" y1="5" x2="12" y2="19"/>
+      <line x1="5" y1="12" x2="19" y2="12"/>
+    </svg>
+  </button>
+
+</section>
+
+
+<!-- ── screen: circle ── -->
+<style>
+[data-screen="circle"] .circle-icon-wrap {
+  position: relative;
+  z-index: 1;
+  margin-top: -36px;
+  margin-left: 14px;
+  margin-bottom: 0;
+  display: inline-block;
+}
+
+[data-screen="circle"] .circle-icon-wrap .user-icon {
+  border: 3px solid var(--bg);
+  background: var(--rose-dim);
+  color: var(--rose);
+  font-size: 24px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+[data-screen="circle"] .circle-meta-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 0 14px;
+}
+
+[data-screen="circle"] .circle-name-block {
+  flex: 1;
+  min-width: 0;
+}
+
+[data-screen="circle"] .circle-name {
+  font-size: 19px;
+  font-weight: 800;
+  line-height: 1.2;
+  color: var(--fg);
+}
+
+[data-screen="circle"] .circle-count {
+  font-size: 12px;
+  color: var(--mut);
+  margin-top: 3px;
+}
+
+[data-screen="circle"] .circle-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+  padding: 0 14px;
+}
+
+[data-screen="circle"] .circle-desc {
+  font-size: 13px;
+  color: var(--mut);
+  line-height: 1.65;
+  margin-top: 10px;
+  padding: 0 14px;
+}
+
+[data-screen="circle"] .circle-join-row {
+  margin: 12px 14px 4px;
+}
+
+[data-screen="circle"] .seg-tabs {
+  margin-top: 12px;
+}
+
+[data-screen="circle"] .room-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 14px;
+  border-bottom: 1px solid var(--line2);
+}
+
+[data-screen="circle"] .room-row:last-child {
+  border-bottom: none;
+}
+
+[data-screen="circle"] .room-info {
+  flex: 1;
+  min-width: 0;
+}
+
+[data-screen="circle"] .room-name {
+  font-weight: 600;
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--fg);
+}
+
+[data-screen="circle"] .room-sub {
+  font-size: 12px;
+  color: var(--mut);
+  margin-top: 3px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+[data-screen="circle"] .room-live-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--rose);
+  letter-spacing: 0.3px;
+}
+
+[data-screen="circle"] .room-participants {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--dim);
+}
+</style>
+<section class="screen" data-screen="circle">
+
+  <div class="appbar">
+    <button class="appbar-back">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+    </button>
+    <span class="appbar-title">lo-fi beats</span>
+    <button class="appbar-act">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="5" r="1.2" fill="currentColor" stroke="none"/>
+        <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none"/>
+        <circle cx="12" cy="19" r="1.2" fill="currentColor" stroke="none"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="scroll">
+
+    <!-- カバーバナー -->
+    <div class="cover banner" style="background:linear-gradient(135deg,#1a0d12 0%,#2b0f1a 40%,#1c0a0f 100%);position:relative;">
+    </div>
+
+    <!-- サークルアイコン（バナー端に半被せ） -->
+    <div class="circle-icon-wrap">
+      <div class="user-icon lg">L</div>
+    </div>
+
+    <!-- 名前・メンバー数・参加ボタン -->
+    <div class="circle-meta-row">
+      <div class="circle-name-block">
+        <div class="circle-name">lo-fi beats</div>
+        <div class="circle-count">メンバー 1,204人</div>
+      </div>
+      <button class="btn ghost" style="flex-shrink:0;margin-top:4px;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        参加中
+      </button>
+    </div>
+
+    <!-- タグ -->
+    <div class="circle-tags">
+      <span class="chip mini">#lofi</span>
+      <span class="chip mini">#チルホップ</span>
+      <span class="chip mini">#作業BGM</span>
+      <span class="chip mini">#ビートメイク</span>
+      <span class="chip mini">#深夜</span>
+    </div>
+
+    <!-- 説明文 -->
+    <p class="circle-desc">
+      lo-fi・チルホップ好きが集まるサークル。制作中のビートを流したり、黙って作業通話するのも歓迎。深夜枠が特に活発です。
+    </p>
+
+    <!-- セグメントタブ -->
+    <div class="seg-tabs">
+      <span class="seg-tab on">通話</span>
+      <span class="seg-tab">投稿</span>
+      <span class="seg-tab">メンバー</span>
+    </div>
+
+    <!-- 通話中の部屋 -->
+    <div class="section-lbl" style="padding:12px 14px 6px;">通話中の部屋</div>
+    <div style="border-top:1px solid var(--line2);border-bottom:1px solid var(--line2);">
+
+      <div class="room-row">
+        <div class="user-icon" style="background:var(--rose-dim);color:var(--rose-soft);">さ</div>
+        <div class="room-info">
+          <div class="room-name">深夜作業部屋</div>
+          <div class="room-sub">
+            <span class="dot rose"></span>
+            <span class="room-live-label">LIVE</span>
+            <span class="dim">·</span>
+            <span class="room-participants">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              5
+            </span>
+            <span class="chip mini" style="margin-left:2px;">#チル</span>
+          </div>
+        </div>
+        <button class="btn mini">入る</button>
+      </div>
+
+      <div class="room-row">
+        <div class="user-icon" style="background:#12181a;color:#6acfe0;">r</div>
+        <div class="room-info">
+          <div class="room-name">ビート聴かせて</div>
+          <div class="room-sub">
+            <span class="dot rose"></span>
+            <span class="room-live-label">LIVE</span>
+            <span class="dim">·</span>
+            <span class="room-participants">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              3
+            </span>
+            <span class="chip mini" style="margin-left:2px;">#制作</span>
+          </div>
+        </div>
+        <button class="btn mini">入る</button>
+      </div>
+
+      <div class="room-row">
+        <div class="user-icon" style="background:#131a12;color:#7ad16a;">み</div>
+        <div class="room-info">
+          <div class="room-name">黙作業（BGMあり）</div>
+          <div class="room-sub">
+            <span class="dot rose"></span>
+            <span class="room-live-label">LIVE</span>
+            <span class="dim">·</span>
+            <span class="room-participants">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+              8
+            </span>
+            <span class="chip mini" style="margin-left:2px;">#作業BGM</span>
+          </div>
+        </div>
+        <button class="btn mini">入る</button>
+      </div>
+
+    </div>
+
+    <!-- 最近の投稿 -->
+    <div class="section-lbl" style="padding:14px 14px 6px;">最近の投稿</div>
+
+    <div class="post">
+      <a><div class="user-icon" style="background:var(--rose-dim);color:var(--rose-soft);">r</div></a>
+      <div class="pbody">
+        <div class="phead">
+          <span class="pname">r4in</span>
+          <time class="ptime">2時間前</time>
+        </div>
+        <div class="ptext">昨夜の作業部屋で流してたビート完成しました。SoundCloudに上げたので聴いてもらえると嬉しいです。フィードバックも歓迎。</div>
+        <div class="post-actions">
+          <span class="pa liked">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            24
+          </span>
+          <span class="pa">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            7
+          </span>
+          <span class="pa">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V22H4V12"/><path d="M22 7H2v5h20V7z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+            1
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="post">
+      <a><div class="user-icon" style="background:#1a1612;color:#c8b06a;">lo</div></a>
+      <div class="pbody">
+        <div class="phead">
+          <span class="pname">lo-fi廃人</span>
+          <time class="ptime">6時間前</time>
+        </div>
+        <div class="ptext">サンプリング素材おすすめあったら教えてください。フリー素材メインで作ってるんですが、もう少しクオリティ上げたくて。</div>
+        <div class="post-actions">
+          <span class="pa">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            11
+          </span>
+          <span class="pa">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            15
+          </span>
+          <span class="pa">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12V22H4V12"/><path d="M22 7H2v5h20V7z"/><path d="M12 22V7"/><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/></svg>
+            0
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div style="height:24px;"></div>
+
+  </div>
+
+</section>
+
+
+<!-- ── screen: chat ── -->
+<style>
+/* ── chat: 会話一覧 ── */
+[data-screen="chat"] .chat-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line2);
+  cursor: pointer;
+}
+[data-screen="chat"] .chat-row:active {
+  background: var(--surface2);
+}
+[data-screen="chat"] .chat-row-body {
+  flex: 1;
+  min-width: 0;
+}
+[data-screen="chat"] .chat-row-top {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+[data-screen="chat"] .chat-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  min-width: 0;
+}
+[data-screen="chat"] .chat-time {
+  font-size: 11px;
+  color: var(--dim);
+  flex-shrink: 0;
+}
+[data-screen="chat"] .chat-preview {
+  font-size: 12px;
+  color: var(--mut);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 3px;
+}
+[data-screen="chat"] .chat-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 5px;
+  flex-shrink: 0;
+}
+[data-screen="chat"] .unread-badge {
+  background: var(--rose);
+  color: #fff;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 99px;
+  min-width: 18px;
+  height: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 5px;
+}
+
+/* ── chat-thread: スレッド ── */
+[data-screen="chat-thread"] {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+[data-screen="chat-thread"] .scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px 14px 80px;
+}
+[data-screen="chat-thread"] .date-sep {
+  text-align: center;
+  font-size: 11px;
+  color: var(--dim);
+  margin: 16px 0 12px;
+  position: relative;
+}
+[data-screen="chat-thread"] .date-sep::before,
+[data-screen="chat-thread"] .date-sep::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  width: calc(50% - 36px);
+  height: 1px;
+  background: var(--line);
+}
+[data-screen="chat-thread"] .date-sep::before { left: 0; }
+[data-screen="chat-thread"] .date-sep::after  { right: 0; }
+
+[data-screen="chat-thread"] .bubble {
+  max-width: 74%;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 16px 16px 16px 4px;
+  padding: 9px 13px;
+  font-size: 13px;
+  color: var(--fg);
+  line-height: 1.55;
+  margin-bottom: 8px;
+  align-self: flex-start;
+}
+[data-screen="chat-thread"] .bubble.me {
+  background: var(--rose-dim);
+  border-color: color-mix(in srgb, var(--rose) 35%, transparent);
+  border-radius: 16px 16px 4px 16px;
+  align-self: flex-end;
+  color: var(--fg);
+}
+[data-screen="chat-thread"] .bubble-wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+[data-screen="chat-thread"] .input-bar {
+  position: fixed;
+  bottom: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 430px;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  box-sizing: border-box;
+  z-index: 20;
+}
+[data-screen="chat-thread"] .input-bar .input {
+  flex: 1;
+  font-size: 14px;
+  padding: 9px 14px;
+  min-height: unset;
+  line-height: 1.4;
+}
+[data-screen="chat-thread"] .send-btn {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--rose);
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  flex-shrink: 0;
+}
+[data-screen="chat-thread"] .send-btn:active {
+  opacity: 0.8;
+}
+</style>
+
+<!-- ────────────────────────────────────────
+     (A) チャット会話一覧
+     ──────────────────────────────────────── -->
+<section class="screen" data-screen="chat">
+
+  <div class="appbar">
+    <button class="appbar-back" aria-label="戻る">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+    </button>
+    <span class="appbar-title">チャット</span>
+    <button class="appbar-act" aria-label="新規チャット">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        <line x1="12" y1="8" x2="12" y2="14"/>
+        <line x1="9" y1="11" x2="15" y2="11"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="scroll">
+
+    <!-- 1: さく（未読2件） -->
+    <div class="chat-row">
+      <div class="user-icon" aria-hidden="true">さ</div>
+      <div class="chat-row-body">
+        <div class="chat-row-top">
+          <span class="chat-name">さく</span>
+        </div>
+        <div class="chat-preview">今日の通話たのしかった、ありがとう</div>
+      </div>
+      <div class="chat-meta">
+        <span class="chat-time">2分</span>
+        <span class="unread-badge">2</span>
+      </div>
+    </div>
+
+    <!-- 2: みお（未読なし） -->
+    <div class="chat-row">
+      <div class="user-icon" aria-hidden="true">み</div>
+      <div class="chat-row-body">
+        <div class="chat-row-top">
+          <span class="chat-name">みお</span>
+        </div>
+        <div class="chat-preview">おやすみ〜</div>
+      </div>
+      <div class="chat-meta">
+        <span class="chat-time">昨日</span>
+      </div>
+    </div>
+
+    <!-- 3: r4in（未読1件） -->
+    <div class="chat-row">
+      <div class="user-icon" aria-hidden="true">r</div>
+      <div class="chat-row-body">
+        <div class="chat-row-top">
+          <span class="chat-name">r4in</span>
+        </div>
+        <div class="chat-preview">その曲なに？気になる</div>
+      </div>
+      <div class="chat-meta">
+        <span class="chat-time">昨日</span>
+        <span class="unread-badge">1</span>
+      </div>
+    </div>
+
+    <!-- 4: lo-fi廃人（未読なし） -->
+    <div class="chat-row">
+      <div class="user-icon" aria-hidden="true">L</div>
+      <div class="chat-row-body">
+        <div class="chat-row-top">
+          <span class="chat-name">lo-fi廃人</span>
+        </div>
+        <div class="chat-preview">作業通話またやろうね</div>
+      </div>
+      <div class="chat-meta">
+        <span class="chat-time">月曜</span>
+      </div>
+    </div>
+
+    <!-- 5: 名なし（未読なし） -->
+    <div class="chat-row">
+      <div class="user-icon" aria-hidden="true">名</div>
+      <div class="chat-row-body">
+        <div class="chat-row-top">
+          <span class="chat-name">名なし</span>
+        </div>
+        <div class="chat-preview">了解です！</div>
+      </div>
+      <div class="chat-meta">
+        <span class="chat-time">先週</span>
+      </div>
+    </div>
+
+  </div>
+
+</section>
+
+<!-- ────────────────────────────────────────
+     (B) スレッド（さくとの会話）
+     ──────────────────────────────────────── -->
+<section class="screen" data-screen="chat-thread">
+
+  <div class="appbar">
+    <button class="appbar-back" aria-label="戻る">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+    </button>
+    <span class="appbar-title">さく<small>オンライン</small></span>
+    <button class="appbar-act" aria-label="通話">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.39 2 2 0 0 1 3.59 1.22h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.76a16 16 0 0 0 5.98 5.98l.86-.86a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7a2 2 0 0 1 1.74 2.03z"/>
+      </svg>
+    </button>
+    <button class="appbar-act" aria-label="その他" style="margin-left:2px;">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="scroll">
+    <div class="bubble-wrap">
+
+      <div class="date-sep">5月29日（木）</div>
+
+      <!-- 相手 -->
+      <div class="bubble">深夜なのに全然眠れない</div>
+
+      <!-- 自分 -->
+      <div class="bubble me">わかる、最近ずっとそう</div>
+
+      <!-- 相手 -->
+      <div class="bubble">通話しない？誰か声聞きたい気分</div>
+
+      <!-- 自分 -->
+      <div class="bubble me">いいよ、今からでも</div>
+
+      <!-- 相手 -->
+      <div class="bubble">今日の通話たのしかった、ありがとう</div>
+
+      <!-- 自分 -->
+      <div class="bubble me">こちらこそ、また話しかけて</div>
+
+    </div>
+  </div>
+
+  <div class="input-bar">
+    <input type="text" class="input" placeholder="メッセージを送る…" aria-label="メッセージ入力">
+    <button class="send-btn" aria-label="送信">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <line x1="22" y1="2" x2="11" y2="13"/>
+        <polygon points="22 2 15 22 11 13 2 9 22 2"/>
+      </svg>
+    </button>
+  </div>
+
+</section>
+
+
+<!-- ── screen: notifications ── -->
+<style>
+[data-screen="notifications"] .notif-row {
+  position: relative;
+  align-items: flex-start;
+  padding: 12px 14px 12px 14px;
+  gap: 10px;
+}
+[data-screen="notifications"] .notif-row .dot.rose {
+  position: absolute;
+  left: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  flex-shrink: 0;
+}
+[data-screen="notifications"] .notif-avatar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+[data-screen="notifications"] .notif-type-badge {
+  position: absolute;
+  bottom: -2px;
+  right: -2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--surface2);
+  border: 1.5px solid var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+[data-screen="notifications"] .notif-type-badge.type-like {
+  color: var(--rose);
+}
+[data-screen="notifications"] .notif-type-badge.type-follow {
+  color: var(--ok);
+}
+[data-screen="notifications"] .notif-type-badge.type-gift {
+  color: var(--gold);
+}
+[data-screen="notifications"] .notif-type-badge.type-enter {
+  color: var(--mut);
+}
+[data-screen="notifications"] .notif-type-badge.type-invite {
+  color: var(--gold);
+}
+[data-screen="notifications"] .notif-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+[data-screen="notifications"] .notif-text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--mut);
+  line-height: 1.5;
+}
+[data-screen="notifications"] .notif-text .name {
+  color: var(--fg);
+  font-weight: 600;
+}
+[data-screen="notifications"] .notif-row.unread .notif-text {
+  color: var(--fg);
+}
+[data-screen="notifications"] .notif-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+[data-screen="notifications"] .notif-time {
+  font-size: 11px;
+  color: var(--dim);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+[data-screen="notifications"] .notif-thumb {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
+  background: var(--surface2);
+  flex-shrink: 0;
+  align-self: center;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--dim);
+  font-size: 10px;
+}
+[data-screen="notifications"] .follow-btn-wrap {
+  flex-shrink: 0;
+  align-self: center;
+}
+</style>
+
+<section class="screen" data-screen="notifications" data-tab="notifications">
+
+  <div class="appbar">
+    <span class="appbar-title">通知</span>
+    <button class="appbar-act" aria-label="すべて既読にする">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/>
+        <polyline points="22 4 12 14.01 9 11.01"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="seg-tabs">
+    <button class="seg-tab on">すべて</button>
+    <button class="seg-tab">あなた宛</button>
+  </div>
+
+  <div class="scroll">
+
+    <p class="section-lbl">今日</p>
+
+    <!-- フォロー（未読） -->
+    <div class="row notif-row unread">
+      <span class="dot rose"></span>
+      <div class="notif-avatar-wrap">
+        <div class="user-icon sm">さ</div>
+        <div class="notif-type-badge type-follow">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <line x1="19" y1="8" x2="19" y2="14"/>
+            <line x1="22" y1="11" x2="16" y2="11"/>
+          </svg>
+        </div>
+      </div>
+      <div class="notif-body">
+        <p class="notif-text"><span class="name">さく</span> があなたをフォローしました</p>
+        <div class="notif-meta">
+          <span class="notif-time">3分前</span>
+        </div>
+      </div>
+      <div class="follow-btn-wrap">
+        <button class="btn mini">フォロー</button>
+      </div>
+    </div>
+
+    <!-- いいね（未読） -->
+    <div class="row notif-row unread">
+      <span class="dot rose"></span>
+      <div class="notif-avatar-wrap">
+        <div class="user-icon sm">み</div>
+        <div class="notif-type-badge type-like">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+          </svg>
+        </div>
+      </div>
+      <div class="notif-body">
+        <p class="notif-text"><span class="name">みお</span> があなたの投稿にいいねしました</p>
+        <div class="notif-meta">
+          <span class="notif-time">17分前</span>
+        </div>
+      </div>
+      <div class="notif-thumb">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+      </div>
+    </div>
+
+    <!-- 入室（未読） -->
+    <div class="row notif-row unread">
+      <span class="dot rose"></span>
+      <div class="notif-avatar-wrap">
+        <div class="user-icon sm">r</div>
+        <div class="notif-type-badge type-enter">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+            <polyline points="10 17 15 12 10 7"/>
+            <line x1="15" y1="12" x2="3" y2="12"/>
+          </svg>
+        </div>
+      </div>
+      <div class="notif-body">
+        <p class="notif-text"><span class="name">r4in</span> が「深夜の作業通話」に入室しました</p>
+        <div class="notif-meta">
+          <span class="notif-time">44分前</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- サークル招待（未読） -->
+    <div class="row notif-row unread">
+      <span class="dot rose"></span>
+      <div class="notif-avatar-wrap">
+        <div class="user-icon sm">lo</div>
+        <div class="notif-type-badge type-invite">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"/>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+          </svg>
+        </div>
+      </div>
+      <div class="notif-body">
+        <p class="notif-text">「lo-fi beats」に招待されました</p>
+        <div class="notif-meta">
+          <span class="notif-time">1時間前</span>
+        </div>
+      </div>
+      <div class="follow-btn-wrap">
+        <button class="btn mini">参加</button>
+      </div>
+    </div>
+
+    <!-- ギフト（既読） -->
+    <div class="row notif-row">
+      <div class="notif-avatar-wrap">
+        <div class="user-icon sm" style="background:var(--rose-dim);color:var(--rose);">名</div>
+        <div class="notif-type-badge type-gift">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 12 20 22 4 22 4 12"/>
+            <rect x="2" y="7" width="20" height="5"/>
+            <line x1="12" y1="22" x2="12" y2="7"/>
+            <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>
+            <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
+          </svg>
+        </div>
+      </div>
+      <div class="notif-body">
+        <p class="notif-text"><span class="name">名なし</span> がギフトを送りました</p>
+        <div class="notif-meta">
+          <span class="notif-time">3時間前</span>
+        </div>
+      </div>
+    </div>
+
+    <p class="section-lbl">以前</p>
+
+    <!-- いいね 複数（既読） -->
+    <div class="row notif-row">
+      <div class="notif-avatar-wrap">
+        <div class="user-icon sm">n</div>
+        <div class="notif-type-badge type-like">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/>
+          </svg>
+        </div>
+      </div>
+      <div class="notif-body">
+        <p class="notif-text"><span class="name">nxmeless</span> と他3人があなたの投稿にいいねしました</p>
+        <div class="notif-meta">
+          <span class="notif-time">2日前</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- フォロー（既読） -->
+    <div class="row notif-row">
+      <div class="notif-avatar-wrap">
+        <div class="user-icon sm">ao</div>
+        <div class="notif-type-badge type-follow">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+            <circle cx="9" cy="7" r="4"/>
+            <line x1="19" y1="8" x2="19" y2="14"/>
+            <line x1="22" y1="11" x2="16" y2="11"/>
+          </svg>
+        </div>
+      </div>
+      <div class="notif-body">
+        <p class="notif-text"><span class="name">ao_noise</span> があなたをフォローしました</p>
+        <div class="notif-meta">
+          <span class="notif-time">3日前</span>
+        </div>
+      </div>
+      <div class="follow-btn-wrap">
+        <button class="btn ghost mini">フォロー中</button>
+      </div>
+    </div>
+
+    <!-- ギフト 以前（既読） -->
+    <div class="row notif-row">
+      <div class="notif-avatar-wrap">
+        <div class="user-icon sm">lo</div>
+        <div class="notif-type-badge type-gift">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 12 20 22 4 22 4 12"/>
+            <rect x="2" y="7" width="20" height="5"/>
+            <line x1="12" y1="22" x2="12" y2="7"/>
+            <path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"/>
+            <path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"/>
+          </svg>
+        </div>
+      </div>
+      <div class="notif-body">
+        <p class="notif-text"><span class="name">lo-fi廃人</span> がギフトを送りました</p>
+        <div class="notif-meta">
+          <span class="notif-time">4日前</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 入室 以前（既読） -->
+    <div class="row notif-row">
+      <div class="notif-avatar-wrap">
+        <div class="user-icon sm">r</div>
+        <div class="notif-type-badge type-enter">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+            <polyline points="10 17 15 12 10 7"/>
+            <line x1="15" y1="12" x2="3" y2="12"/>
+          </svg>
+        </div>
+      </div>
+      <div class="notif-body">
+        <p class="notif-text"><span class="name">r4in</span> が「朝の雑談部屋」に入室しました</p>
+        <div class="notif-meta">
+          <span class="notif-time">5日前</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</section>
+
+
+<!-- ── screen: profile ── -->
+<style>
+/* ── カバー + アバター被せ ── */
+[data-screen="profile"] .profile-cover-wrap {
+  position: relative;
+  margin-bottom: 40px;
+}
+[data-screen="profile"] .profile-avatar-row {
+  position: absolute;
+  bottom: -40px;
+  left: 0;
+  right: 0;
+  padding: 0 14px;
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+[data-screen="profile"] .profile-avatar-row .user-icon.lg {
+  border: 3px solid var(--bg);
+  flex-shrink: 0;
+}
+
+/* ── 名前・ID・bio ── */
+[data-screen="profile"] .profile-info {
+  padding: 6px 14px 0;
+}
+[data-screen="profile"] .profile-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--fg);
+  line-height: 1.2;
+  margin-bottom: 2px;
+}
+[data-screen="profile"] .profile-id {
+  font-size: 12px;
+  color: var(--dim);
+  margin-bottom: 6px;
+}
+[data-screen="profile"] .profile-age {
+  margin-right: 4px;
+}
+[data-screen="profile"] .profile-bio {
+  font-size: 13px;
+  color: var(--mut);
+  line-height: 1.55;
+  margin-top: 8px;
+}
+
+/* ── 統計3カラム ── */
+[data-screen="profile"] .stats-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  margin: 14px 0 0;
+}
+[data-screen="profile"] .stat-cell {
+  text-align: center;
+  padding: 12px 4px;
+  cursor: pointer;
+}
+[data-screen="profile"] .stat-cell + .stat-cell {
+  border-left: 1px solid var(--line);
+}
+[data-screen="profile"] .stat-val {
+  font-size: 19px;
+  font-weight: 700;
+  color: var(--fg);
+  line-height: 1;
+}
+[data-screen="profile"] .stat-lbl {
+  font-size: 11px;
+  color: var(--dim);
+  margin-top: 3px;
+}
+
+/* ── タグ群 ── */
+[data-screen="profile"] .tags-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 12px 14px 0;
+}
+
+/* ── ボタン群 ── */
+[data-screen="profile"] .profile-btns {
+  display: flex;
+  gap: 8px;
+  padding: 12px 14px 0;
+}
+[data-screen="profile"] .profile-btns .btn.gray {
+  flex: 1;
+}
+[data-screen="profile"] .profile-btns .btn.ghost {
+  flex: 1;
+}
+
+/* ── seg-tabs ── */
+[data-screen="profile"] .seg-tabs {
+  margin-top: 14px;
+  border-bottom: 1px solid var(--line);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 2;
+}
+
+/* ── 投稿フィード（枠線区切り、padding なし） ── */
+[data-screen="profile"] .post {
+  border-bottom: 1px solid var(--line2);
+}
+[data-screen="profile"] .post:last-child {
+  border-bottom: none;
+}
+</style>
+<section class="screen" data-screen="profile" data-tab="profile">
+
+  <!-- appbar -->
+  <div class="appbar">
+    <span class="appbar-title">プロフィール</span>
+    <button class="appbar-act" aria-label="設定">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+      </svg>
+    </button>
+  </div>
+
+  <!-- scroll -->
+  <div class="scroll">
+
+    <!-- カバー + アバター被せ -->
+    <div class="profile-cover-wrap">
+      <div class="cover banner"></div>
+      <div class="profile-avatar-row">
+        <div class="user-icon lg">さく</div>
+        <button class="btn ghost" style="margin-bottom:6px;padding:6px 16px;font-size:13px;">編集</button>
+      </div>
+    </div>
+
+    <!-- 名前・ID・bio -->
+    <div class="profile-info">
+      <div class="profile-name">さくら夜想</div>
+      <div class="profile-id">@sakura_yasooo <span class="chip mini profile-age">20代前半</span></div>
+      <div class="profile-bio">深夜の音楽垢。ドローンとアンビエントが好き。眠れない夜によく通話してます。</div>
+    </div>
+
+    <!-- 統計3カラム -->
+    <div class="stats-row">
+      <div class="stat-cell">
+        <div class="stat-val">247</div>
+        <div class="stat-lbl">投稿</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-val">182</div>
+        <div class="stat-lbl">フォロー</div>
+      </div>
+      <div class="stat-cell">
+        <div class="stat-val">1,043</div>
+        <div class="stat-lbl">フォロワー</div>
+      </div>
+    </div>
+
+    <!-- タグ -->
+    <div class="tags-row">
+      <span class="chip mini">#アンビエント</span>
+      <span class="chip mini">#ドローン</span>
+      <span class="chip mini">#深夜通話</span>
+      <span class="chip mini">#映画</span>
+      <span class="chip mini">#電子音楽</span>
+      <span class="chip mini">#雑談歓迎</span>
+    </div>
+
+    <!-- ボタン群 -->
+    <div class="profile-btns">
+      <button class="btn gray">プロフィールを編集</button>
+      <button class="btn ghost" style="display:flex;align-items:center;justify-content:center;gap:5px;">
+        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+        </svg>
+        メッセージ
+      </button>
+    </div>
+
+    <!-- seg-tabs -->
+    <div class="seg-tabs">
+      <span class="seg-tab on">投稿</span>
+      <span class="seg-tab">メディア</span>
+      <span class="seg-tab">いいね</span>
+    </div>
+
+    <!-- 投稿フィード -->
+    <div class="post">
+      <a><div class="user-icon">さく</div></a>
+      <div class="pbody">
+        <div class="phead">
+          <span class="pname">さくら夜想</span>
+          <time class="ptime">14分</time>
+        </div>
+        <div class="ptext">夜3時のアンビエント、窓開けて外の雨音と混ぜながら聴くとめちゃくちゃいい。滲んだテープ的な質感になる</div>
+        <div class="post-actions">
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            8
+          </span>
+          <span class="pa liked">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            34
+          </span>
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+            3
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="post">
+      <a><div class="user-icon">さく</div></a>
+      <div class="pbody">
+        <div class="phead">
+          <span class="pname">さくら夜想</span>
+          <time class="ptime">2時間</time>
+        </div>
+        <div class="ptext">最近の深夜通話がまじで楽しい。音楽の話だけで2時間飛んでいく。また来週もやりたい</div>
+        <div class="post-actions">
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            21
+          </span>
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            67
+          </span>
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+            5
+          </span>
+        </div>
+      </div>
+    </div>
+
+    <div class="post">
+      <a><div class="user-icon">さく</div></a>
+      <div class="pbody">
+        <div class="phead">
+          <span class="pname">さくら夜想</span>
+          <time class="ptime">昨日</time>
+        </div>
+        <div class="ptext">眠れなさすぎて「深夜のダメ人間部屋」開いたら10人も来てくれた。みんな同じか〜と思って少し救われた気持ち</div>
+        <div class="post-actions">
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            43
+          </span>
+          <span class="pa liked">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+            158
+          </span>
+          <span class="pa">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>
+            12
+          </span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+
+<!-- ── screen: settings ── -->
+<style>
+[data-screen="settings"] .row-val {
+  font-size: 13px;
+  color: var(--mut);
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+[data-screen="settings"] .row-label {
+  font-size: 14px;
+  color: var(--fg);
+  flex: 1;
+}
+[data-screen="settings"] .row-sub {
+  font-size: 12px;
+  color: var(--dim);
+  margin-top: 2px;
+}
+[data-screen="settings"] .row {
+  cursor: pointer;
+}
+[data-screen="settings"] .row.no-tap {
+  cursor: default;
+}
+[data-screen="settings"] .anon-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--mut);
+}
+[data-screen="settings"] .section-lbl {
+  margin-top: 22px;
+}
+[data-screen="settings"] .version-row {
+  cursor: default;
+}
+[data-screen="settings"] .version-row .row-label {
+  color: var(--dim);
+  font-size: 13px;
+}
+[data-screen="settings"] .safety-note {
+  font-size: 12px;
+  color: var(--mut);
+  line-height: 1.6;
+  padding: 0 0 8px;
+}
+[data-screen="settings"] .logout-wrap {
+  margin-top: 28px;
+  margin-bottom: 8px;
+}
+[data-screen="settings"] .logout-note {
+  text-align: center;
+  margin-top: 8px;
+  font-size: 12px;
+}
+[data-screen="settings"] .row-toggle-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 13px 0;
+  gap: 0;
+}
+[data-screen="settings"] .row-toggle-row .row-label-wrap {
+  flex: 1;
+}
+[data-screen="settings"] .row-toggle-row .toggle-wrap {
+  margin-left: 12px;
+  padding-top: 2px;
+}
+</style>
+<section class="screen" data-screen="settings">
+
+  <div class="appbar">
+    <button class="appbar-back" aria-label="戻る">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+    </button>
+    <span class="appbar-title">設定</span>
+  </div>
+
+  <div class="scroll">
+    <div class="scroll-pad">
+
+      <!-- アカウント -->
+      <div class="section-lbl">アカウント</div>
+
+      <div class="row no-tap" style="padding:12px 0; cursor:default;">
+        <div>
+          <div class="anon-badge">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            匿名で利用中
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-label">名前を変更</div>
+        <div class="row-val">
+          <span>ながれ星42</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-label">年齢帯</div>
+        <div class="row-val">
+          <span>20代</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-label">@ID</div>
+        <div class="row-val">
+          <span>@nagare_42</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- プライバシー -->
+      <div class="section-lbl">プライバシー</div>
+
+      <div class="row-toggle-row no-tap">
+        <div class="row-label-wrap">
+          <div class="row-label">連絡先交換を促す相手を警告</div>
+          <div class="row-sub">外部への誘導を検知したとき通知</div>
+        </div>
+        <div class="toggle-wrap">
+          <label class="toggle on">
+            <input type="checkbox" checked>
+            <span></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="row-toggle-row no-tap">
+        <div class="row-label-wrap">
+          <div class="row-label">知らない人からのメッセージを受け取る</div>
+          <div class="row-sub">オフにするとフォロー中の相手のみ</div>
+        </div>
+        <div class="toggle-wrap">
+          <label class="toggle">
+            <input type="checkbox">
+            <span></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-label">プロフィール公開範囲</div>
+        <div class="row-val">
+          <span>全員</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- 安全 -->
+      <div class="section-lbl">安全</div>
+      <p class="safety-note muted">業者・なりすましを見かけたら通報してください。繰り返しの通報があったアカウントは自動で制限されます。</p>
+
+      <div class="row">
+        <div class="row-label">ブロックしたユーザー</div>
+        <div class="row-val">
+          <span>3件</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-label">通報履歴</div>
+        <div class="row-val">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-label">年齢確認について</div>
+        <div class="row-val">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- 通知 -->
+      <div class="section-lbl">通知</div>
+
+      <div class="row no-tap" style="padding:12px 0;">
+        <div class="row-label">通話への招待</div>
+        <label class="toggle on" style="margin-left:auto;">
+          <input type="checkbox" checked>
+          <span></span>
+        </label>
+      </div>
+
+      <div class="row no-tap" style="padding:12px 0;">
+        <div class="row-label">フォロー</div>
+        <label class="toggle on" style="margin-left:auto;">
+          <input type="checkbox" checked>
+          <span></span>
+        </label>
+      </div>
+
+      <div class="row no-tap" style="padding:12px 0;">
+        <div class="row-label">いいね</div>
+        <label class="toggle" style="margin-left:auto;">
+          <input type="checkbox">
+          <span></span>
+        </label>
+      </div>
+
+      <div class="row no-tap" style="padding:12px 0;">
+        <div class="row-label">ギフト</div>
+        <label class="toggle" style="margin-left:auto;">
+          <input type="checkbox">
+          <span></span>
+        </label>
+      </div>
+
+      <!-- アプリについて -->
+      <div class="section-lbl">アプリについて</div>
+
+      <div class="row version-row no-tap">
+        <div class="row-label">バージョン</div>
+        <div class="row-val">0.4.0</div>
+      </div>
+
+      <div class="row">
+        <div class="row-label">利用規約</div>
+        <div class="row-val">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-label">プライバシーポリシー</div>
+        <div class="row-val">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- ログアウト -->
+      <div class="logout-wrap">
+        <button class="btn gray block">ログアウト</button>
+        <p class="dim logout-note">匿名なのでデータは残りません</p>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+
+  <nav class="tabbar" id="tabbar">
+    <button class="tab" data-go-tab="timeline"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="14" y2="17"/></svg>タイムライン</button>
+    <button class="tab" data-go-tab="circles"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="9" r="5"/><circle cx="16" cy="15" r="5"/></svg>サークル</button>
+    <button class="tab" data-go-tab="chat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4L3 21l1.1-4.5A8.4 8.4 0 1 1 21 11.5z"/></svg>チャット</button>
+    <button class="tab" data-go-tab="notifications"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 0 1-3.4 0"/></svg>通知</button>
+    <button class="tab" data-go-tab="profile"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>プロフィール</button>
+  </nav>
+</div>
+
+<script>
+const TAB_SCREENS = ['timeline','circles','chat','notifications','profile'];
+let stack = [];
+const $$ = (s)=>document.querySelectorAll(s);
+const screenEl = (id)=>document.querySelector(`[data-screen="${id}"]`);
+
+function render(id){
+  const t = screenEl(id); if(!t){ console.warn('no screen',id); return; }
+  $$('.screen').forEach(s=>s.classList.remove('active')); t.classList.add('active');
+  const isTab = TAB_SCREENS.includes(id);
+  document.getElementById('tabbar').classList.toggle('hidden', !isTab);
+  t.classList.toggle('has-tabbar', isTab);
+  $$('.tab').forEach(x=>x.classList.toggle('active', x.dataset.goTab===id));
+  const sc=t.querySelector('.scroll'); if(sc) sc.scrollTop=0;
+}
+function go(id){ stack.push(id); render(id); }
+function goTab(id){ stack=[id]; render(id); }
+function back(){ stack.pop(); render(stack[stack.length-1]||'timeline'); }
+
+function balanceAppbars(){
+  $$('.appbar').forEach(bar=>{ if(!bar.querySelector('.appbar-back') && !bar.querySelector('.spacer') && bar.querySelector('.appbar-title')){
+    const sp=document.createElement('span'); sp.className='spacer'; bar.insertBefore(sp,bar.firstChild); } });
+}
+function wire(){
+  $$('.tab').forEach(t=>t.onclick=()=>goTab(t.dataset.goTab));
+  $$('.appbar-back').forEach(b=>b.onclick=()=>back());
+  // onboarding → timeline
+  const ob=screenEl('onboarding'); if(ob) ob.querySelectorAll('.btn').forEach(b=>{ if(/はじめる|始める/.test(b.textContent)) b.onclick=()=>goTab('timeline'); });
+  // timeline: オープン通話/通話募集/部屋カード/参加 → call
+  bindText('timeline',['入る','通話','参加'],'call');
+  bindClass('timeline','[data-go="call"], .room-strip *',null);
+  // circles: カード/参加 → circle詳細
+  bindCards('circles','circle'); bindText('circles',['参加','開く'],'circle'); bindClass('circles','.fab','circle');
+  bindText('circle',['入る','通話'],'call');
+  // chat: 行 → thread
+  bindRows('chat',()=> 'chat-thread');
+  // profile: 設定 → settings, メッセージ/DM → chat
+  const pf=screenEl('profile'); if(pf){ pf.querySelectorAll('.appbar-act').forEach(a=>a.onclick=()=>go('settings'));
+    pf.querySelectorAll('.btn').forEach(b=>{ if(/メッセージ|DM|チャット/i.test(b.textContent)) b.onclick=()=>go('chat'); }); }
+  // notifications rows
+  bindRows('notifications',(t)=> /入室|通話|部屋/.test(t)?'call':(/サークル|招待/.test(t)?'circle':'profile'));
+}
+function bindText(s,words,dest){ const el=screenEl(s); if(!el) return; el.querySelectorAll('.btn,button').forEach(b=>{ if(words.some(w=>b.textContent.includes(w))) b.onclick=(e)=>{e.stopPropagation(); dest&&go(dest);}; }); }
+function bindClass(s,sel,dest){ const el=screenEl(s); if(!el) return; el.querySelectorAll(sel).forEach(x=>x.onclick=()=>dest?go(dest):go('call')); }
+function bindCards(s,dest){ const el=screenEl(s); if(!el) return; el.querySelectorAll('.scroll .card, .scroll .group-card, .scroll .GroupCard').forEach(c=>{ c.style.cursor='pointer'; c.addEventListener('click',()=>go(dest)); }); }
+function bindRows(s,fn){ const el=screenEl(s); if(!el) return; el.querySelectorAll('.scroll .row').forEach(r=>{ r.style.cursor='pointer'; r.onclick=()=>go(fn(r.textContent)); }); }
+
+balanceAppbars(); wire();
+const initS = new URLSearchParams(location.search).get('s');
+if(initS && screenEl(initS)){ stack=[initS]; render(initS); }
+else if(screenEl('onboarding')){ stack=['onboarding']; render('onboarding'); }
+else goTab('timeline');
+</script>
+</body>
+</html>

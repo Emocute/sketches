@@ -1,0 +1,276 @@
+<style>
+[data-screen="settings"] .row-val {
+  font-size: 13px;
+  color: var(--mut);
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+[data-screen="settings"] .row-label {
+  font-size: 14px;
+  color: var(--fg);
+  flex: 1;
+}
+[data-screen="settings"] .row-sub {
+  font-size: 12px;
+  color: var(--dim);
+  margin-top: 2px;
+}
+[data-screen="settings"] .row {
+  cursor: pointer;
+}
+[data-screen="settings"] .row.no-tap {
+  cursor: default;
+}
+[data-screen="settings"] .anon-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: var(--surface2);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: 4px 12px;
+  font-size: 12px;
+  color: var(--mut);
+}
+[data-screen="settings"] .section-lbl {
+  margin-top: 22px;
+}
+[data-screen="settings"] .version-row {
+  cursor: default;
+}
+[data-screen="settings"] .version-row .row-label {
+  color: var(--dim);
+  font-size: 13px;
+}
+[data-screen="settings"] .safety-note {
+  font-size: 12px;
+  color: var(--mut);
+  line-height: 1.6;
+  padding: 0 0 8px;
+}
+[data-screen="settings"] .logout-wrap {
+  margin-top: 28px;
+  margin-bottom: 8px;
+}
+[data-screen="settings"] .logout-note {
+  text-align: center;
+  margin-top: 8px;
+  font-size: 12px;
+}
+[data-screen="settings"] .row-toggle-row {
+  display: flex;
+  align-items: flex-start;
+  padding: 13px 0;
+  gap: 0;
+}
+[data-screen="settings"] .row-toggle-row .row-label-wrap {
+  flex: 1;
+}
+[data-screen="settings"] .row-toggle-row .toggle-wrap {
+  margin-left: 12px;
+  padding-top: 2px;
+}
+</style>
+<section class="screen" data-screen="settings">
+
+  <div class="appbar">
+    <button class="appbar-back" aria-label="戻る">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="15 18 9 12 15 6"/>
+      </svg>
+    </button>
+    <span class="appbar-title">設定</span>
+  </div>
+
+  <div class="scroll">
+    <div class="scroll-pad">
+
+      <!-- アカウント -->
+      <div class="section-lbl">アカウント</div>
+
+      <div class="row no-tap" style="padding:12px 0; cursor:default;">
+        <div>
+          <div class="anon-badge">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+              <circle cx="12" cy="7" r="4"/>
+            </svg>
+            匿名で利用中
+          </div>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-label">名前を変更</div>
+        <div class="row-val">
+          <span>ながれ星42</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-label">年齢帯</div>
+        <div class="row-val">
+          <span>20代</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-label">@ID</div>
+        <div class="row-val">
+          <span>@nagare_42</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- プライバシー -->
+      <div class="section-lbl">プライバシー</div>
+
+      <div class="row-toggle-row no-tap">
+        <div class="row-label-wrap">
+          <div class="row-label">連絡先交換を促す相手を警告</div>
+          <div class="row-sub">外部への誘導を検知したとき通知</div>
+        </div>
+        <div class="toggle-wrap">
+          <label class="toggle on">
+            <input type="checkbox" checked>
+            <span></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="row-toggle-row no-tap">
+        <div class="row-label-wrap">
+          <div class="row-label">知らない人からのメッセージを受け取る</div>
+          <div class="row-sub">オフにするとフォロー中の相手のみ</div>
+        </div>
+        <div class="toggle-wrap">
+          <label class="toggle">
+            <input type="checkbox">
+            <span></span>
+          </label>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-label">プロフィール公開範囲</div>
+        <div class="row-val">
+          <span>全員</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- 安全 -->
+      <div class="section-lbl">安全</div>
+      <p class="safety-note muted">業者・なりすましを見かけたら通報してください。繰り返しの通報があったアカウントは自動で制限されます。</p>
+
+      <div class="row">
+        <div class="row-label">ブロックしたユーザー</div>
+        <div class="row-val">
+          <span>3件</span>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-label">通報履歴</div>
+        <div class="row-val">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-label">年齢確認について</div>
+        <div class="row-val">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- 通知 -->
+      <div class="section-lbl">通知</div>
+
+      <div class="row no-tap" style="padding:12px 0;">
+        <div class="row-label">通話への招待</div>
+        <label class="toggle on" style="margin-left:auto;">
+          <input type="checkbox" checked>
+          <span></span>
+        </label>
+      </div>
+
+      <div class="row no-tap" style="padding:12px 0;">
+        <div class="row-label">フォロー</div>
+        <label class="toggle on" style="margin-left:auto;">
+          <input type="checkbox" checked>
+          <span></span>
+        </label>
+      </div>
+
+      <div class="row no-tap" style="padding:12px 0;">
+        <div class="row-label">いいね</div>
+        <label class="toggle" style="margin-left:auto;">
+          <input type="checkbox">
+          <span></span>
+        </label>
+      </div>
+
+      <div class="row no-tap" style="padding:12px 0;">
+        <div class="row-label">ギフト</div>
+        <label class="toggle" style="margin-left:auto;">
+          <input type="checkbox">
+          <span></span>
+        </label>
+      </div>
+
+      <!-- アプリについて -->
+      <div class="section-lbl">アプリについて</div>
+
+      <div class="row version-row no-tap">
+        <div class="row-label">バージョン</div>
+        <div class="row-val">0.4.0</div>
+      </div>
+
+      <div class="row">
+        <div class="row-label">利用規約</div>
+        <div class="row-val">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="row-label">プライバシーポリシー</div>
+        <div class="row-val">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="9 18 15 12 9 6"/>
+          </svg>
+        </div>
+      </div>
+
+      <!-- ログアウト -->
+      <div class="logout-wrap">
+        <button class="btn gray block">ログアウト</button>
+        <p class="dim logout-note">匿名なのでデータは残りません</p>
+      </div>
+
+    </div>
+  </div>
+</section>

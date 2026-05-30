@@ -1,0 +1,13 @@
+{
+  "name": "voice-rooms",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "description": "Yay! だれ通風 匿名グループ通話プロトタイプ (WebRTC mesh)",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

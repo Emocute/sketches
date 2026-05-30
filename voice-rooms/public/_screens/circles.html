@@ -1,0 +1,289 @@
+<style>
+/* ─── 並び替えチップ行 ─── */
+[data-screen="circles"] .sort-row {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-bottom: 12px;
+}
+
+/* ─── カテゴリ横スクロール ─── */
+[data-screen="circles"] .cat-strip {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  padding-bottom: 14px;
+}
+[data-screen="circles"] .cat-strip::-webkit-scrollbar { display: none; }
+
+/* ─── グループカードグリッド ─── */
+[data-screen="circles"] .group-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+[data-screen="circles"] .group-card {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+/* カード上部カバー */
+[data-screen="circles"] .group-card .cover {
+  height: 84px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 700;
+  color: rgba(255,255,255,0.9);
+  letter-spacing: -.5px;
+  position: relative;
+  flex-shrink: 0;
+}
+
+/* カード下部情報エリア */
+[data-screen="circles"] .gc-body {
+  padding: 10px 12px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+[data-screen="circles"] .gc-row1 {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+}
+[data-screen="circles"] .gc-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+  line-height: 1.25;
+}
+[data-screen="circles"] .gc-count {
+  font-size: 11px;
+  color: var(--dim);
+  margin-top: 1px;
+}
+[data-screen="circles"] .gc-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+/* FAB 配置 */
+[data-screen="circles"] .circles-fab {
+  position: fixed;
+  bottom: 88px;
+  right: calc(50% - 215px + 16px);
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: var(--rose);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #1a0a0e;
+  box-shadow: 0 4px 16px rgba(255,94,126,0.35);
+  cursor: pointer;
+  border: none;
+  z-index: 100;
+}
+</style>
+
+<section class="screen" data-screen="circles" data-tab="circles">
+
+  <!-- アプリバー -->
+  <div class="appbar">
+    <span class="appbar-title">サークル</span>
+    <button class="appbar-act" aria-label="検索">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="11" cy="11" r="7"/>
+        <line x1="17" y1="17" x2="22" y2="22"/>
+      </svg>
+    </button>
+  </div>
+
+  <div class="scroll">
+    <div class="scroll-pad">
+
+      <!-- 並び替え行 -->
+      <div class="sort-row">
+        <span class="chip sel">新着順</span>
+        <span class="chip">メンバー数順</span>
+      </div>
+
+      <!-- カテゴリ横スクロール -->
+      <div class="cat-strip">
+        <span class="chip sel">つながりたい</span>
+        <span class="chip">ふぁぼ</span>
+        <span class="chip">雑談しょう</span>
+        <span class="chip">ゲーム</span>
+        <span class="chip">占い</span>
+        <span class="chip">音楽</span>
+      </div>
+
+      <!-- みつける -->
+      <p class="section-lbl">みつける</p>
+
+      <div class="group-grid">
+
+        <!-- lo-fi beats -->
+        <div class="group-card">
+          <div class="cover" style="background:linear-gradient(135deg,#1a0d14 0%,#3a1020 50%,#5c1830 100%);">
+            lo&#x2011;fi
+          </div>
+          <div class="gc-body">
+            <div class="gc-row1">
+              <div>
+                <div class="gc-name">lo-fi beats</div>
+                <div class="gc-count">1,204人</div>
+              </div>
+              <button class="btn mini">参加</button>
+            </div>
+            <div class="gc-tags">
+              <span class="chip mini">#音楽</span>
+              <span class="chip mini">#作業BGM</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- レトロゲーム部 -->
+        <div class="group-card">
+          <div class="cover" style="background:linear-gradient(135deg,#0d0d1e 0%,#151535 50%,#1e1e50 100%);">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="6" width="20" height="12" rx="2"/>
+              <path d="M6 12h4M8 10v4"/>
+              <circle cx="15" cy="12" r="1.2" fill="rgba(255,255,255,0.85)"/>
+              <circle cx="18" cy="12" r="1.2" fill="rgba(255,255,255,0.85)"/>
+            </svg>
+          </div>
+          <div class="gc-body">
+            <div class="gc-row1">
+              <div>
+                <div class="gc-name">レトロゲーム部</div>
+                <div class="gc-count">3,817人</div>
+              </div>
+              <button class="btn mini">参加</button>
+            </div>
+            <div class="gc-tags">
+              <span class="chip mini">#ゲーム</span>
+              <span class="chip mini">#FC/SFC</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 深夜作業組 -->
+        <div class="group-card">
+          <div class="cover" style="background:linear-gradient(135deg,#0a0a0f 0%,#111118 50%,#1a1a28 100%);">
+            <svg width="38" height="38" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.75)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/>
+            </svg>
+          </div>
+          <div class="gc-body">
+            <div class="gc-row1">
+              <div>
+                <div class="gc-name">深夜作業組</div>
+                <div class="gc-count">1,089人</div>
+              </div>
+              <button class="btn mini">参加</button>
+            </div>
+            <div class="gc-tags">
+              <span class="chip mini">#深夜</span>
+              <span class="chip mini">#作業</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ボカロ語り -->
+        <div class="group-card">
+          <div class="cover" style="background:linear-gradient(135deg,#130e1e 0%,#22133a 50%,#2e1850 100%);">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="22"/>
+              <line x1="8" y1="22" x2="16" y2="22"/>
+            </svg>
+          </div>
+          <div class="gc-body">
+            <div class="gc-row1">
+              <div>
+                <div class="gc-name">ボカロ語り</div>
+                <div class="gc-count">638人</div>
+              </div>
+              <button class="btn mini">参加</button>
+            </div>
+            <div class="gc-tags">
+              <span class="chip mini">#音楽</span>
+              <span class="chip mini">#ボカロ</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 弾き語り集会所 -->
+        <div class="group-card">
+          <div class="cover" style="background:linear-gradient(135deg,#0e1a0a 0%,#162810 50%,#1e3614 100%);">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 18V5l12-2v13"/>
+              <circle cx="6" cy="18" r="3"/>
+              <circle cx="18" cy="16" r="3"/>
+            </svg>
+          </div>
+          <div class="gc-body">
+            <div class="gc-row1">
+              <div>
+                <div class="gc-name">弾き語り集会所</div>
+                <div class="gc-count">421人</div>
+              </div>
+              <button class="btn mini">参加</button>
+            </div>
+            <div class="gc-tags">
+              <span class="chip mini">#音楽</span>
+              <span class="chip mini">#ギター</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- 眠れない夜の会 -->
+        <div class="group-card">
+          <div class="cover" style="background:linear-gradient(135deg,#110a1e 0%,#1e1030 50%,#2a1440 100%);">
+            <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.75)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="4"/>
+              <path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+            </svg>
+          </div>
+          <div class="gc-body">
+            <div class="gc-row1">
+              <div>
+                <div class="gc-name">眠れない夜の会</div>
+                <div class="gc-count">956人</div>
+              </div>
+              <button class="btn mini">参加</button>
+            </div>
+            <div class="gc-tags">
+              <span class="chip mini">#深夜</span>
+              <span class="chip mini">#雑談</span>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /group-grid -->
+
+      <!-- FAB 下余白 -->
+      <div style="height:80px;"></div>
+    </div><!-- /scroll-pad -->
+  </div><!-- /scroll -->
+
+  <!-- FAB: サークルをつくる -->
+  <button class="circles-fab" aria-label="サークルをつくる">
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <line x1="12" y1="5" x2="12" y2="19"/>
+      <line x1="5" y1="12" x2="19" y2="12"/>
+    </svg>
+  </button>
+
+</section>

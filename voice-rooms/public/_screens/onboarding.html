@@ -1,0 +1,141 @@
+<style>
+[data-screen="onboarding"] {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+  background: var(--bg);
+}
+
+[data-screen="onboarding"] .scroll {
+  flex: 1;
+}
+
+[data-screen="onboarding"] .ob-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 52px 0 28px;
+}
+
+[data-screen="onboarding"] .ob-logo-mark {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+[data-screen="onboarding"] .ob-dot {
+  width: 38px;
+  height: 38px;
+  border-radius: 50%;
+  background: var(--rose);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #1a0a0e;
+  flex-shrink: 0;
+}
+
+[data-screen="onboarding"] .ob-wordmark {
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+  color: var(--fg);
+}
+
+[data-screen="onboarding"] .ob-tagline {
+  font-size: 13px;
+  color: var(--mut);
+  text-align: center;
+  line-height: 1.55;
+}
+
+[data-screen="onboarding"] .ob-section {
+  margin-top: 22px;
+}
+
+[data-screen="onboarding"] .ob-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+[data-screen="onboarding"] .ob-cta {
+  margin-top: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-bottom: 8px;
+}
+
+[data-screen="onboarding"] .ob-notice {
+  font-size: 11px;
+  color: var(--dim);
+  text-align: center;
+  line-height: 1.7;
+}
+</style>
+<section class="screen" data-screen="onboarding">
+  <div class="scroll">
+    <div class="scroll-pad">
+
+      <!-- ヒーロー -->
+      <div class="ob-hero">
+        <div class="ob-logo-mark">
+          <div class="ob-dot">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 0 1-6 0V5a3 3 0 0 1 3-3z"/>
+              <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+              <line x1="12" y1="19" x2="12" y2="23"/>
+              <line x1="8" y1="23" x2="16" y2="23"/>
+            </svg>
+          </div>
+          <span class="ob-wordmark">voice rooms</span>
+        </div>
+        <p class="ob-tagline">ブラウザだけ。匿名で、声でつながる。</p>
+      </div>
+
+      <!-- 名前（任意） -->
+      <div class="field">
+        <span class="lbl">名前（任意）</span>
+        <input class="input" type="text" placeholder="名乗らなくてもいい" maxlength="24" />
+      </div>
+
+      <!-- 年齢帯 -->
+      <div class="ob-section">
+        <div class="section-lbl">年齢帯</div>
+        <div class="ob-chips">
+          <span class="chip">〜15</span>
+          <span class="chip">16–18</span>
+          <span class="chip">19–22</span>
+          <span class="chip sel">23+</span>
+        </div>
+      </div>
+
+      <!-- 興味・タグ -->
+      <div class="ob-section">
+        <div class="section-lbl">興味・タグ</div>
+        <div class="ob-chips">
+          <span class="chip tag sel">lofi</span>
+          <span class="chip tag">ゲーム</span>
+          <span class="chip tag">アニメ</span>
+          <span class="chip tag">雑談</span>
+          <span class="chip tag sel">深夜</span>
+          <span class="chip tag">音楽</span>
+          <span class="chip tag">勉強</span>
+          <span class="chip tag">恋バナ</span>
+          <span class="chip tag sel">弾き語り</span>
+          <span class="chip tag">ボカロ</span>
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <div class="ob-cta">
+        <button class="btn block">はじめる</button>
+        <p class="ob-notice dim">連絡先の交換も電話番号も要らない。</p>
+      </div>
+
+    </div>
+  </div>
+</section>
