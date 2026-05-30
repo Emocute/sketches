@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Negative Harmony — Emocute</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<style>
+  :root{--bg:#0e0e12;--panel:#16161d;--ink:#e9e9f0;--dim:#8a8a99;
+    --accent:#c9a86a;--accent2:#6a9ec9;--line:#26262f;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:-apple-system,"Hiragino Kaku Gothic ProN",sans-serif;
+    line-height:1.55;padding:24px;max-width:920px;margin:0 auto}
+  h1{font-size:20px;font-weight:600}h1 .sub{color:var(--dim);font-weight:400;font-size:13px;margin-left:10px}
+  .tagline{color:var(--dim);font-size:13px;margin:6px 0 18px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+  label.lbl{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:7px}
+  input,select{background:#1d1d26;color:var(--ink);border:1px solid var(--line);border-radius:8px;
+    padding:10px 12px;font-size:15px;font-family:ui-monospace,Menlo,monospace}
+  input{width:100%}
+  .ctrls{display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap}
+  .ctrls .grow{flex:1;min-width:220px}
+  .presets{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+  .presets button{font-size:12px;background:#1d1d26;color:var(--ink);border:1px solid var(--line);
+    border-radius:8px;padding:7px 11px;cursor:pointer;font-family:inherit}
+  .stage{display:grid;grid-template-columns:70px 1fr 44px;gap:14px;align-items:center;
+    padding:14px 16px;border-radius:12px;border:1px solid var(--line);margin-bottom:10px;background:var(--panel)}
+  .stage.after{border-color:var(--accent2)}
+  .tag{font-size:11px;color:var(--dim);text-transform:uppercase}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{font-family:ui-monospace,Menlo,monospace;font-size:16px;padding:7px 13px;border-radius:8px;
+    background:#1d1d26;border:1px solid var(--line)}
+  .chip.after{border-color:var(--accent);color:var(--accent);background:#241d10}
+  .play{width:42px;height:42px;border-radius:8px;background:#1d1d26;border:1px solid var(--line);
+    color:var(--ink);font-size:16px;cursor:pointer}
+  .err{color:#c96a6a;font-size:13px;margin-top:8px}
+  .footer{margin-top:18px;color:var(--dim);font-size:12px;border-top:1px solid var(--line);padding-top:14px}
+  .footer code{background:#1d1d26;padding:1px 5px;border-radius:4px;font-size:11px}
+</style>
+</head>
+<body>
+  <h1>Negative Harmony <span class="sub">引力を、裏返す。</span></h1>
+  <p class="tagline">トニック–ドミナント軸でコードを鏡映し、「裏の進行」を生成して聴き比べる。</p>
+  <div class="panel">
+    <div class="ctrls">
+      <div><label class="lbl">キー</label><select id="key"></select></div>
+      <div class="grow"><label class="lbl">進行（度数・スペース区切り）</label>
+        <input id="prog" value="Imaj7 VIm7 IIm7 V7" spellcheck="false"></div>
+    </div>
+    <div class="presets">
+      <button data-p="Imaj7 VIm7 IIm7 V7">I–vi–ii–V</button>
+      <button data-p="IIm7 V7 Imaj7">ii–V–I</button>
+      <button data-p="Imaj7 IV V Imaj7">I–IV–V</button>
+      <button data-p="Imaj7 IIIm7 IV V7">I–iii–IV–V</button>
+    </div>
+    <div class="err" id="err"></div>
+  </div>
+  <div class="stage"><span class="tag">original</span><div class="chips" id="cb"></div><button class="play" id="pb">▶</button></div>
+  <div class="stage after"><span class="tag">negative</span><div class="chips" id="ca"></div><button class="play" id="pa">▶</button></div>
+  <div class="footer">
+    鏡映式 <code>r(p) = (2·tonic + 7 − p) mod 12</code>（軸 = トニックとドミナントの中点）。<br>
+    コード名は鏡映後の音集合を辞書照合して推定（近い和音が無ければ構成音をそのまま発音）。度数 = Studio v7 準拠。
+  </div>
+<script>
+const NOTE=["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const NUM={I:0,II:2,III:4,IV:5,V:7,VI:9,VII:11};
+const NUM_REV=["I","♭II","II","♭III","III","IV","♭V","V","♭VI","VI","♭VII","VII"];
+const Q={"maj7":[0,4,7,11],"maj9":[0,4,7,11,14],"m7":[0,3,7,10],"m9":[0,3,7,10,14],
+  "7":[0,4,7,10],"9":[0,4,7,10,14],"m7b5":[0,3,6,10],"dim7":[0,3,6,9],"6":[0,4,7,9],"m6":[0,3,7,9],"":[0,4,7]};
+let tonic=0;
+const $k=document.getElementById("key");
+NOTE.forEach((n,i)=>{const o=document.createElement("option");o.value=i;o.textContent=n+" major";$k.appendChild(o);});
+$k.onchange=()=>{tonic=+$k.value;refresh();};
+
+function parseToken(tok){
+  const m=tok.match(/^([b#♭♯]?)([IViv]+)(.*)$/); if(!m)return null;
+  let [,acc,num,qual]=m; num=num.toUpperCase(); if(!(num in NUM))return null;
+  let pc=NUM[num]; if(acc==="b"||acc==="♭")pc--; if(acc==="#"||acc==="♯")pc++; pc=((pc%12)+12)%12;
+  qual=qual.trim(); if(!(qual in Q)){const diat={0:"maj7",2:"m7",4:"m7",5:"maj7",7:"7",9:"m7",11:"m7b5"};qual=diat[pc]||"7";}
+  return {pc,q:qual};
+}
+function parseProg(s){const t=s.trim().split(/\s+/).filter(Boolean);const o=[];for(const x of t){const p=parseToken(x);if(!p)return null;o.push(p);}return o.length?o:null;}
+
+// 絶対 pc 集合（key 適用）
+function absPCs(c){ return Q[c.q].map(iv=> (tonic + c.pc + iv)%12 ); }
+// 鏡映
+function reflectPC(p){ return ((2*tonic+7 - p)%12+12)%12; }
+// 集合 → コード名推定（root+quality）。マッチ無ければ null
+function detect(pcsAbs){
+  const set=[...new Set(pcsAbs.map(x=>((x%12)+12)%12))].sort((a,b)=>a-b);
+  for(const root of set){
+    const ivs=[...new Set(set.map(x=>((x-root)%12+12)%12))].sort((a,b)=>a-b);
+    for(const [q,qi] of Object.entries(Q)){
+      const base=[...new Set(qi.map(x=>x%12))].sort((a,b)=>a-b);
+      if(base.length===ivs.length && base.every((v,i)=>v===ivs[i]))
+        return {root,q};
+    }
+  }
+  return null;
+}
+function relName(rootAbs,q){ const deg=((rootAbs - tonic)%12+12)%12; return NUM_REV[deg]+(q===""?"":q); }
+
+let before=null, after=null;
+const $cb=document.getElementById("cb"),$ca=document.getElementById("ca"),$err=document.getElementById("err"),$prog=document.getElementById("prog");
+function chip(text,after){const s=document.createElement("span");s.className="chip"+(after?" after":"");s.textContent=text;return s;}
+function refresh(){
+  $err.textContent="";$cb.innerHTML="";$ca.innerHTML="";after=null;
+  before=parseProg($prog.value);
+  if(!before){$err.textContent="進行をパースできない。例: Imaj7 VIm7 IIm7 V7";return;}
+  after=before.map(c=>{
+    const refl=absPCs(c).map(reflectPC);
+    const det=detect(refl);
+    return {pcs:refl, det};
+  });
+  before.forEach(c=>$cb.appendChild(chip(NUM_REV[c.pc]+(c.q||""))));
+  after.forEach(a=>$ca.appendChild(chip(a.det?relName(a.det.root,a.det.q):"("+a.pcs.map(p=>NOTE[p]).join(" ")+")")));
+}
+document.querySelectorAll(".presets button").forEach(b=>b.onclick=()=>{$prog.value=b.dataset.p;refresh();});
+$prog.addEventListener("input",refresh);
+
+let synth=null;
+function ensure(){if(synth)return;synth=new Tone.PolySynth(Tone.Synth,{oscillator:{type:"triangle"},
+  envelope:{attack:.01,decay:.3,sustain:.4,release:1.0}}).toDestination();synth.volume.value=-11;}
+function fr(m){return 440*Math.pow(2,(m-69)/12);}
+async function playBefore(){if(!before)return;await Tone.start();ensure();let t=Tone.now();
+  before.forEach(c=>{synth.triggerAttackRelease(absPCs(c).map(p=>fr(60+p)),0.8,t);t+=0.9;});}
+async function playAfter(){if(!after)return;await Tone.start();ensure();let t=Tone.now();
+  after.forEach(a=>{synth.triggerAttackRelease(a.pcs.map(p=>fr(60+p)),0.8,t);t+=0.9;});}
+document.getElementById("pb").onclick=playBefore;
+document.getElementById("pa").onclick=playAfter;
+refresh();
+</script>
+</body>
+</html>

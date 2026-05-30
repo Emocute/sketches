@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Euclid Rhythm — Emocute</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<style>
+  :root{--bg:#0e0e12;--panel:#16161d;--ink:#e9e9f0;--dim:#8a8a99;
+    --accent:#c9a86a;--accent2:#6a9ec9;--line:#26262f;--k:#c9a86a;--h:#6a9ec9;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:-apple-system,"Hiragino Kaku Gothic ProN",sans-serif;
+    line-height:1.5;padding:24px;max-width:860px;margin:0 auto}
+  h1{font-size:20px;font-weight:600}h1 .sub{color:var(--dim);font-weight:400;font-size:13px;margin-left:10px}
+  .tagline{color:var(--dim);font-size:13px;margin:6px 0 18px}
+  .wrap{display:flex;gap:24px;flex-wrap:wrap;align-items:flex-start}
+  svg{width:300px;height:300px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:18px;flex:1;min-width:280px}
+  .track{margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+  .track:last-child{border:none;margin:0;padding:0}
+  .track h3{font-size:14px;margin-bottom:10px}
+  .track h3 .dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:7px;vertical-align:middle}
+  .slider{display:flex;align-items:center;gap:10px;margin:8px 0;font-size:13px}
+  .slider label{width:64px;color:var(--dim)}
+  input[type=range]{flex:1;accent-color:var(--accent)}
+  .slider .v{width:90px;text-align:right;font-family:ui-monospace,Menlo,monospace;color:var(--accent)}
+  .pattern{font-family:ui-monospace,Menlo,monospace;font-size:13px;color:var(--dim);margin-top:6px;word-break:break-all}
+  .transport{display:flex;gap:12px;align-items:center;margin-top:18px}
+  button{background:var(--accent);color:#1a1206;border:none;border-radius:8px;padding:11px 22px;
+    font-weight:600;cursor:pointer;font-family:inherit;font-size:14px}
+  button.stop{background:#1d1d26;color:var(--ink);border:1px solid var(--line)}
+  .footer{margin-top:20px;color:var(--dim);font-size:12px;border-top:1px solid var(--line);padding-top:14px}
+  .footer code{background:#1d1d26;padding:1px 5px;border-radius:4px;font-size:11px}
+</style>
+</head>
+<body>
+  <h1>Euclid Rhythm <span class="sub">均等に割ると、世界のグルーヴ。</span></h1>
+  <p class="tagline">k 個の打点を n ステップへ最も均等に散らす E(k,n)。2 トラックを重ねてループ再生。</p>
+  <div class="wrap">
+    <svg id="ring" viewBox="0 0 300 300"></svg>
+    <div class="panel">
+      <div class="track" data-i="0">
+        <h3><span class="dot" style="background:var(--k)"></span>Kick</h3>
+        <div class="slider"><label>pulses k</label><input type="range" id="k0" min="0" max="16" value="3"><span class="v" id="k0v"></span></div>
+        <div class="slider"><label>steps n</label><input type="range" id="n0" min="2" max="16" value="8"><span class="v" id="n0v"></span></div>
+        <div class="slider"><label>回転</label><input type="range" id="r0" min="0" max="15" value="0"><span class="v" id="r0v"></span></div>
+        <div class="pattern" id="p0"></div>
+      </div>
+      <div class="track" data-i="1">
+        <h3><span class="dot" style="background:var(--h)"></span>Hat</h3>
+        <div class="slider"><label>pulses k</label><input type="range" id="k1" min="0" max="16" value="5"><span class="v" id="k1v"></span></div>
+        <div class="slider"><label>steps n</label><input type="range" id="n1" min="2" max="16" value="8"><span class="v" id="n1v"></span></div>
+        <div class="slider"><label>回転</label><input type="range" id="r1" min="0" max="15" value="0"><span class="v" id="r1v"></span></div>
+        <div class="pattern" id="p1"></div>
+      </div>
+      <div class="slider" style="margin-top:14px"><label>tempo</label><input type="range" id="bpm" min="60" max="180" value="100"><span class="v" id="bpmv"></span></div>
+      <div class="transport">
+        <button id="play">▶ Play</button>
+        <button class="stop" id="stop">■ Stop</button>
+      </div>
+    </div>
+  </div>
+  <div class="footer">
+    E(3,8)=トレシージョ、E(5,8)=シンキージョ、E(7,16)=サンバ系… 定番グルーヴが 1 つの数理から出る。<br>
+    アルゴリズムは <code>Bjorklund</code>。打点は外周リング上に表示、再生位置が回る。表示トラックは Kick = n=8 基準。
+  </div>
+<script>
+function euclid(k,n){
+  if(k<=0)return Array(n).fill(0);
+  if(k>=n)return Array(n).fill(1);
+  let g=[],r=[];
+  for(let i=0;i<k;i++)g.push([1]);
+  for(let i=0;i<n-k;i++)r.push([0]);
+  while(r.length>1){
+    const m=Math.min(g.length,r.length),ng=[],nr=[];
+    for(let i=0;i<m;i++)ng.push(g[i].concat(r[i]));
+    if(g.length>m)for(let i=m;i<g.length;i++)nr.push(g[i]);
+    else for(let i=m;i<r.length;i++)nr.push(r[i]);
+    g=ng;r=nr;
+  }
+  return g.concat(r).flat();
+}
+function rotate(a,r){r=((r%a.length)+a.length)%a.length;return a.slice(r).concat(a.slice(0,r));}
+
+const T=[
+  {k:3,n:8,r:0,pat:[]},
+  {k:5,n:8,r:0,pat:[]},
+];
+function recompute(i){
+  const t=T[i];
+  document.getElementById("k"+i).max=t.n;
+  if(t.k>t.n){t.k=t.n;document.getElementById("k"+i).value=t.k;}
+  document.getElementById("r"+i).max=Math.max(0,t.n-1);
+  t.pat=rotate(euclid(t.k,t.n),t.r);
+  document.getElementById("k"+i+"v").textContent=t.k;
+  document.getElementById("n"+i+"v").textContent=t.n;
+  document.getElementById("r"+i+"v").textContent=t.r;
+  document.getElementById("p"+i).textContent="E("+t.k+","+t.n+")  "+t.pat.join("");
+}
+["0","1"].forEach(i=>{
+  ["k","n","r"].forEach(p=>{
+    const el=document.getElementById(p+i);
+    el.oninput=()=>{T[+i][p]=+el.value;recompute(+i);drawRing();};
+  });
+});
+const $bpm=document.getElementById("bpm");
+$bpm.oninput=()=>{document.getElementById("bpmv").textContent=$bpm.value+" BPM";Tone.Transport.bpm.value=+$bpm.value;};
+
+// リング描画（kick の n を主リング）
+const ring=document.getElementById("ring");
+let stepPos=-1;
+function pol(cx,cy,rad,deg){const a=(deg-90)*Math.PI/180;return [cx+rad*Math.cos(a),cy+rad*Math.sin(a)];}
+function drawRing(){
+  const n=T[0].n, R=110, CX=150,CY=150;
+  let h="";
+  for(let s=0;s<n;s++){
+    const [x,y]=pol(CX,CY,R,s*360/n);
+    const kHit=T[0].pat[s]===1;
+    const hHit=T[1].pat[s%T[1].n]===1;
+    const playing=(s===stepPos%n);
+    let fill = kHit?"var(--k)":"#1d1d26";
+    let stroke = playing?"#fff":(hHit?"var(--h)":"#26262f");
+    let sw = playing?3:(hHit?2.5:1.5);
+    h+=`<circle cx="${x}" cy="${y}" r="${kHit?16:11}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>`;
+  }
+  ring.innerHTML=h;
+}
+
+// 音
+let kick=null,hat=null,repeatId=null;
+function ensure(){
+  if(kick)return;
+  kick=new Tone.MembraneSynth({octaves:5,pitchDecay:.05}).toDestination();kick.volume.value=-6;
+  hat=new Tone.MetalSynth({frequency:280,envelope:{attack:.001,decay:.12,release:.01},
+    harmonicity:5.1,modulationIndex:32,resonance:4000,octaves:1.5}).toDestination();hat.volume.value=-20;
+}
+let idx=0;
+function start(){
+  ensure();
+  if(repeatId!==null)return;
+  idx=0;
+  Tone.Transport.bpm.value=+$bpm.value;
+  repeatId=Tone.Transport.scheduleRepeat((time)=>{
+    const n0=T[0].n,n1=T[1].n;
+    if(T[0].pat[idx%n0]===1)kick.triggerAttackRelease("C2","16n",time);
+    if(T[1].pat[idx%n1]===1)hat.triggerAttackRelease("16n",time);
+    stepPos=idx;
+    Tone.Draw.schedule(drawRing,time);
+    idx++;
+  },"16n");
+  Tone.Transport.start();
+}
+function stop(){
+  if(repeatId!==null){Tone.Transport.clear(repeatId);repeatId=null;}
+  Tone.Transport.stop();stepPos=-1;drawRing();
+}
+document.getElementById("play").onclick=async()=>{await Tone.start();start();};
+document.getElementById("stop").onclick=stop;
+
+document.getElementById("bpmv").textContent=$bpm.value+" BPM";
+recompute(0);recompute(1);drawRing();
+</script>
+</body>
+</html>
