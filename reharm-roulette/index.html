@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Reharm Roulette — Emocute</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+<style>
+  :root{--bg:#0e0e12;--panel:#16161d;--ink:#e9e9f0;--dim:#8a8a99;
+    --accent:#c9a86a;--accent2:#6a9ec9;--line:#26262f;--warn:#c96a6a;--good:#6ac98f;}
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--ink);font-family:-apple-system,"Hiragino Kaku Gothic ProN",sans-serif;
+    line-height:1.55;padding:24px;max-width:1000px;margin:0 auto}
+  h1{font-size:20px;font-weight:600}
+  h1 .sub{color:var(--dim);font-weight:400;font-size:13px;margin-left:10px}
+  .tagline{color:var(--dim);font-size:13px;margin:6px 0 20px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+  label.lbl{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.08em;display:block;margin-bottom:7px}
+  input[type=text]{width:100%;background:#1d1d26;color:var(--ink);border:1px solid var(--line);
+    border-radius:8px;padding:11px 13px;font-size:15px;font-family:ui-monospace,Menlo,monospace}
+  input[type=text]:focus{outline:none;border-color:var(--accent)}
+  .row{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;align-items:center}
+  button{background:#1d1d26;color:var(--ink);border:1px solid var(--line);border-radius:8px;
+    padding:8px 13px;font-size:13px;font-family:inherit;cursor:pointer}
+  button:hover{border-color:var(--accent)}
+  button.primary{background:var(--accent);color:#1a1206;border-color:var(--accent);font-weight:600}
+  button.gacha{background:var(--accent2);color:#06121d;border-color:var(--accent2);font-weight:600;font-size:14px;padding:10px 18px}
+  .presets button{font-size:12px}
+  .techs{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px}
+  .verdict{font-size:13px;margin:4px 0 0;padding:8px 12px;border-radius:8px}
+  .verdict.cliche{background:#2a1414;color:var(--warn);border:1px solid #4a2020}
+  .verdict.fresh{background:#14241a;color:var(--good);border:1px solid #204a30}
+  .stage{display:grid;grid-template-columns:70px 1fr 44px;gap:14px;align-items:center;
+    padding:14px 16px;border-radius:12px;border:1px solid var(--line);margin-bottom:10px;background:var(--panel)}
+  .stage .tag{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:.06em}
+  .stage.after{border-color:var(--accent2)}
+  .chips{display:flex;flex-wrap:wrap;gap:8px}
+  .chip{font-family:ui-monospace,Menlo,monospace;font-size:16px;padding:7px 13px;border-radius:8px;
+    background:#1d1d26;border:1px solid var(--line)}
+  .chip.changed{border-color:var(--accent);color:var(--accent);background:#241d10}
+  .playbtn{width:42px;height:42px;border-radius:8px;font-size:16px;display:flex;align-items:center;justify-content:center}
+  .applied{font-size:12px;color:var(--accent2);margin:2px 0 12px}
+  .footer{margin-top:20px;color:var(--dim);font-size:12px;border-top:1px solid var(--line);padding-top:14px}
+  .footer code{background:#1d1d26;padding:1px 5px;border-radius:4px;font-size:11px}
+  .err{color:var(--warn);font-size:13px;margin-top:8px}
+</style>
+</head>
+<body>
+  <h1>Reharm Roulette <span class="sub">同じ進行を、もっと遠くへ。</span></h1>
+  <p class="tagline">度数進行に Studio の REHARM 技を仕込んで歪ませ、before/after を鳴らし比べる。</p>
+
+  <div class="panel">
+    <label class="lbl">進行（度数・スペース区切り）</label>
+    <input type="text" id="prog" value="IIm7 V7 Imaj7" spellcheck="false">
+    <div class="row presets">
+      <span style="font-size:11px;color:var(--dim)">プリセット:</span>
+      <button data-p="IIm7 V7 Imaj7">ii–V–I</button>
+      <button data-p="VIm7 IV Imaj7 V7">VIm–IV–I–V（凡庸）</button>
+      <button data-p="Imaj7 VIm7 IIm7 V7">循環</button>
+      <button data-p="Imaj7 IV V Imaj7">I–IV–V（凡庸）</button>
+      <button data-p="IIm7 V7 IIIm7 VI7 IIm7 V7 Imaj7">ロング ii–V</button>
+    </div>
+    <div id="verdict"></div>
+    <div class="err" id="err"></div>
+    <div class="row" style="margin-top:14px">
+      <button class="gacha" id="gacha">🎲 ガチャ（自動で歪ませる）</button>
+      <span style="font-size:11px;color:var(--dim);margin-left:6px">— or 技を選んで適用 ↓</span>
+    </div>
+    <div class="techs" id="techs"></div>
+  </div>
+
+  <div class="stage" id="stageBefore">
+    <span class="tag">before</span>
+    <div class="chips" id="chipsBefore"></div>
+    <button class="playbtn" id="playBefore">▶</button>
+  </div>
+  <div class="applied" id="applied"></div>
+  <div class="stage after" id="stageAfter">
+    <span class="tag">after</span>
+    <div class="chips" id="chipsAfter"></div>
+    <button class="playbtn" id="playAfter">▶</button>
+  </div>
+
+  <div class="footer">
+    度数 = メジャースケール準拠（Studio v7）。発音は C major、各コードは close voicing で 1 コード ≒ 0.9 秒。<br>
+    技は <code>REHARM_TABLE</code> / <code>reharm_loop.py</code> の哲学をミラー。判定は <code>anti_pattern_checker.py</code> 由来。
+  </div>
+
+<script>
+// ---- 度数 ⇄ pc -------------------------------------------------------------
+const NUM={I:0,II:2,III:4,IV:5,V:7,VI:9,VII:11};
+const NUM_REV=["I","♭II","II","♭III","III","IV","♭V","V","♭VI","VI","♭VII","VII"];
+function degToName(pc,acc){ // pc 0-11 → ローマ字（♭優先）
+  return NUM_REV[((pc%12)+12)%12];
+}
+// quality intervals（root=0）
+const Q={
+  "maj7":[0,4,7,11],"maj9":[0,4,7,11,14],"maj7#11":[0,4,7,11,18],
+  "m7":[0,3,7,10],"min7":[0,3,7,10],"m9":[0,3,7,10,14],"min9":[0,3,7,10,14],
+  "7":[0,4,7,10],"9":[0,4,7,10,14],"13":[0,4,7,10,14,21],
+  "m7b5":[0,3,6,10],"dim7":[0,3,6,9],"6":[0,4,7,9],"m6":[0,3,7,9],
+  "":[0,4,7] // 素の三和音
+};
+const QALIAS={"M7":"maj7","Δ":"maj7","-7":"m7","min7":"m7","ø":"m7b5","°7":"dim7"};
+
+// token → {pc, q, accDisplay}
+function parseToken(tok){
+  const m=tok.match(/^([b#♭♯]?)([IViv]+)(.*)$/);
+  if(!m) return null;
+  let [,acc,num,qual]=m;
+  num=num.toUpperCase();
+  if(!(num in NUM)) return null;
+  let pc=NUM[num];
+  if(acc==="b"||acc==="♭")pc--; if(acc==="#"||acc==="♯")pc++;
+  pc=((pc%12)+12)%12;
+  qual=qual.replace("maj","maj").trim();
+  if(QALIAS[qual])qual=QALIAS[qual];
+  if(!(qual in Q)){
+    // 既定: 度数からダイアトニック7th 推定（C major 基準）
+    const diat={0:"maj7",2:"m7",4:"m7",5:"maj7",7:"7",9:"m7",11:"m7b5"};
+    qual = diat[pc] || "7";
+  }
+  return {pc,q:qual};
+}
+function parseProg(str){
+  const toks=str.trim().split(/\s+/).filter(Boolean);
+  const out=[]; for(const t of toks){const p=parseToken(t); if(!p)return null; out.push(p);}
+  return out.length?out:null;
+}
+function chordName(c){ return degToName(c.pc) + (c.q===""?"" : c.q); }
+
+// ---- 凡庸判定（anti_pattern 由来）-----------------------------------------
+const CLICHE_SETS=[
+  {name:"VIm-IV-I-V",seq:[9,5,0,7]},
+  {name:"I-V-VIm-IV",seq:[0,7,9,5]},
+  {name:"I-IV-V",seq:[0,5,7]},
+  {name:"IIm-V-I のみ",seq:[2,7,0]},
+];
+function judge(prog){
+  const pcs=prog.map(c=>c.pc);
+  for(const cl of CLICHE_SETS){
+    if(pcs.length>=cl.seq.length && cl.seq.every((v,i)=>pcs[i]===v))
+      return {cliche:true,msg:`手垢ループ（${cl.name}）。REHARM 技で歪ませる価値あり。`};
+  }
+  // テンション/技の気配が無い純三和音ばかりも凡庸寄り
+  const plain=prog.filter(c=>c.q===""||c.q==="maj7"||c.q==="m7"||c.q==="7").length;
+  if(plain===prog.length && prog.length<=4)
+    return {cliche:true,msg:"素直すぎる。chromatic mediant か tritone sub を 1 個。"};
+  return {cliche:false,msg:"悪くない。さらに遠くへ飛ばすなら技をどうぞ。"};
+}
+
+// ---- REHARM 技（progression を受け、新 progression を返す）------------------
+function isDom(c){ return c.q==="7"||c.q==="9"||c.q==="13"; }
+function isMajT(c){ return c.q==="maj7"||c.q==="maj9"||c.q===""||c.q==="6"; }
+function isMinT(c){ return c.q==="m7"||c.q==="m9"||c.q==="m6"; }
+
+const TECHS={
+  tritone:{label:"Tritone sub",fn:p=>p.map(c=> isDom(c)?{pc:(c.pc+6)%12,q:c.q,_chg:1}:c)},
+  backdoor:{label:"Backdoor",fn:p=>p.map(c=> isDom(c)?{pc:(c.pc+10)%12,q:"7",_chg:1}:c)},
+  cmediant:{label:"Chromatic mediant",fn:p=>p.map((c,i)=> (isMajT(c)&&i%2===0)?{pc:(c.pc+8)%12,q:c.q==="" ?"maj7":c.q,_chg:1}:c)},
+  lydian:{label:"Lydian ♯11",fn:p=>p.map(c=> (c.q==="maj7")?{pc:c.pc,q:"maj7#11",_chg:1}:c)},
+  iivins:{label:"ii–V 挿入",fn:p=>{ // 各 maj target の前に ii-V を差す
+      const out=[]; p.forEach((c)=>{
+        if(isMajT(c)){ out.push({pc:(c.pc+2)%12,q:"m7",_chg:1}); out.push({pc:(c.pc+7)%12,q:"7",_chg:1}); }
+        out.push(c);
+      }); return out; }},
+  thirds:{label:"3度下行連鎖",fn:p=>p.map((c,i)=> i>0?{pc:(p[0].pc - 3*i %12 +120)%12,q:isMinT(c)?"m7":"maj7",_chg:1}:c)},
+};
+
+// ---- state & render --------------------------------------------------------
+let before=parseProg("IIm7 V7 Imaj7"), after=null, appliedName="";
+const $prog=document.getElementById("prog"),$err=document.getElementById("err"),
+      $verdict=document.getElementById("verdict"),$techs=document.getElementById("techs"),
+      $cb=document.getElementById("chipsBefore"),$ca=document.getElementById("chipsAfter"),
+      $applied=document.getElementById("applied");
+
+Object.entries(TECHS).forEach(([k,t])=>{
+  const b=document.createElement("button"); b.textContent=t.label; b.onclick=()=>applyTech(k);
+  $techs.appendChild(b);
+});
+document.querySelectorAll(".presets button").forEach(b=>b.onclick=()=>{$prog.value=b.dataset.p;refresh();});
+
+function chips(prog,el,base){
+  el.innerHTML="";
+  prog.forEach((c,i)=>{
+    const span=document.createElement("span");
+    const changed = base && (!base[i] || base[i].pc!==c.pc || base[i].q!==c.q) ;
+    span.className="chip"+((c._chg||changed)?" changed":"");
+    span.textContent=chordName(c);
+    el.appendChild(span);
+  });
+}
+function refresh(){
+  $err.textContent=""; after=null; appliedName=""; $applied.textContent=""; $ca.innerHTML="";
+  before=parseProg($prog.value);
+  if(!before){ $err.textContent="進行をパースできない。例: IIm7 V7 Imaj7"; $verdict.innerHTML=""; $cb.innerHTML=""; return; }
+  chips(before,$cb,null);
+  const v=judge(before);
+  $verdict.className="verdict "+(v.cliche?"cliche":"fresh");
+  $verdict.innerHTML=(v.cliche?"⚠ ":"✓ ")+v.msg;
+}
+function applyTech(key){
+  if(!before)return;
+  const t=TECHS[key];
+  const res=t.fn(before.map(c=>({...c})));
+  after=res; appliedName=t.label;
+  chips(after,$ca,before);
+  $applied.textContent="↓ 適用: "+appliedName;
+}
+function gacha(){
+  if(!before)return;
+  const keys=Object.keys(TECHS);
+  // 2 個ランダム適用（重複なし）
+  const shuffled=keys.map((k,i)=>[k,(i*7+before.length*3)%keys.length]).sort((a,b)=>a[1]-b[1]).map(x=>x[0]);
+  const pick=shuffled.slice(0,2);
+  let prog=before.map(c=>({...c})); const names=[];
+  pick.forEach(k=>{ const r=TECHS[k].fn(prog); if(JSON.stringify(r)!==JSON.stringify(prog)){prog=r;names.push(TECHS[k].label);} });
+  if(!names.length){ const r=TECHS.cmediant.fn(prog); prog=r; names.push(TECHS.cmediant.label); }
+  after=prog; appliedName=names.join(" + ");
+  chips(after,$ca,before);
+  $applied.textContent="🎲 "+appliedName;
+}
+document.getElementById("gacha").onclick=gacha;
+$prog.addEventListener("input",refresh);
+
+// ---- 音 -------------------------------------------------------------------
+let synth=null;
+function ensureSynth(){ if(synth)return;
+  synth=new Tone.PolySynth(Tone.Synth,{oscillator:{type:"triangle"},
+    envelope:{attack:.01,decay:.3,sustain:.4,release:1.0}}).toDestination(); synth.volume.value=-11; }
+function f(m){return 440*Math.pow(2,(m-69)/12);}
+async function playProg(prog){
+  if(!prog)return; await Tone.start(); ensureSynth();
+  let t=Tone.now();
+  prog.forEach(c=>{
+    const notes=Q[c.q].map(iv=> f(60 + c.pc + iv)); // C4 基準
+    synth.triggerAttackRelease(notes,0.8,t); t+=0.9;
+  });
+}
+document.getElementById("playBefore").onclick=()=>playProg(before);
+document.getElementById("playAfter").onclick=()=>playProg(after||before);
+
+refresh();
+</script>
+</body>
+</html>
