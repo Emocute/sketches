@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="ja" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>voice rooms</title>
+<style>
+  /* ── 2テーマ。シックで洗練（モノクロ基調＋抑えた単一アクセント） ── */
+  :root[data-theme="dark"]{
+    --bg:#0c0c0d; --surface:#161618; --surface2:#1e1e21; --elev:#222226;
+    --line:rgba(255,255,255,.085); --line-2:rgba(255,255,255,.16);
+    --fg:#edece8; --mut:#9a9a96; --dim:#646468;
+    --accent:#cf8593; --accent-2:#e0a0ab; --accent-soft:rgba(207,133,147,.14); --on-accent:#160a0c;
+    --shadow:0 10px 30px rgba(0,0,0,.45);
+  }
+  :root[data-theme="light"]{
+    --bg:#f4f3ef; --surface:#ffffff; --surface2:#eeede8; --elev:#ffffff;
+    --line:rgba(0,0,0,.10); --line-2:rgba(0,0,0,.22);
+    --fg:#1b1a18; --mut:#6b6a64; --dim:#a6a59f;
+    --accent:#b15d6e; --accent-2:#9c4c5d; --accent-soft:rgba(177,93,110,.12); --on-accent:#ffffff;
+    --shadow:0 10px 30px rgba(0,0,0,.10);
+  }
+  :root{
+    --sans:-apple-system,"Helvetica Neue","Hiragino Kaku Gothic ProN","Noto Sans JP",sans-serif;
+    --serif:"Hiragino Mincho ProN","Yu Mincho","Noto Serif JP",serif;
+    --appbar-h:54px;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;}
+  body{font-family:var(--sans);font-size:15px;color:var(--fg);background:#000;
+    -webkit-font-smoothing:antialiased;display:flex;justify-content:center;transition:background .3s;}
+  .app{position:relative;width:100%;max-width:430px;height:100vh;background:var(--bg);overflow:hidden;
+    display:flex;flex-direction:column;transition:background .3s,color .3s;}
+  svg{display:block;} button{font:inherit;cursor:pointer;border:none;background:none;color:inherit;}
+  ::selection{background:var(--accent-soft);}
+
+  .view{position:absolute;inset:0;display:none;flex-direction:column;background:var(--bg);overflow:hidden;}
+  .view.active{display:flex;}
+  .scroll{flex:1;overflow-y:auto;overflow-x:hidden;-webkit-overflow-scrolling:touch;}
+  .pad{padding:20px;}
+
+  /* appbar */
+  .appbar{height:var(--appbar-h);flex:0 0 var(--appbar-h);display:flex;align-items:center;gap:4px;padding:0 12px;
+    border-bottom:1px solid var(--line);position:relative;z-index:5;}
+  .appbar .brand{flex:1;font-size:16px;font-weight:600;letter-spacing:.01em;}
+  .appbar .brand.center{justify-content:center;}
+  .appbar .title{flex:1;text-align:center;font-weight:600;font-size:15px;letter-spacing:.04em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .appbar .title small{display:block;font-weight:400;font-size:11px;color:var(--dim);margin-top:2px;letter-spacing:.06em;}
+  .ico{width:38px;height:38px;border-radius:50%;display:flex;align-items:center;justify-content:center;color:var(--mut);flex:0 0 38px;transition:color .15s,background .15s;}
+  .ico:hover{color:var(--fg);background:var(--surface2);}
+  .spacer{width:38px;flex:0 0 38px;}
+
+  /* labels & text */
+  .eyebrow{font-size:12px;color:var(--dim);font-weight:500;}
+  .dim{color:var(--dim);} .muted{color:var(--mut);}
+  .hr{height:1px;background:var(--line);border:0;margin:0;}
+  .hidden{display:none !important;}
+
+  /* buttons */
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;background:var(--accent);color:var(--on-accent);
+    font-weight:600;font-size:14px;padding:11px 20px;border-radius:11px;letter-spacing:.02em;transition:filter .12s,transform .04s;}
+  .btn:hover{filter:brightness(1.06);} .btn:active{transform:translateY(1px);}
+  .btn.block{display:flex;width:100%;padding:14px;}
+  .btn.outline{background:transparent;color:var(--fg);border:1px solid var(--line-2);}
+  .btn.outline:hover{border-color:var(--fg);filter:none;background:var(--surface2);}
+  .btn.sm{padding:8px 16px;font-size:13px;border-radius:9px;}
+  .btn.ghost{background:transparent;color:var(--mut);} .btn.ghost:hover{color:var(--fg);background:var(--surface2);}
+
+  .input{width:100%;background:transparent;border:none;border-bottom:1px solid var(--line-2);color:var(--fg);
+    padding:11px 2px;font:inherit;font-size:16px;outline:none;transition:border-color .2s;}
+  .input:focus{border-color:var(--accent);} .input::placeholder{color:var(--dim);}
+
+  .chip{display:inline-flex;align-items:center;font-size:13px;color:var(--mut);border:1px solid var(--line-2);
+    border-radius:999px;padding:7px 15px;white-space:nowrap;cursor:pointer;transition:all .15s;background:transparent;}
+  .chip:hover{color:var(--fg);}
+  .chip.sel{color:var(--accent);border-color:var(--accent);background:var(--accent-soft);}
+
+  /* ── 入口 ── */
+  #entry .scroll{display:flex;flex-direction:column;}
+  .entry-top{display:flex;justify-content:flex-end;padding:12px;}
+  .hero{flex:1;display:flex;flex-direction:column;justify-content:center;padding:0 26px;max-width:380px;margin:0 auto;width:100%;}
+  .wordmark{font-size:20px;font-weight:600;letter-spacing:.01em;}
+  .field-lbl{margin:0 0 12px;}
+  .entry-tags{display:flex;flex-wrap:wrap;gap:9px;margin-top:10px;}
+  .entry-foot{padding:22px 26px 30px;}
+  .fine{color:var(--dim);font-size:11.5px;text-align:center;letter-spacing:.02em;margin-top:16px;line-height:1.7;}
+
+  /* ── 部屋一覧 ── */
+  .hima{display:flex;align-items:center;gap:14px;padding:18px;border:1px solid var(--line-2);border-radius:16px;margin-bottom:24px;background:var(--surface);}
+  .hima .live{font-size:10px;letter-spacing:.16em;color:var(--accent);font-weight:700;display:flex;align-items:center;gap:6px;}
+  .hima .live .d{width:7px;height:7px;border-radius:50%;background:var(--accent);}
+  .hima .t{flex:1;min-width:0;} .hima .t b{display:block;font-size:16px;font-weight:600;margin-top:3px;} .hima .t span{font-size:12.5px;color:var(--mut);}
+  .filter{display:flex;gap:9px;overflow-x:auto;padding-bottom:6px;margin-bottom:6px;scrollbar-width:none;}
+  .filter::-webkit-scrollbar{display:none;}
+  .rooms-head{display:flex;align-items:baseline;justify-content:space-between;margin:26px 2px 4px;}
+  .roomrow{display:flex;align-items:center;gap:14px;padding:18px 2px;border-top:1px solid var(--line);}
+  .roomrow .info{flex:1;min-width:0;}
+  .roomrow .rn{font-size:16px;font-weight:500;letter-spacing:.01em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .roomrow .meta{font-size:12.5px;color:var(--dim);margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+  .roomrow .cnt{font-variant-numeric:tabular-nums;color:var(--mut);font-size:13px;flex:0 0 auto;}
+  .empty{color:var(--dim);font-size:13px;padding:24px 2px;text-align:center;}
+  .fab{position:absolute;right:18px;bottom:22px;height:50px;padding:0 20px;border-radius:25px;background:var(--accent);color:var(--on-accent);
+    display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px;box-shadow:var(--shadow);z-index:6;}
+
+  /* ── 通話 ── */
+  .conn{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--mut);padding:0 8px;letter-spacing:.04em;}
+  .conn .d{width:6px;height:6px;border-radius:50%;background:var(--dim);}
+  .conn.live .d{background:#5ad17e;}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(98px,1fr));gap:14px;padding:20px;}
+  .tile{text-align:center;position:relative;}
+  .tile .av{width:60px;height:60px;border-radius:50%;margin:0 auto 10px;background:var(--surface2);
+    display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:22px;color:var(--mut);
+    position:relative;transition:box-shadow .14s,color .14s;}
+  .tile.talking .av{color:var(--fg);box-shadow:0 0 0 2px var(--accent),0 0 0 7px var(--accent-soft);}
+  .tile.muted .av{opacity:.5;}
+  .tile.muted .av::after{content:"";position:absolute;inset:0;border-radius:50%;border:1px dashed var(--line-2);}
+  .tile .nm{font-size:13px;font-weight:500;word-break:break-all;}
+  .tile .nm.none{color:var(--dim);font-weight:400;}
+  .tile .st{font-size:10px;color:var(--dim);margin-top:3px;letter-spacing:.06em;}
+  .tile .st.host{color:var(--accent);}
+  .tile .hand{position:absolute;top:-2px;right:50%;transform:translateX(34px);color:var(--accent);}
+  .tile .acts{display:flex;justify-content:center;gap:12px;margin-top:8px;opacity:0;transition:opacity .15s;}
+  .tile:hover .acts{opacity:1;} .tile .acts button{color:var(--dim);padding:2px;} .tile .acts button:hover{color:var(--accent);}
+  .alone{text-align:center;color:var(--dim);font-size:13px;padding:30px 20px;line-height:1.8;}
+  .chatbox{margin:6px 20px 14px;border:1px solid var(--line);border-radius:14px;overflow:hidden;background:var(--surface);}
+  .chatlog{height:118px;overflow-y:auto;padding:12px 14px;display:flex;flex-direction:column;gap:9px;font-size:13px;}
+  .msg{line-height:1.5;} .msg .who{color:var(--accent);font-weight:600;margin-right:7px;} .msg.sys{color:var(--dim);font-style:italic;font-size:12px;}
+  .chatin{display:flex;gap:10px;align-items:center;border-top:1px solid var(--line);padding:10px 12px;}
+  .chatin .input{border-bottom:none;padding:6px 0;font-size:14px;}
+  .controls{display:flex;justify-content:center;gap:22px;padding:14px 0 22px;border-top:1px solid var(--line);}
+  .ctl{display:flex;flex-direction:column;align-items:center;gap:7px;}
+  .cbtn{width:56px;height:56px;border-radius:50%;border:1px solid var(--line-2);color:var(--fg);
+    display:flex;align-items:center;justify-content:center;transition:all .14s;}
+  .cbtn:hover{background:var(--surface2);}
+  .cbtn.on{color:var(--accent);border-color:var(--accent);background:var(--accent-soft);}
+  .cbtn.raised{color:var(--accent);border-color:var(--accent);}
+  .cbtn.leave{color:var(--fg);}
+  .cbtn.leave:hover{background:var(--accent);color:var(--on-accent);border-color:var(--accent);}
+  .clbl{font-size:10.5px;color:var(--dim);letter-spacing:.04em;}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── 入口 ── -->
+  <section class="view active" id="entry">
+    <div class="scroll">
+      <div class="entry-top"><button class="ico" id="themeE" title="テーマ"></button></div>
+      <div class="hero">
+        <div class="wordmark">voice rooms</div>
+        <div class="eyebrow field-lbl" style="margin-top:28px;">名前（任意）</div>
+        <input class="input" id="nick" maxlength="24" placeholder="ニックネーム">
+      </div>
+      <div class="entry-foot">
+        <button class="btn block" id="startBtn">はじめる</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 部屋一覧 ── -->
+  <section class="view" id="rooms">
+    <div class="appbar">
+      <span class="brand">rooms</span>
+      <button class="ico" id="reloadBtn" title="更新"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-3-6.7"/><polyline points="21 3 21 9 15 9"/></svg></button>
+      <button class="ico" id="themeR" title="テーマ"></button>
+    </div>
+    <div class="scroll pad">
+      <div class="hima" id="himaBtn">
+        <div class="t"><span class="live"><span class="d"></span>今ひま</span><b>すぐ誰かと話す</b><span>ワンタップで雑談部屋に入る</span></div>
+        <button class="btn sm">入る</button>
+      </div>
+      <div class="filter" id="filter"></div>
+      <div class="rooms-head"><span class="eyebrow">開いている部屋</span><span class="dim" id="roomCount" style="font-size:12px;"></span></div>
+      <div id="roomList"></div>
+      <div class="empty hidden" id="noRooms">まだ部屋がない。作るか「今ひま」で入れる。</div>
+    </div>
+    <button class="fab" id="createBtn"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>部屋をつくる</button>
+  </section>
+
+  <!-- ── 通話 ── -->
+  <section class="view" id="call">
+    <div class="appbar">
+      <button class="ico" id="leaveTop"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+      <span class="title"><span id="callTitle"></span><small id="callSub"></small></span>
+      <span class="conn" id="conn"><span class="d"></span><span id="connTxt">接続中</span></span>
+    </div>
+    <div class="scroll" style="padding:0;">
+      <div class="grid" id="tiles"></div>
+      <div class="alone hidden" id="aloneNote">まだひとり。<br>誰か入ると声がつながる。</div>
+      <div class="chatbox">
+        <div class="chatlog" id="chatlog"></div>
+        <div class="chatin"><input class="input" id="chatInput" maxlength="500" placeholder="メッセージ"><button class="ico" id="chatSend" style="flex:0 0 auto;color:var(--accent);"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg></button></div>
+      </div>
+    </div>
+    <div class="controls">
+      <div class="ctl"><button class="cbtn on" id="muteBtn"></button><span class="clbl" id="muteLbl">声 ON</span></div>
+      <div class="ctl"><button class="cbtn" id="handBtn"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 0 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg></button><span class="clbl">手を挙げる</span></div>
+      <div class="ctl"><button class="cbtn leave" id="leaveBtn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M10 19H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h5"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg></button><span class="clbl">退出</span></div>
+    </div>
+  </section>
+</div>
+
+<script>
+const SUN='<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5L19 19M19 5l-1.5 1.5M6.5 17.5L5 19"/></svg>';
+const MOON='<svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>';
+const ICON={
+  micOn:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>',
+  micOff:'<svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="2" y1="2" x2="22" y2="22"/><path d="M9 9v3a3 3 0 0 0 5.1 2.1M15 9.3V4a3 3 0 0 0-5.9-.6"/><path d="M17 16.9A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.1 1.2"/><line x1="12" y1="19" x2="12" y2="23"/></svg>',
+  flag:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><line x1="4" y1="22" x2="4" y2="15"/></svg>',
+  kick:'<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="7" r="4"/><path d="M3 20c0-3.3 2.7-5 6-5"/><line x1="17" y1="8" x2="22" y2="13"/><line x1="22" y1="8" x2="17" y2="13"/></svg>',
+  hand:'<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 11V6a2 2 0 0 0-4 0M14 10V4a2 2 0 0 0-4 0v2M10 10.5V6a2 2 0 0 0-4 0v8"/><path d="M18 8a2 2 0 0 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15"/></svg>',
+};
+let ICE={iceServers:[{urls:'stun:stun.l.google.com:19302'}]};
+// サーバから ICE 設定（STUN + 必要なら TURN）を取得。失敗時は STUN にフォールバック
+fetch('/ice').then(r=>r.json()).then(j=>{ if(j&&j.iceServers&&j.iceServers.length) ICE={iceServers:j.iceServers}; }).catch(()=>{});
+// 音を大事に: エコー除去・ノイズ抑制・自動ゲイン
+const MIC_CONSTRAINTS={audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true},video:false};
+const $=(id)=>document.getElementById(id);
+
+// ── テーマ ──
+function applyTheme(t){ document.documentElement.setAttribute('data-theme',t); try{localStorage.setItem('vr-theme',t);}catch(e){}
+  const ic=t==='dark'?SUN:MOON; ['themeE','themeR'].forEach(id=>{const b=$(id); if(b) b.innerHTML=ic;}); }
+function toggleTheme(){ applyTheme(document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark'); }
+(function initTheme(){ const q=new URLSearchParams(location.search).get('theme'); let t=q;
+  if(!t){ try{t=localStorage.getItem('vr-theme');}catch(e){} }
+  if(!t) t=window.matchMedia&&window.matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'; applyTheme(t); })();
+$('themeE').onclick=toggleTheme; $('themeR').onclick=toggleTheme;
+
+let ws,myId=null,myNick='',myTags=[],hostId=null;
+let localStream=null,muted=false,handRaised=false,currentRoom=null,currentTags=[],filterTag=null;
+const pcs=new Map(),nicks=new Map(),raised=new Set();
+const audioCtx=window.AudioContext?new AudioContext():null;
+const meters=new Map();
+let lastRooms=[];
+
+function view(id){ document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active',v.id===id)); }
+
+$('startBtn').onclick=()=>{ myNick=$('nick').value.trim(); view('rooms'); wsSend({type:'list'}); };
+
+let keepalive=null;
+function connect(){ const p=location.protocol==='https:'?'wss':'ws'; ws=new WebSocket(`${p}://${location.host}`);
+  ws.onopen=()=>{ clearInterval(keepalive); keepalive=setInterval(()=>wsSend({type:'ping'}),25000); };  // idle切断対策
+  ws.onmessage=e=>handle(JSON.parse(e.data)); ws.onclose=()=>{ clearInterval(keepalive); if(currentRoom) setConn(false,'再接続中'); setTimeout(connect,1000); }; }
+const wsSend=(o)=>{ if(ws&&ws.readyState===1) ws.send(JSON.stringify(o)); };
+
+function handle(m){ switch(m.type){
+  case 'welcome': myId=m.id; renderRooms(m.rooms); break;
+  case 'rooms': renderRooms(m.rooms); break;
+  case 'peers': hostId=m.host; for(const p of m.peers){ nicks.set(p.id,p.nick); createPeer(p.id,true); addTile(p.id,p.nick); }
+    refreshBadges(); updateAlone(); setConn(true,'接続済み'); break;
+  case 'peer-joined': nicks.set(m.id,m.nick); addTile(m.id,m.nick); sysMsg(`${disp(m.nick)} が入室`); updateAlone(); break;
+  case 'peer-left': sysMsg(`${disp(nicks.get(m.id))} が退出`); removePeer(m.id); updateAlone(); break;
+  case 'host': hostId=m.id; refreshBadges(); break;
+  case 'signal': onSignal(m.from,m.data); break;
+  case 'room': if(m.kind==='chat') chatMsg(m.from,m.nick,m.text); else { m.raised?raised.add(m.from):raised.delete(m.from); refreshBadges(); } break;
+  case 'kicked': sysMsg('ホストにより退出させられました'); doLeave(true); break;
+}}
+
+function renderRooms(rooms){ lastRooms=rooms;
+  const all=[...new Set(rooms.flatMap(r=>r.tags||[]))];
+  const fb=$('filter'); fb.innerHTML='';
+  if(all.length){ const a=document.createElement('span'); a.className='chip'+(filterTag?'':' sel'); a.textContent='すべて';
+    a.onclick=()=>{filterTag=null;renderRooms(lastRooms);}; fb.appendChild(a);
+    all.forEach(t=>{ const c=document.createElement('span'); c.className='chip'+(filterTag===t?' sel':''); c.textContent='#'+t;
+      c.onclick=()=>{filterTag=t;renderRooms(lastRooms);}; fb.appendChild(c); }); }
+  const list=$('roomList'); list.innerHTML='';
+  const shown=rooms.filter(r=>!filterTag||(r.tags||[]).includes(filterTag));
+  $('noRooms').classList.toggle('hidden',rooms.length>0);
+  $('roomCount').textContent=rooms.length?`${rooms.length}`:'';
+  for(const r of shown){ const row=document.createElement('div'); row.className='roomrow';
+    const meta=(r.tags||[]).map(t=>'#'+esc(t)).join('  ·  ')||'　';
+    row.innerHTML=`<div class="info"><div class="rn">${esc(r.name)}</div><div class="meta">${meta}</div></div>
+      <span class="cnt">${r.count}</span><button class="btn outline sm">入る</button>`;
+    row.querySelector('button').onclick=()=>joinRoom(r.name); list.appendChild(row); }
+}
+$('reloadBtn').onclick=()=>wsSend({type:'list'});
+$('createBtn').onclick=()=>{ const n=prompt('部屋の名前'); if(!n) return; const t=prompt('タグ（カンマ区切り・任意）','')||'';
+  joinRoom(n.trim(), t.split(',').map(s=>s.replace(/^#/,'').trim()).filter(Boolean).slice(0,4)); };
+$('himaBtn').onclick=()=>joinRoom('ひまなう',['雑談']);
+
+async function joinRoom(room,tags){
+  if(!localStream){ try{ localStream=await navigator.mediaDevices.getUserMedia(MIC_CONSTRAINTS); }
+    catch(err){ alert('マイクが使えない: '+err.message); return; } setupMeter('me',localStream); }
+  if(audioCtx&&audioCtx.state==='suspended') audioCtx.resume();
+  currentRoom=room; currentTags=tags||myTags.slice(0,4); raised.clear(); handRaised=false; muted=false;
+  $('callTitle').textContent=room; $('callSub').textContent=(currentTags.map(t=>'#'+t).join('  ·  '))||'　';
+  $('tiles').innerHTML=''; $('chatlog').innerHTML=''; $('handBtn').classList.remove('raised');
+  $('muteBtn').classList.add('on'); $('muteBtn').innerHTML=ICON.micOn; $('muteLbl').textContent='声 ON';
+  view('call'); setConn(false,'接続中'); addTile('me',myNick,true); updateAlone();
+  wsSend({type:'join',room,nick:myNick,tags:currentTags});
+}
+$('leaveBtn').onclick=()=>doLeave(); $('leaveTop').onclick=()=>doLeave();
+function doLeave(kicked){ if(!kicked) wsSend({type:'leave'}); for(const id of [...pcs.keys()]) removePeer(id);
+  currentRoom=null; hostId=null; raised.clear(); view('rooms'); wsSend({type:'list'}); }
+
+$('muteBtn').onclick=()=>{ muted=!muted; if(localStream) localStream.getAudioTracks().forEach(t=>t.enabled=!muted);
+  $('muteBtn').innerHTML=muted?ICON.micOff:ICON.micOn; $('muteBtn').classList.toggle('on',!muted);
+  $('muteLbl').textContent=muted?'声 OFF':'声 ON'; document.querySelector('.tile.me')?.classList.toggle('muted',muted); };
+$('handBtn').onclick=()=>{ handRaised=!handRaised; $('handBtn').classList.toggle('raised',handRaised);
+  handRaised?raised.add('me'):raised.delete('me'); refreshBadges(); wsSend({type:'room',kind:'hand',raised:handRaised}); };
+$('muteBtn').innerHTML=ICON.micOn;
+
+$('chatSend').onclick=sendChat; $('chatInput').addEventListener('keydown',e=>{if(e.key==='Enter')sendChat();});
+function sendChat(){ const t=$('chatInput').value.trim(); if(!t) return; $('chatInput').value=''; chatMsg('me',myNick,t); wsSend({type:'room',kind:'chat',text:t}); }
+function chatMsg(from,nick,text){ const l=$('chatlog'); const d=document.createElement('div'); d.className='msg';
+  const me=from==='me'?'（あなた）':''; const none=!nick||!nick.trim();
+  d.innerHTML=`<span class="who">${none?'名なし':esc(nick)}${me}</span>${esc(text)}`; l.appendChild(d); l.scrollTop=l.scrollHeight; }
+function sysMsg(t){ const l=$('chatlog'); const d=document.createElement('div'); d.className='msg sys'; d.textContent=t; l.appendChild(d); l.scrollTop=l.scrollHeight; }
+
+function createPeer(id,init){ if(pcs.has(id)) return pcs.get(id); const pc=new RTCPeerConnection(ICE); pcs.set(id,pc);
+  localStream.getTracks().forEach(t=>pc.addTrack(t,localStream));
+  pc.onicecandidate=e=>{ if(e.candidate) wsSend({type:'signal',to:id,data:{candidate:e.candidate}}); };
+  pc.ontrack=e=>{ let a=$('audio-'+id); if(!a){ a=document.createElement('audio'); a.id='audio-'+id; a.autoplay=true; document.body.appendChild(a);} a.srcObject=e.streams[0]; setupMeter(id,e.streams[0]); };
+  pc.onconnectionstatechange=()=>{ const st=document.querySelector(`#tile-${id} .st`);
+    if(st&&!st.classList.contains('host')) st.textContent=pc.connectionState==='connected'?'通話中':(pc.connectionState==='connecting'?'接続中':pc.connectionState);
+    if(['failed','closed','disconnected'].includes(pc.connectionState)) removePeer(id);
+    if([...pcs.values()].some(p=>p.connectionState==='connected')) setConn(true,'接続済み'); };
+  if(init){ pc.onnegotiationneeded=async()=>{ const o=await pc.createOffer(); await pc.setLocalDescription(o); wsSend({type:'signal',to:id,data:{sdp:pc.localDescription}}); }; }
+  return pc;
+}
+async function onSignal(from,data){ let pc=pcs.get(from);
+  if(data.sdp){ if(!pc) pc=createPeer(from,false); await pc.setRemoteDescription(data.sdp);
+    if(data.sdp.type==='offer'){ const a=await pc.createAnswer(); await pc.setLocalDescription(a); wsSend({type:'signal',to:from,data:{sdp:pc.localDescription}}); } }
+  else if(data.candidate&&pc){ try{ await pc.addIceCandidate(data.candidate);}catch(e){} } }
+function removePeer(id){ const pc=pcs.get(id); if(pc){pc.close();pcs.delete(id);} meters.delete(id); raised.delete(id);
+  $('audio-'+id)?.remove(); $('tile-'+id)?.remove(); }
+
+function addTile(id,nick,me=false){ const key=me?'me':id; if($('tile-'+key)) return;
+  const none=!nick||!nick.trim(); const label=me?(none?'あなた':esc(nick)+'（あなた）'):(none?'名なし':esc(nick));
+  const d=document.createElement('div'); d.id='tile-'+key; d.className='tile'+(me?' me':'');
+  d.innerHTML=`<div class="av">${none?'·':esc((nick||'·').trim()[0])}<span class="hand hidden">${ICON.hand}</span></div>
+    <div class="nm${none?' none':''}">${label}</div><div class="st">${me?'あなた':'接続中'}</div><div class="acts"></div>`;
+  $('tiles').appendChild(d); refreshBadges();
+}
+function refreshBadges(){ document.querySelectorAll('.tile').forEach(t=>{ const key=t.id.replace('tile-',''); const real=key==='me'?myId:key;
+  const st=t.querySelector('.st'); const isHost=real===hostId;
+  st.classList.toggle('host',isHost); if(isHost) st.textContent='ホスト';
+  t.querySelector('.hand').classList.toggle('hidden',!raised.has(key));
+  const acts=t.querySelector('.acts'); acts.innerHTML='';
+  if(key!=='me'){ const rep=document.createElement('button'); rep.title='通報'; rep.innerHTML=ICON.flag;
+    rep.onclick=()=>sysMsg(`${disp(nicks.get(key))} を通報しました（試作）`); acts.appendChild(rep);
+    if(myId===hostId){ const k=document.createElement('button'); k.title='退出させる'; k.innerHTML=ICON.kick;
+      k.onclick=()=>{ if(confirm('この人を退出させる？')) wsSend({type:'kick',id:key}); }; acts.appendChild(k); } } });
+}
+function updateAlone(){ $('aloneNote').classList.toggle('hidden', document.querySelectorAll('.tile:not(.me)').length>0); }
+function setConn(live,txt){ $('conn').classList.toggle('live',live); $('connTxt').textContent=txt; }
+
+function setupMeter(key,stream){ if(!audioCtx) return; try{ const s=audioCtx.createMediaStreamSource(stream); const an=audioCtx.createAnalyser(); an.fftSize=256;
+  s.connect(an); meters.set(key,{an,data:new Uint8Array(an.frequencyBinCount),env:0}); }catch(e){} }
+function tick(){ for(const [key,m] of meters){ m.an.getByteTimeDomainData(m.data); let s=0;
+  for(let i=0;i<m.data.length;i++){ const v=(m.data[i]-128)/128; s+=v*v; } let rms=Math.sqrt(s/m.data.length); if(key==='me'&&muted) rms=0;
+  m.env=rms>m.env?rms:m.env*0.85+rms*0.15; const t=$('tile-'+key); if(t) t.classList.toggle('talking',m.env>0.05); }
+  requestAnimationFrame(tick); }
+requestAnimationFrame(tick);
+
+const disp=(n)=>(!n||!n.trim())?'名なし':n;
+function esc(s){ return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+connect();
+if(new URLSearchParams(location.search).get('v')==='rooms') view('rooms');  // 検証用ディープリンク
+</script>
+</body>
+</html>

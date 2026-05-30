@@ -7,10 +7,18 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { WebSocketServer } from 'ws';
+import crypto from 'crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, 'public');
 const PORT = process.env.PORT || 8800;
+
+// 鍵: GATE_PASS が設定されていればパスフレーズゲートを有効化（静的配信もWSも遮断）
+const GATE_PASS = process.env.GATE_PASS || '';
+const GATE_TOKEN = GATE_PASS ? crypto.createHash('sha256').update('vr|' + GATE_PASS).digest('hex') : '';
+const gateCookie = (req) => { const m = (req.headers.cookie || '').match(/(?:^|;\s*)vr_gate=([a-f0-9]+)/); return m ? m[1] : ''; };
+const gateOk = (req) => !GATE_PASS || gateCookie(req) === GATE_TOKEN;
+const LOGIN_PAGE = (err) => `<!doctype html><html lang="ja"><meta charset="utf8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>voice rooms</title><body style="margin:0;height:100vh;display:flex;align-items:center;justify-content:center;background:#0a0a0a;color:#ececec;font-family:-apple-system,'Helvetica Neue',sans-serif"><form method="POST" action="/gate" style="width:280px;text-align:center"><div style="font-weight:600;font-size:18px;letter-spacing:.02em;margin-bottom:20px">voice rooms</div><input name="p" type="password" placeholder="鍵" autofocus autocomplete="current-password" style="width:100%;box-sizing:border-box;background:#0e0e0e;border:1px solid #242424;color:#ececec;border-radius:20px;padding:11px 14px;font-size:15px;outline:none"><button style="width:100%;margin-top:12px;background:#ff5e7e;color:#160a0c;font-weight:700;border:0;border-radius:22px;padding:12px;font-size:14px;cursor:pointer">入る</button>${err ? '<div style="color:#ff5e7e;font-size:12px;margin-top:10px">鍵が違う</div>' : ''}</form></body></html>`;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -36,6 +44,25 @@ function iceServers() {
 
 const server = http.createServer((req, res) => {
   let urlPath = decodeURIComponent(req.url.split('?')[0]);
+  // 鍵ゲート
+  if (GATE_PASS) {
+    if (req.method === 'POST' && urlPath === '/gate') {
+      let body = '';
+      req.on('data', (c) => { body += c; if (body.length > 4096) req.destroy(); });
+      req.on('end', () => {
+        const p = new URLSearchParams(body).get('p') || '';
+        if (p === GATE_PASS) {
+          res.writeHead(302, { 'Set-Cookie': `vr_gate=${GATE_TOKEN}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`, 'Location': '/' });
+          res.end();
+        } else {
+          res.writeHead(401, { 'Content-Type': 'text/html; charset=utf-8' });
+          res.end(LOGIN_PAGE(true));
+        }
+      });
+      return;
+    }
+    if (!gateOk(req)) { res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(LOGIN_PAGE(false)); return; }
+  }
   if (urlPath === '/ice') {
     res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
     res.end(JSON.stringify({ iceServers: iceServers() }));
@@ -51,7 +78,12 @@ const server = http.createServer((req, res) => {
   });
 });
 
-const wss = new WebSocketServer({ server });
+// WS も鍵ゲートを通す（cookie が無ければ upgrade を拒否）
+const wss = new WebSocketServer({ noServer: true });
+server.on('upgrade', (req, socket, head) => {
+  if (!gateOk(req)) { socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n'); socket.destroy(); return; }
+  wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+});
 
 let nextId = 1;
 const clients = new Map(); // id -> { ws, room, nick, tags }

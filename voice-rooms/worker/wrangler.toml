@@ -1,0 +1,28 @@
+name = "voice-rooms"
+main = "src/index.js"
+compatibility_date = "2026-05-01"
+
+# 静的配信（index.html）。Worker を先に通してゲートを必ず効かせる
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
+
+# シグナリングのハブ（全ルーム＋全接続を1つの Durable Object で捌く）
+[[durable_objects.bindings]]
+name = "HUB"
+class_name = "Hub"
+
+# 無料プランは SQLite バックエンドの DO のみ
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Hub"]
+
+# 24時間公開する独自ドメイン（デプロイ時に DNS/証明書を自動発行）
+[[routes]]
+pattern = "voice.emocutelab.com"
+custom_domain = true
+
+# 環境変数のメモ（鍵と TURN は secret/var で設定。ここには値を書かない）
+#  wrangler secret put GATE_PASS        … 鍵（パスフレーズ）
+#  TURN_URLS / TURN_USERNAME / TURN_CREDENTIAL … 任意（Cloudflare TURN 等）
