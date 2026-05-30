@@ -1,0 +1,31 @@
+# 再生成物（forge.py で作り直せる）
+wav/
+index.html
+
+# composer 生成物（composer.py で作り直せる）
+gen/
+
+# index_v2 と V2 生成物一式（forge_v2.py で作り直せる）
+index_v2.html
+v2/midi/
+v2/wav/
+v2/catalog.jsonl
+v2/seen.txt
+v2/counter.txt
+v2/run.log
+v2/endless.lock
+
+# V3 生成物
+index_v3.html
+v3/midi/
+v3/wav/
+v3/catalog.jsonl
+v3/seen.txt
+v3/counter.txt
+v3/run.log
+v3/endless.lock
+
+# その他の再生成物・キャッシュ
+gen.html
+midi/
+__pycache__/
