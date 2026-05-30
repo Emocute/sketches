@@ -25,3 +25,8 @@
 ## 注意
 - Worker 版の鍵は `wrangler secret put GATE_PASS`。未設定だと**ゲート無効＝公開**になるので、deploy 後に必ず secret を入れる（手順2に含む）。
 - DO は1インスタンス集約（mesh前提の小〜中規模で十分）。多人数化は将来 SFU（`docs/HOSTING_FREE_VS_PAID.md` 参照）。
+
+## ローカル検証済み（2026-05-30）
+- `wrangler deploy --dry-run`: 設定/ビルドOK（HUB DO 認識）
+- `wrangler dev`（ローカルWorkersランタイム）で全通過: 静的配信 / `/ice` / WSシグナリング(welcome・join・peers・host・signal中継・chat) / 鍵ゲート(鍵ページ・WS無cookie=401拒否・誤鍵401・正鍵302・cookieで本体)
+- 結論: 移植コードはデプロイ可能。残りは `wrangler login` → `wrangler deploy` のみ。
