@@ -1,0 +1,12 @@
+import { chromium } from 'playwright';
+import { CONFIG } from '../config.mjs';
+setTimeout(() => { console.log('TIMEOUT'); process.exit(1); }, 15000);
+const browser = await chromium.connectOverCDP(CONFIG.cdpUrl);
+const ctx = browser.contexts()[0];
+const page = ctx.pages().find(p => /conference/.test(p.url())) || ctx.pages()[0];
+console.log('url:', page.url());
+const btns = await page.evaluate(() => [...document.querySelectorAll('[class*="ConferenceCallScreen__toolbar__item"],[class*="sound"]')].map(e=>e.className.toString()).slice(0,12));
+console.log('toolbar:', JSON.stringify(btns));
+await page.screenshot({ path: 'assets/_peek.png' });
+console.log('shot');
+process.exit(0);

@@ -1,0 +1,10 @@
+import { chromium } from 'playwright';
+import { CONFIG } from '../config.mjs';
+setTimeout(() => process.exit(0), 8000);
+const browser = await chromium.connectOverCDP(CONFIG.cdpUrl);
+const ctx = browser.contexts()[0];
+const page = ctx.pages().find(p => /conference/.test(p.url())) || ctx.pages()[0];
+await page.keyboard.press('Escape').catch(()=>{});
+await page.waitForTimeout(400);
+await page.evaluate(()=>{ document.querySelector('.Modal__close, [class*="close"]')?.click(); }).catch(()=>{});
+process.exit(0);

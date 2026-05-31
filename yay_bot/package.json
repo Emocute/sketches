@@ -1,0 +1,14 @@
+{
+  "name": "yay_bot",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Yay group-chat bot (EmoCC persona) + music DJ via BlackHole",
+  "scripts": {
+    "setup": "node scripts/00_inspect.mjs",
+    "avatar": "node scripts/01_set_avatar.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.60.0"
+  }
+}
