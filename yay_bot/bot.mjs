@@ -5,7 +5,7 @@
 //   3) "/play <曲>" / "/yt <曲>" / "/sp <曲>" を音楽指示として処理
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { CONFIG } from './config.mjs';
-import { connectYay, openChatPanel, readMessages, postMessage } from './lib/yay.mjs';
+import { connectYay, openChatPanel, readMessages, postMessage, ensureCallAudio } from './lib/yay.mjs';
 import { emoccReply } from './lib/claude.mjs';
 import * as music from './lib/music.mjs';
 
@@ -24,15 +24,26 @@ function canReply() {
 function markReplied() { const t = Date.now(); replyTimes.push(t); lastReplyAt = t; }
 
 async function handleMusic(text) {
-  const m = text.match(/^\/(play|yt|sp)\s+(.+)/i);
+  const m = text.match(/^\/(play|yt|sp|stop|pause)\s*(.*)/i);
   if (!m) return null;
   const [, cmd, q] = m;
+  const c = cmd.toLowerCase();
   try {
     if (!music.__connected) { await music.connectMusic(); music.__connected = true; }
-    // 既定は Spotify（Premium=広告ゼロ）。/yt の時だけ YouTube
-    const useYT = cmd.toLowerCase() === 'yt';
-    const r = useYT ? await music.playYouTube(q) : await music.playSpotify(q);
-    return `▶ ${r.service}: ${q}${r.route?.ok ? '（通話へ）' : '（音声経路NG: ' + (r.route?.reason || '') + '）'}`;
+    if (c === 'stop' || c === 'pause') { await music.pause(); return '⏸ 停止'; }
+    if (!q.trim()) return '曲名を入れて（例: /play 曲名）';
+    // 既定は YouTube（<video> なので setSinkId が確実）。/sp の時だけ Spotify(DRMで弾かれ得る)
+    const useSpotify = c === 'sp';
+    // 再生前に通話マイク=BlackHole＋ミュート解除を自動保証（究の手作業を排除）
+    const mic = await ensureCallAudio(page).catch((e) => ({ ok: false, reason: e.message }));
+    const r = useSpotify ? await music.playSpotify(q) : await music.playYouTube(q);
+    const rt = r.route || {};
+    if (rt.ok && mic.ok) return `▶ ${r.service}: ${q} → 通話へ流れてる（出力 ${rt.device}）`;
+    // どこで死んだか具体的に返す
+    const why = [];
+    if (!mic.ok) why.push('通話マイク=BlackHole 未設定(' + (mic.mic?.reason || mic.reason || '') + ')');
+    if (!rt.ok) why.push(rt.reason || 'route不明');
+    return `△ ${r.service}: ${q} を再生したが経路NG → ${why.join(' / ')}`;
   } catch (e) {
     return `再生失敗: ${e.message}`;
   }
@@ -48,6 +59,13 @@ async function connect() {
 }
 
 async function main() {
+  // ★最優先で音楽ブラウザを掴む（誰も CDP 接続しないと約10秒でアイドル回収されるため、
+  //   Yay 接続より先に・リトライしながら即座に握って keepalive の起点にする）
+  for (let i = 0; i < 10 && !music.__connected; i++) {
+    try { await music.connectMusic(); music.__connected = true; console.log('[bot] 音楽ブラウザ接続（keepalive開始）'); }
+    catch { await sleep(1000); }
+  }
+  if (!music.__connected) console.log('[bot] 音楽ブラウザ未接続（/play 時に再試行）');
   await connect();
   const stateExisted = existsSync(CONFIG.stateFile);
   const seen = new Set(loadState().seen);
@@ -62,6 +80,18 @@ async function main() {
   for (;;) {
     let msgs = null;
     try {
+      // 通話が別タブで開いても拾えるよう、毎ループで /conference タブを探して掴み直す
+      try {
+        const conf = browserRef?.contexts().flatMap((c) => c.pages()).find((p) => /conference/.test(p.url()));
+        if (conf && conf !== page) { page = conf; console.log('[bot] 通話タブに切替:', page.url()); }
+      } catch {}
+      // 音楽ブラウザ keepalive（アイドル回収を防ぐ）。未接続/切断なら毎ループ再接続を試みる（自己修復）
+      if (music.__connected) {
+        if (!(await music.ping())) { music.__connected = false; }
+      }
+      if (!music.__connected) {
+        try { await music.connectMusic(); music.__connected = true; console.log('[bot] 音楽ブラウザ接続'); } catch {}
+      }
       await openChatPanel(page); // パネルが閉じてたら毎回開け直す（無言化防止）
       msgs = await readMessages(page);
     } catch (e) {
