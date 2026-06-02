@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<title>yay_bot Agora client</title>
+<!-- 全面API移行(2026-06-03): Yay通話のAgoraチャンネルに直接入る。
+     RTC=音楽publisher(BlackHole経路を廃止し音質◎)、RTM=通話チャット読/送。
+     SDKはnode_modules(UMD)からfile://でロード。Node側(lib/agora.mjs)がCDPでこのページを操作する。 -->
+<script src="./node_modules/agora-rtc-sdk-ng/AgoraRTC_N-production.js"></script>
+<script src="./node_modules/agora-rtm-sdk/agora-rtm.js"></script>
+</head>
+<body>
+<pre id="log">yay_bot agora client ready</pre>
+<script>
+(() => {
+  const S = {
+    appId: null, channel: null, uid: null,
+    rtc: null, rtm: null, rtmChannel: null,
+    musicTrack: null, joinedRtc: false, joinedRtm: false,
+    nowPlaying: null, log: [], inbox: [], errors: [],
+  };
+  window.__yay = S;
+  const logEl = document.getElementById('log');
+  const L = (...a) => {
+    const line = a.map((x) => (typeof x === 'object' ? JSON.stringify(x) : String(x))).join(' ');
+    S.log.push(`${Date.now()} ${line}`);
+    if (S.log.length > 500) S.log.splice(0, S.log.length - 500);
+    logEl.textContent = S.log.slice(-40).join('\n');
+    console.log('[yay]', line);
+  };
+  const err = (stage, e) => { const m = `${stage}: ${e?.message || e}`; S.errors.push(m); L('ERR', m); return m; };
+
+  // ===== RTC（音楽 publisher）=====
+  async function joinRtc({ appId, channel, rtcToken, uid }) {
+    S.appId = appId; S.channel = channel; S.uid = uid;
+    AgoraRTC.setLogLevel(2);
+    // 通話は communication。音声のみ publish。
+    S.rtc = AgoraRTC.createClient({ mode: 'rtc', codec: 'opus' });
+    S.rtc.on('user-published', async (user, mediaType) => {
+      // 他参加者の音は購読しない（DJなので聞く必要なし＋CPU節約）。必要なら有効化。
+      L('remote published', user.uid, mediaType);
+    });
+    S.rtc.on('exception', (ev) => L('rtc exception', ev.code, ev.msg));
+    S.rtc.on('connection-state-change', (cur, prev, reason) => L('rtc state', prev, '→', cur, reason || ''));
+    // uid は Yay が token を発行した時の値（数値）。token を尊重。
+    const joinedUid = await S.rtc.join(appId, channel, rtcToken || null, Number(uid) || null);
+    S.joinedRtc = true;
+    L('RTC joined', 'channel=' + channel, 'uid=' + joinedUid);
+    return { ok: true, uid: joinedUid };
+  }
+
+  async function playUrl(url, { loop = false } = {}) {
+    if (!S.joinedRtc) throw new Error('RTC未参加');
+    await stopMusic();
+    // source は URL文字列/File/ArrayBuffer 可。ローカルHTTP(127.0.0.1)配信のmp3を想定（CORS回避）。
+    S.musicTrack = await AgoraRTC.createBufferSourceAudioTrack({ source: url });
+    S.musicTrack.on('source-state-change', (st) => L('music state', st));
+    S.musicTrack.startProcessAudioBuffer({ loop });
+    await S.rtc.publish([S.musicTrack]);
+    S.nowPlaying = url;
+    L('▶ publish music', url);
+    return { ok: true, url };
+  }
+
+  async function stopMusic() {
+    if (!S.musicTrack) return { ok: true, idle: true };
+    try { await S.rtc.unpublish([S.musicTrack]); } catch (e) { err('unpublish', e); }
+    try { S.musicTrack.stopProcessAudioBuffer(); } catch {}
+    try { S.musicTrack.close(); } catch {}
+    S.musicTrack = null; S.nowPlaying = null;
+    L('⏸ stop music');
+    return { ok: true };
+  }
+  function pauseMusic() { if (S.musicTrack) { S.musicTrack.pauseProcessAudioBuffer(); L('pause'); } return { ok: !!S.musicTrack }; }
+  function resumeMusic() { if (S.musicTrack) { S.musicTrack.resumeProcessAudioBuffer(); L('resume'); } return { ok: !!S.musicTrack }; }
+
+  // ===== RTM（通話チャット）=====
+  // 注意: Yay通話チャットのRTMチャンネル名・メッセージ形式は実通話で要発見（スパイク）。
+  // 既定では RTC と同じ channel 名を購読し、来た生メッセージを inbox/log に貯める。
+  async function joinRtm({ appId, uid, rtmToken, channel }) {
+    const RTMNS = window.AgoraRTM || {};
+    const RTMCtor = RTMNS.RTM || (RTMNS.default && RTMNS.default.RTM);
+    if (!RTMCtor) throw new Error('AgoraRTM SDK未ロード');
+    S.rtm = new RTMCtor(appId, String(uid), { token: rtmToken });
+    S.rtm.addEventListener('status', (e) => L('rtm status', e.state, e.reason || ''));
+    S.rtm.addEventListener('message', (e) => {
+      // e: { channelName, channelType, publisher, message, messageType, ... }
+      const m = { ts: Date.now(), channel: e.channelName, type: e.channelType, publisher: e.publisher, message: e.message, messageType: e.messageType };
+      S.inbox.push(m);
+      if (S.inbox.length > 500) S.inbox.splice(0, S.inbox.length - 500);
+      L('RTM msg', e.publisher, '@' + e.channelName, typeof e.message === 'string' ? e.message.slice(0, 80) : '[non-string]');
+    });
+    await S.rtm.login();
+    S.joinedRtm = true;
+    S.rtmChannel = channel;
+    // MESSAGE チャンネルとして購読（通話チャットは message チャンネル想定）
+    await S.rtm.subscribe(channel, { withMessage: true, withPresence: true, withMetadata: false });
+    L('RTM joined+subscribed', channel);
+    return { ok: true, channel };
+  }
+  async function sendChat(text) {
+    if (!S.joinedRtm || !S.rtmChannel) throw new Error('RTM未参加');
+    await S.rtm.publish(S.rtmChannel, String(text), { channelType: 'MESSAGE' });
+    L('→ RTM send', String(text).slice(0, 80));
+    return { ok: true };
+  }
+
+  // ===== Node から呼ぶ公開 API =====
+  window.YayAgora = {
+    join: async (creds) => {
+      const out = { rtc: null, rtm: null };
+      try { out.rtc = await joinRtc(creds); } catch (e) { out.rtc = { ok: false, error: err('joinRtc', e) }; }
+      // RTM チャンネル名は creds.rtmChannel があればそれ、無ければ RTC channel を流用（発見対象）
+      try { out.rtm = await joinRtm({ appId: creds.appId, uid: creds.uid, rtmToken: creds.rtmToken || creds.rtm_token, channel: creds.rtmChannel || creds.channel }); }
+      catch (e) { out.rtm = { ok: false, error: err('joinRtm', e) }; }
+      return out;
+    },
+    playUrl, stopMusic, pauseMusic, resumeMusic, sendChat,
+    // Node が polling で吸う
+    drainInbox: () => { const x = S.inbox.slice(); S.inbox.length = 0; return x; },
+    peekInbox: () => S.inbox.slice(),
+    status: () => ({ joinedRtc: S.joinedRtc, joinedRtm: S.joinedRtm, channel: S.channel, rtmChannel: S.rtmChannel, uid: S.uid, nowPlaying: S.nowPlaying, errors: S.errors.slice(-10), inbox: S.inbox.length }),
+    tail: (n = 60) => S.log.slice(-n),
+    leave: async () => { try { await stopMusic(); } catch {} try { await S.rtc?.leave(); } catch {} try { await S.rtm?.logout(); } catch {} S.joinedRtc = S.joinedRtm = false; return { ok: true }; },
+  };
+  L('YayAgora API ready', 'rtc=' + (typeof AgoraRTC !== 'undefined'), 'rtm=' + (typeof AgoraRTM !== 'undefined'));
+})();
+</script>
+</body>
+</html>

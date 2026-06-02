@@ -1,5 +1,9 @@
 node_modules/
+.venv/
+_music_cache/
 state.json
 .yay_token
+.yay_token.*
 .yay_cable_token
+.yay_device
 assets/_*.png
