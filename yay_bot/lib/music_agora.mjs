@@ -39,7 +39,21 @@ export async function ytdlpToFile(query, { timeout = 120000 } = {}) {
   return { path: made, cached: false, query };
 }
 
-// /play 入力 → { path } （ローカル絶対パス）
+// /play 入力 → 直リンク音声URL（DLしない。yt-dlp -g で一瞬取るだけ＝real-time配信用）。
+//   既に直リンク音声URLならそのまま返す。曲名/ページURLは yt-dlp -g で bestaudio の直URLに解決。
+export async function resolveStreamUrl(query, { timeout = 30000 } = {}) {
+  const q = (query || '').trim();
+  if (!q) throw new Error('曲名が空');
+  if (/^https?:\/\/.+\.(mp3|m4a|aac|ogg|opus|wav|flac)(\?|$)/i.test(q)) return { url: q, query: q };
+  const target = /^https?:\/\//i.test(q) ? q : `ytsearch1:${q}`;
+  // m4a(itag140)優先。-g は URL のみ出力（DLなし）。
+  const out = await sh('yt-dlp', ['-g', '-f', 'bestaudio[ext=m4a]/bestaudio/best', '--no-playlist', target], { timeout });
+  const url = (out || '').trim().split('\n').filter(Boolean).pop();
+  if (!url || !/^https?:\/\//.test(url)) throw new Error('yt-dlp -g がURLを返さない');
+  return { url, query: q };
+}
+
+// /play 入力 → { path } （ローカル絶対パス、旧DL方式。フォールバック用に残置）
 export async function resolve(query) {
   const q = (query || '').trim();
   if (!q) throw new Error('曲名が空');

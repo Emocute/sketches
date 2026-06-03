@@ -53,30 +53,72 @@
     return { ok: true, uid: joinedUid };
   }
 
+  // 共通: ライブ MediaStreamTrack を Agora custom track として publish（real-time配信の核）。
+  async function publishLiveTrack(mst, label) {
+    S.musicTrack = AgoraRTC.createCustomAudioTrack({ mediaStreamTrack: mst });
+    await S.rtc.publish([S.musicTrack]);
+    S.nowPlaying = label;
+    L('▶ live publish', label);
+    return { ok: true, label };
+  }
+
+  // /play: URL(ローカルproxy経由の直リンク)を <audio> で progressive 再生し、
+  //   captureStream で生トラックを取って publish。全DLせず即流れる＝real-time。
   async function playUrl(url, { loop = false } = {}) {
     if (!S.joinedRtc) throw new Error('RTC未参加');
     await stopMusic();
-    // source は URL文字列/File/ArrayBuffer 可。ローカルHTTP(127.0.0.1)配信のmp3を想定（CORS回避）。
-    S.musicTrack = await AgoraRTC.createBufferSourceAudioTrack({ source: url });
-    S.musicTrack.on('source-state-change', (st) => L('music state', st));
-    S.musicTrack.startProcessAudioBuffer({ loop });
-    await S.rtc.publish([S.musicTrack]);
-    S.nowPlaying = url;
-    L('▶ publish music', url);
-    return { ok: true, url };
+    const a = new Audio();
+    a.crossOrigin = 'anonymous';   // proxyがCORS付与＝captureStreamがtaintされない
+    a.preload = 'auto'; a.loop = loop; a.src = url;
+    S.audioEl = a;
+    await new Promise((res, rej) => {
+      const ok = () => { cleanup(); res(); };
+      const ng = () => { cleanup(); rej(new Error('audio読込失敗: ' + (a.error?.code || '?'))); };
+      const cleanup = () => { a.removeEventListener('canplay', ok); a.removeEventListener('error', ng); };
+      a.addEventListener('canplay', ok); a.addEventListener('error', ng);
+      setTimeout(ok, 8000); // canplay来なくても8秒で見切り発車（progressiveなので流れ始める）
+    });
+    await a.play();
+    const stream = a.captureStream ? a.captureStream() : a.mozCaptureStream();
+    const [mst] = stream.getAudioTracks();
+    if (!mst) throw new Error('captureStream: 音声トラック無し');
+    a.addEventListener('ended', () => { if (!a.loop) { L('music ended'); stopMusic().catch(() => {}); } });
+    return publishLiveTrack(mst, url);
+  }
+
+  // /live: システム音声入力（BlackHole等）を getUserMedia で掴んで publish。yt-dlp不要・完全real-time。
+  async function playLive(match) {
+    if (!S.joinedRtc) throw new Error('RTC未参加');
+    await stopMusic();
+    let constraints = { audio: true };
+    if (match) {
+      const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
+      const hit = devs.find((d) => new RegExp(match, 'i').test(d.label));
+      if (hit) constraints = { audio: { deviceId: { exact: hit.deviceId } } };
+      else L('playLive: 該当入力なし match=' + match + ' / 既定入力を使用');
+    }
+    const ms = await navigator.mediaDevices.getUserMedia(constraints);
+    const [mst] = ms.getAudioTracks();
+    if (!mst) throw new Error('getUserMedia: 音声トラック無し');
+    return publishLiveTrack(mst, 'live:' + (mst.label || match || 'default'));
+  }
+
+  async function listAudioInputs() {
+    const devs = await navigator.mediaDevices.enumerateDevices();
+    return devs.filter((d) => d.kind === 'audioinput').map((d) => ({ id: d.deviceId, label: d.label }));
   }
 
   async function stopMusic() {
-    if (!S.musicTrack) return { ok: true, idle: true };
-    try { await S.rtc.unpublish([S.musicTrack]); } catch (e) { err('unpublish', e); }
-    try { S.musicTrack.stopProcessAudioBuffer(); } catch {}
-    try { S.musicTrack.close(); } catch {}
-    S.musicTrack = null; S.nowPlaying = null;
+    if (!S.musicTrack && !S.audioEl) return { ok: true, idle: true };
+    try { if (S.musicTrack) await S.rtc.unpublish([S.musicTrack]); } catch (e) { err('unpublish', e); }
+    try { S.musicTrack?.close(); } catch {}
+    try { if (S.audioEl) { S.audioEl.pause(); S.audioEl.src = ''; } } catch {}
+    S.musicTrack = null; S.audioEl = null; S.nowPlaying = null;
     L('⏸ stop music');
     return { ok: true };
   }
-  function pauseMusic() { if (S.musicTrack) { S.musicTrack.pauseProcessAudioBuffer(); L('pause'); } return { ok: !!S.musicTrack }; }
-  function resumeMusic() { if (S.musicTrack) { S.musicTrack.resumeProcessAudioBuffer(); L('resume'); } return { ok: !!S.musicTrack }; }
+  function pauseMusic() { try { S.audioEl?.pause(); } catch {} L('pause'); return { ok: !!S.audioEl }; }
+  function resumeMusic() { try { S.audioEl?.play(); } catch {} L('resume'); return { ok: !!S.audioEl }; }
 
   // ===== RTM（通話チャット）=====
   // 注意: Yay通話チャットのRTMチャンネル名・メッセージ形式は実通話で要発見（スパイク）。
@@ -125,7 +167,7 @@
       catch (e) { out.rtm = { ok: false, error: err('joinRtm', e) }; }
       return out;
     },
-    playUrl, stopMusic, pauseMusic, resumeMusic, sendChat,
+    playUrl, playLive, listAudioInputs, stopMusic, pauseMusic, resumeMusic, sendChat,
     // Node が polling で吸う
     drainInbox: () => { const x = S.inbox.slice(); S.inbox.length = 0; return x; },
     peekInbox: () => S.inbox.slice(),

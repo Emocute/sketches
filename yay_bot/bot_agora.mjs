@@ -63,26 +63,35 @@ function parseMsg(m) {
 let page, fileBase, creds;
 
 async function handleMusic(text) {
-  const mm = text.match(/^\/(play|yt|stop|pause|resume)\s*(.*)/i);
+  const mm = text.match(/^\/(play|yt|live|stop|pause|resume)\s*(.*)/i);
   if (!mm) return null;
   const [, cmdRaw, q] = mm; const cmd = cmdRaw.toLowerCase();
   try {
     if (cmd === 'stop') { await agora.stopMusic(page); return '⏸ 停止'; }
     if (cmd === 'pause') { await agora.pauseMusic(page); return '⏸ 一時停止'; }
     if (cmd === 'resume') { await agora.resumeMusic(page); return '▶ 再開'; }
+    if (cmd === 'live') { await agora.playLive(page, q.trim() || null); return `▶ システム音声を配信中${q.trim() ? '（' + q.trim() + '）' : ''}`; }
     if (!q.trim()) return '曲名を入れて（例: /play 曲名）';
-    const r = await music.resolve(q);
-    const url = r.directUrl || agora.fileUrl(fileBase, r.path);
-    await agora.playUrl(page, url);
-    return `▶ ${q} を通話に流してる${r.cached ? '（cache）' : ''}`;
+    // real-time: yt-dlp -g で直URLを一瞬で取り（DLなし）、ローカルproxy経由でprogressive配信。
+    const r = await music.resolveStreamUrl(q);
+    await agora.playUrl(page, agora.streamUrl(fileBase, r.url));
+    return `▶ ${q} を通話に流してる`;
   } catch (e) { return `再生失敗: ${e.message}`; }
 }
 
 async function main() {
-  console.log('[bot] creds 取得中…');
-  creds = await fetchCreds();
-  if (!creds.ok) throw new Error('creds 取得失敗: ' + JSON.stringify(creds));
-  console.log('[bot] creds ok channel=%s uid=%s rtm=%s', creds.channel, creds.uid, creds.rtm_token ? 'yes' : 'no');
+  // 通話待ち受け: Emo が通話に入る（active で拾える）まで polling し、見つけたら自動 join。
+  //   get_active_call_post(SELF_UID) を叩くので polling は控えめ（既定15秒）に。
+  const WAIT_MS = Number(process.env.YAY_WAIT_MS || 15000);
+  console.log('[bot] 通話待ち受け開始（Emoが通話に入ったら自動参加）…');
+  for (;;) {
+    creds = await fetchCreds().catch((e) => ({ ok: false, error: e.message }));
+    if (creds && creds.ok) break;
+    const reason = creds?.error || '不明';
+    if (!/参加中の通話が無い/.test(String(reason))) console.log('[bot] creds 取得待ち:', reason);
+    await sleep(WAIT_MS);
+  }
+  console.log('[bot] ✓ 通話発見→自動参加 channel=%s uid=%s rtm=%s', creds.channel, creds.uid, creds.rtm_token ? 'yes' : 'no');
 
   const fs = await agora.startFileServer(0);
   fileBase = `http://127.0.0.1:${fs.port}`;
@@ -104,6 +113,13 @@ async function main() {
   const stateExisted = existsSync(CONFIG.stateFile);
   const seen = new Set(loadState().seen);
   console.log('[bot] 稼働開始', stateExisted ? '(seen継承)' : '(初回)');
+
+  // テスト再生: YAY_TEST_PLAY="曲名" で起動時に1曲だけ流す（RTC publish 経路の実機確認用）。
+  if (process.env.YAY_TEST_PLAY && joined.rtc?.ok) {
+    console.log('[bot] ▶ TEST_PLAY:', process.env.YAY_TEST_PLAY);
+    const r = await handleMusic('/play ' + process.env.YAY_TEST_PLAY);
+    console.log('[bot] TEST_PLAY 結果:', r);
+  }
 
   for (;;) {
     let raw = [];

@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-06-03 12:40 JST — 通話自動参加・音楽配信をreal-time化（DL方式廃止）
+
+### 通話自動参加（待ち受け）
+- bot を「Emo が通話に入る（`get_active_call_post` で拾える）まで polling→見つけたら自動 join」に変更。
+  通話が無い間 crash-loop してたのを待ち受けループ化（既定15秒間隔、`YAY_WAIT_MS`）。
+- 実走確認: Emo が通話参加→bot が自動 join（RTC/RTM 両方 ok、他参加者の音声 remote published 受信）。
+- **制約（既知）**: bot は Emo(11320230) 自身として入るので、ブラウザ/スマホの Emo と**同一アカウント＝衝突**
+  （後から入った方が前を蹴る）。観測したいなら別アカウント推奨。yaylib に `join_conference_call` は無く
+  `get_conference_call(call_id)` を呼ぶ＝参加スロット(conference_call_user_uuid)割当＝join。
+
+### 音楽配信を real-time 化（yt-dlp 全件DL廃止）
+- 旧: `yt-dlp` で全曲DL→`createBufferSourceAudioTrack`。「lofi hip hop」が10時間配信に当たり400MB DL→激遅で却下。
+- 新（real-time）:
+  - `/play 曲名|URL`: `yt-dlp -g` で直URLを一瞬取得（DLなし）→ ローカルHTTPで pipe 中継（`/stream?u=`、CORS付与、
+    ディスク保存なし）→ `<audio>` progressive 再生 → `captureStream()` → `createCustomAudioTrack` で publish。
+    起動 ~数秒・全DLしない。検証: headless Chromium で track が readyState=live、currentTime>0 を確認。
+  - `/live [入力名]`: `getUserMedia`（BlackHole等のシステム音声）を直接 publish。yt-dlp 完全不要。
+  - 共通コア `publishLiveTrack(mediaStreamTrack)`。captureStream を tainted にしないため proxy が CORS 付与。
+- 旧DL方式 `resolve`/`ytdlpToFile` は残置（フォールバック、未使用）。
+
+### 残
+- real-time `/play` を**生通話で**最終確認（Emo が通話に居る状態で /play→他参加者に聞こえるか）。
+- 同一アカウント衝突の解（bot 専用アカウント or 観測は別アカ）を究と決める。
+
+---
+
 ## 2026-06-03 11:55 JST — 認証ブロッカー解決（X bot 検知回避）・1コマンド再ログイン化
 
 **唯一の壁だった「有効トークン取得」を解決。** 効いた手順を `relogin.sh` に仕組み化した。

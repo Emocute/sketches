@@ -17,12 +17,38 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 const MIME = { '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.ogg': 'audio/ogg', '.opus': 'audio/ogg', '.wav': 'audio/wav', '.flac': 'audio/flac' };
 
-// ローカル音源を 127.0.0.1 で配信。?p=<絶対パス> をRange対応で返す（CORS全許可）。
+// ローカル音源を 127.0.0.1 で配信。
+//   /audio?p=<絶対パス>  … ローカルファイルを Range 対応で返す
+//   /stream?u=<remoteURL> … 遠隔URL(googlevideo等)を pipe で中継（ディスク保存なし＝real-time）。
+//                            captureStream を tainted にしないため CORS を付ける。
 export function startFileServer(port = 0) {
   return new Promise((resolveP) => {
-    const server = http.createServer((req, res) => {
+    const server = http.createServer(async (req, res) => {
       try {
         const u = new URL(req.url, 'http://127.0.0.1');
+        // --- 遠隔URLストリーム中継（real-time、全DLしない） ---
+        if (u.pathname === '/stream') {
+          const remote = u.searchParams.get('u');
+          if (!remote) { res.writeHead(400); return res.end('no u'); }
+          const fwd = {};
+          if (req.headers.range) fwd['Range'] = req.headers.range;
+          // googlevideo は素直な UA を好む
+          fwd['User-Agent'] = 'Mozilla/5.0';
+          const up = await fetch(remote, { headers: fwd });
+          const h = {
+            'Content-Type': up.headers.get('content-type') || 'audio/mp4',
+            'Access-Control-Allow-Origin': '*',
+            'Accept-Ranges': 'bytes',
+          };
+          const clen = up.headers.get('content-length'); if (clen) h['Content-Length'] = clen;
+          const crange = up.headers.get('content-range'); if (crange) h['Content-Range'] = crange;
+          res.writeHead(up.status, h);
+          if (!up.body) return res.end();
+          const reader = up.body.getReader();
+          for (;;) { const { done, value } = await reader.read(); if (done) break; res.write(Buffer.from(value)); }
+          return res.end();
+        }
+        // --- ローカルファイル配信 ---
         const p = u.searchParams.get('p');
         if (!p || !existsSync(p) || !statSync(p).isFile()) { res.writeHead(404); return res.end('no file'); }
         const size = statSync(p).size;
@@ -45,6 +71,7 @@ export function startFileServer(port = 0) {
 }
 
 export function fileUrl(base, absPath) { return `${base}/audio?p=${encodeURIComponent(pathResolve(absPath))}`; }
+export function streamUrl(base, remoteUrl) { return `${base}/stream?u=${encodeURIComponent(remoteUrl)}`; }
 
 export async function launchAgora({ headless = true } = {}) {
   const browser = await chromium.launch({
@@ -67,6 +94,8 @@ export async function launchAgora({ headless = true } = {}) {
 const ev = (page, fn, ...args) => page.evaluate(fn, ...args);
 export const join = (page, creds) => ev(page, (c) => window.YayAgora.join(c), creds);
 export const playUrl = (page, url, opts) => ev(page, ([u, o]) => window.YayAgora.playUrl(u, o), [url, opts || {}]);
+export const playLive = (page, match) => ev(page, (m) => window.YayAgora.playLive(m), match || null);
+export const listAudioInputs = (page) => ev(page, () => window.YayAgora.listAudioInputs());
 export const stopMusic = (page) => ev(page, () => window.YayAgora.stopMusic());
 export const pauseMusic = (page) => ev(page, () => window.YayAgora.pauseMusic());
 export const resumeMusic = (page) => ev(page, () => window.YayAgora.resumeMusic());
