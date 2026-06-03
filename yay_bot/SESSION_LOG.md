@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-06-03 14:xx JST — RTMフォーマット確定・なりきり人格・自発おしゃべり・チャットトグル
+
+### RTM メッセージ形式を生通話で確定（SESSION_LOG「要発見」だった件）
+- 受信生メッセージ = **`<type> <JSON>`**。チャットは `chat {"text":"...","created_at_seconds":<unix>,"id":"<yay_uid>_<ms>"}`。
+- 旧 `parseMsg` は型プレフィックス(`chat `)を剥がせず: ①`/play`等が `/` 判定に当たらずコマンド未発火 ②本文がJSONごと残る。
+  → `parseMsg` で `^(\w+)\s+([\[{]...)` で型を分離→JSON解析→`text` 抽出。`chat` 以外（presence等）は無視。dedup id は payload.id 優先。
+- **送信も生テキストだとYayクライアントが表示できない**（究の画面に出ない原因）。`yayEnvelope()` で受信と同形 `chat {json}` に包んで publish（`sendYayChat`）。全送信経路を置換。
+
+### なりきり人格（`lib/claude.mjs`）
+- `PERSONAS.zundamon`（語尾「〜のだ」、一人称ぼく/ずんだもん）追加。`emoccReply(ctx,{system})` で system 差し替え可に。
+- `idleChatter(ctx,{system})` 新設＝場が静かな時に自分から一言を生成。
+
+### 自発おしゃべり（中スパン）
+- 人格ON時のみ、直近活動から `IDLE_QUIET`(35s) 空き＋`IDLE_MIN〜MAX`(既定90〜150s)で独り言/話題振り。`YAY_IDLE_MIN/MAX/QUIET` で調整。
+- ローリング会話履歴 `recentLines` を返信/独り言の文脈に共用。
+
+### チャットからトグル（再起動不要）
+- 人格を実行時変数化（`personaKey/personaSys`、idleスケジュールもモジュールスコープ）。
+- コマンド: `/zunda`=ON/OFFトグル、`/mode zunda|off`=明示切替/通常復帰、`/mode`=現状表示。ON時は一発目を即発火。
+- **既定OFF**（究が「ON」と言うまで人格は出さない方針）。`YAY_PERSONA=zundamon` で起動時ONも可。
+- `/h` ヘルプを改行付き複数行に整形。
+
+### 運用メモ
+- 通話が落ちても bot は待ち受けに戻り、究が入り直すと自動再参加（実走で確認）。
+- 停止はクリーン（今回 tmux kill 後の孤児Chromium 0）。残注意は下記「停止の注意」。
+
+---
+
 ## 2026-06-03 13:xx JST — 音量制御・汎用コマンド一式（1-2文字エイリアス）・キュー・チャット合体
 
 ### 音量

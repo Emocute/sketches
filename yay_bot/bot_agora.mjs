@@ -12,13 +12,25 @@ import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { CONFIG } from './config.mjs';
-import { emoccReply } from './lib/claude.mjs';
+import { emoccReply, idleChatter, PERSONAS } from './lib/claude.mjs';
 import * as agora from './lib/agora.mjs';
 import * as music from './lib/music_agora.mjs';
 
 const PY = fileURLToPath(new URL('./.venv/bin/python', import.meta.url));
 const API = fileURLToPath(new URL('./yay_api.py', import.meta.url));
 const SELF_UID = String(process.env.YAY_SELF_UID || '11320230');
+// なりきり人格（YAY_PERSONA=zundamon 等が初期値）。チャットから /mode で実行時切替できる。
+let personaKey = String(process.env.YAY_PERSONA || '').toLowerCase();
+let personaSys = PERSONAS[personaKey] || undefined;
+// 人格名の別名（日本語/略称 → canonical key）
+const PERSONA_ALIAS = { zunda: 'zundamon', zundamon: 'zundamon', 'ずんだ': 'zundamon', 'ずんだもん': 'zundamon' };
+// 自発おしゃべりのスケジュール（モジュールスコープ＝/mode から即発火させられる）
+let lastActivityAt = 0, nextIdleAt = 0;
+// 自発おしゃべりの間隔（中スパン）。YAY_IDLE_MIN/MAX 秒で上書き可。0=無効。
+const IDLE_MIN_MS = Number(process.env.YAY_IDLE_MIN || 90) * 1000;
+const IDLE_MAX_MS = Number(process.env.YAY_IDLE_MAX || 150) * 1000;
+const IDLE_QUIET_MS = Number(process.env.YAY_IDLE_QUIET || 35) * 1000; // 直近の活動からこの時間空いたら独り言可
+const idleSpan = () => IDLE_MIN_MS + Math.floor(Math.random() * Math.max(1, IDLE_MAX_MS - IDLE_MIN_MS));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const loadState = () => (existsSync(CONFIG.stateFile) ? JSON.parse(readFileSync(CONFIG.stateFile, 'utf8')) : { seen: [] });
 const saveState = (s) => writeFileSync(CONFIG.stateFile, JSON.stringify(s, null, 2));
@@ -50,18 +62,34 @@ const canReply = () => {
 };
 const markReplied = () => { const t = Date.now(); replyTimes.push(t); lastReplyAt = t; };
 
-// RTM の生メッセージ → {id, author, text}。形式未知なので寛容にパース（スパイクで要調整）。
+// RTM の生メッセージ → {id, author, text, type}。
+// Yay通話チャットの実フォーマット（2026-06-03 生通話で発見）:
+//   "<type> <JSON>"  例: `chat {"text":"...","created_at_seconds":1780492724,"id":"9714060_..."}`
+//   先頭の型トークン（chat 等）を剥がしてから JSON を解いて本文(text)を拾う。
+//   chat 以外（presence/system 等）は本文扱いしない。
 function parseMsg(m) {
-  let text = m.message, author = String(m.publisher ?? '?');
-  if (typeof text !== 'string') { try { text = JSON.stringify(text); } catch { text = String(text); } }
-  // JSONで包まれている場合は本文フィールドを拾う
+  let raw = m.message, author = String(m.publisher ?? '?');
+  if (typeof raw !== 'string') { try { raw = JSON.stringify(raw); } catch { raw = String(raw); } }
+  let type = 'chat', body = raw;
+  const mt = /^(\w+)\s+([\[{][\s\S]*)$/.exec(raw);   // "chat {...}" の型プレフィックスを分離
+  if (mt) { type = mt[1].toLowerCase(); body = mt[2]; }
+  let text = body, msgId = null;
   try {
-    const j = JSON.parse(text);
-    if (j && typeof j === 'object') text = j.text ?? j.message ?? j.content ?? j.body ?? text;
+    const j = JSON.parse(body);
+    if (j && typeof j === 'object') { text = j.text ?? j.message ?? j.content ?? j.body ?? ''; msgId = j.id ?? null; }
   } catch {}
+  if (type !== 'chat') text = '';   // チャット以外は無視
   text = String(text || '').trim();
-  return { id: `${author}|${m.ts}|${text}`, author, text };
+  return { id: msgId ? `id:${msgId}` : `${author}|${m.ts}|${text}`, author, text, type };
 }
+
+// Yayが表示できる送信エンベロープ。受信と同形式: `chat {"text","created_at_seconds","id"}`。
+function yayEnvelope(text) {
+  const now = Date.now();
+  const payload = { text: String(text), created_at_seconds: Math.floor(now / 1000), id: `${SELF_UID}_${now}` };
+  return 'chat ' + JSON.stringify(payload);
+}
+const sendYayChat = (p, text) => agora.sendChat(p, yayEnvelope(text));
 
 let page, fileBase, creds;
 
@@ -87,11 +115,28 @@ const CMD = {
   clear:  ['clear', 'cls', 'c'],
   ping:   ['ping', 'pi'],
   leave:  ['leave', 'bye'],
+  mode:   ['mode', 'm', 'persona'],
+  zunda:  ['zunda', 'ずんだ'],
 };
 const ALIAS = {}; for (const [k, vs] of Object.entries(CMD)) for (const v of vs) ALIAS[v] = k;
-const HELP =
-  '🎧 /p 曲=今すぐ /q 曲=追加 /s=次 /x=停止 /ps=一時停止 /r=再開 ' +
-  '/v 0-100=音量 /np=再生中 /l=ループ /lv=システム音声 /d=入力 /c=キュー消去 /h=help';
+const HELP = [
+  '🎧 コマンド一覧',
+  '/p 曲 = 今すぐ再生',
+  '/q 曲 = キューに追加',
+  '/s = 次へ  /x = 停止  /ps = 一時停止  /r = 再開',
+  '/v 0-100 = 音量  /np = 再生中  /l = ループ',
+  '/lv = システム音声  /d = 入力  /c = キュー消去',
+  '/zunda = ずんだもんON/OFF  /mode off = 通常',
+  '/h = ヘルプ',
+].join('\n');
+
+// 人格の実行時切替（再起動不要）。ON にしたら起動直後と同じく一発目を即出す。
+function setPersona(key) {
+  personaKey = key || '';
+  personaSys = personaKey ? PERSONAS[personaKey] : undefined;
+  if (personaSys) { lastActivityAt = Date.now() - IDLE_QUIET_MS - 1; nextIdleAt = Date.now(); return `🎭 ${personaKey} モードON（自発おしゃべり ${IDLE_MIN_MS / 1000}〜${IDLE_MAX_MS / 1000}s）`; }
+  return '🎭 通常モードに戻した（自発おしゃべりOFF）';
+}
 
 // 1曲を解決→publish（real-time）
 async function startTrack(query) {
@@ -138,6 +183,16 @@ async function handleCommand(text) {
       case 'live': await agora.playLive(page, q || null); nowQuery = 'live'; return `▶ システム音声配信中${q ? '（' + q + '）' : ''}`;
       case 'dev': { const ds = await agora.listAudioInputs(page); return '🎤 入力: ' + (ds.map((d) => d.label).filter(Boolean).join(' / ') || 'なし'); }
       case 'leave': await agora.leave(page); nowQuery = null; queue = []; return '👋 通話から抜けた';
+      case 'mode': {
+        const want = q.toLowerCase();
+        if (!want || want === '?') return personaKey ? `🎭 現在: ${personaKey}（自発おしゃべりON）` : '🎭 現在: 通常（自発おしゃべりOFF）';
+        if (['off', 'normal', 'plain', 'なし', '通常', 'オフ'].includes(want)) return setPersona('');
+        const key = PERSONA_ALIAS[want] || (PERSONAS[want] ? want : null);
+        if (!key) return `そのモードは無い（使えるの: ${Object.keys(PERSONAS).join(', ')} / off）`;
+        return setPersona(key);
+      }
+      case 'zunda':  // トグル
+        return setPersona(personaKey === 'zundamon' ? '' : 'zundamon');
       default: return null;
     }
   } catch (e) { return `エラー: ${e.message}`; }
@@ -174,12 +229,28 @@ async function main() {
   if (!joined.rtc?.ok) console.error('[bot] ⚠ RTC参加失敗（音楽流せない）:', joined.rtc?.error);
   if (!joined.rtm?.ok) console.error('[bot] ⚠ RTM参加失敗（チャット読/送不可）:', joined.rtm?.error, '→ RTMチャンネル名/形式の発見が必要');
 
+  // ★自己判定は RTM 発言者ID = conference_call_user_uuid（Yay uid ではない）。
+  //   これを誤ると bot が自分の発言に返信して無限ループする（2026-06-03 修正）。
+  const SELF_RTM = String(creds.conference_call_user_uuid || SELF_UID);
+  console.log('[bot] self RTM id =', SELF_RTM);
+
   // 初期音量（既定15、YAY_MUSIC_VOL で上書き可）
   if (process.env.YAY_MUSIC_VOL) { const r = await agora.setMusicVolume(page, process.env.YAY_MUSIC_VOL); console.log('[bot] 初期音量', r?.vol); }
+
+  // join 直後の inbox を一掃（参加前の残/エコーに反応しない）
+  try { await agora.drainInbox(page); } catch {}
 
   const stateExisted = existsSync(CONFIG.stateFile);
   const seen = new Set(loadState().seen);
   console.log('[bot] 稼働開始', stateExisted ? '(seen継承)' : '(初回)');
+  console.log('[bot] 人格:', personaKey || '通常', personaSys ? `/ 自発おしゃべり ${IDLE_MIN_MS / 1000}〜${IDLE_MAX_MS / 1000}s` : '/ 自発OFF', '（チャットで /zunda 切替）');
+
+  // 自発おしゃべり用の状態
+  const recentLines = [];       // ローリング会話履歴（古→新）
+  const pushLine = (s) => { recentLines.push(s); if (recentLines.length > 14) recentLines.shift(); };
+  // 人格ONで起動した場合は直後に一発目を出す（以降は中スパン）。OFFなら通常待機。
+  lastActivityAt = personaSys ? Date.now() - IDLE_QUIET_MS - 1 : Date.now();
+  nextIdleAt = Date.now();
 
   // テスト再生: YAY_TEST_PLAY="曲名" で起動時に1曲だけ流す（RTC publish 経路の実機確認用）。
   if (process.env.YAY_TEST_PLAY && joined.rtc?.ok) {
@@ -197,32 +268,48 @@ async function main() {
           if (queue.length) {
             const r = await startTrack(queue.shift());
             console.log('  ▶ next:', r);
-            if (canReply()) { await agora.sendChat(page, r).catch(() => {}); markReplied(); }
+            if (canReply()) { await sendYayChat(page, r).catch(() => {}); markReplied(); }
           } else if (nowQuery && nowQuery !== 'live') { nowQuery = null; }
         }
       } catch {}
     }
 
+    // 自発おしゃべり（人格指定時のみ）: 場が静かなら中スパンで自分から一言
+    if (personaSys && IDLE_MAX_MS > 0 && Date.now() >= nextIdleAt
+        && (Date.now() - lastActivityAt) > IDLE_QUIET_MS && canReply()) {
+      try {
+        const ctx = recentLines.slice(-10).join('\n');
+        const line = (await idleChatter(ctx, { system: personaSys })).replace(/^[!\/]\S*\s*/, '').trim();
+        if (line) {
+          await sendYayChat(page, line); markReplied();
+          pushLine(`自分: ${line}`);
+          lastActivityAt = Date.now();
+          console.log('  💬 idle:', line);
+        }
+      } catch (e) { console.error('idle err', e.message); }
+      nextIdleAt = Date.now() + idleSpan();
+    }
+
     let raw = [];
     try { raw = await agora.drainInbox(page); } catch (e) { console.error('drain err', e.message); }
     const msgs = raw.map(parseMsg).filter((m) => m.text);
-    const fresh = msgs.filter((m) => !seen.has(m.id) && m.author !== SELF_UID);
+    const fresh = msgs.filter((m) => !seen.has(m.id) && m.author !== SELF_RTM);
     fresh.forEach((m) => seen.add(m.id));
 
     if (fresh.length) {
+      lastActivityAt = Date.now();
       const ts = new Date().toLocaleTimeString('ja-JP');
-      fresh.forEach((m) => console.log(`[${ts}] 新着 ${m.author}: ${m.text}`));
+      fresh.forEach((m) => { console.log(`[${ts}] 新着 ${m.author}: ${m.text}`); pushLine(`${m.author}: ${m.text}`); });
       for (const m of fresh) {
         const mr = await handleCommand(m.text);
-        if (mr && canReply()) { await agora.sendChat(page, mr).catch((e) => console.error('send', e.message)); markReplied(); console.log('  ♪', mr); }
+        if (mr && canReply()) { await sendYayChat(page, mr).catch((e) => console.error('send', e.message)); markReplied(); console.log('  ♪', mr); }
       }
       const conv = fresh.filter((m) => !/^[!\/]/.test(m.text));
       if (conv.length && canReply()) {
-        const context = msgs.filter((m) => !/^[!\/]/.test(m.text)).slice(-10)
-          .map((m) => `${m.author === SELF_UID ? 'Emo Claude(自分)' : m.author}: ${m.text}`).join('\n');
+        const context = recentLines.slice(-10).join('\n');
         try {
-          let reply = (await emoccReply(context)).replace(/^[!\/]\S*\s*/, '').trim();
-          if (reply) { await agora.sendChat(page, reply); markReplied(); console.log('  → EmoCC:', reply); }
+          let reply = (await emoccReply(context, { system: personaSys })).replace(/^[!\/]\S*\s*/, '').trim();
+          if (reply) { await sendYayChat(page, reply); markReplied(); pushLine(`自分: ${reply}`); lastActivityAt = Date.now(); console.log('  → 返信:', reply); }
           else console.log('  → [skip]');
         } catch (e) { console.error('reply err', e.message); }
       } else if (conv.length) console.log('  → 連投ガードで保留');
