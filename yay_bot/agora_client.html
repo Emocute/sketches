@@ -53,13 +53,26 @@
     return { ok: true, uid: joinedUid };
   }
 
+  // 音量 0〜100（Agora setVolume と同スケール、100=原音）。既定は控えめに 15。
+  S.musicVol = (typeof S.musicVol === 'number') ? S.musicVol : 15;
+  function setLoop(on) { S.loop = (typeof on === 'boolean') ? on : !S.loop; if (S.audioEl) S.audioEl.loop = S.loop; L('loop', S.loop); return { ok: true, loop: S.loop }; }
+  function setMusicVolume(v) {
+    let n = Number(v); if (!isFinite(n)) return { ok: false, error: 'NaN' };
+    n = Math.max(0, Math.min(100, Math.round(n)));
+    S.musicVol = n;
+    try { S.musicTrack?.setVolume(n); } catch (e) { err('setVolume', e); }
+    L('vol', n);
+    return { ok: true, vol: n };
+  }
+
   // 共通: ライブ MediaStreamTrack を Agora custom track として publish（real-time配信の核）。
   async function publishLiveTrack(mst, label) {
     S.musicTrack = AgoraRTC.createCustomAudioTrack({ mediaStreamTrack: mst });
+    try { S.musicTrack.setVolume(S.musicVol); } catch (e) { err('setVolume', e); }  // 初期音量
     await S.rtc.publish([S.musicTrack]);
     S.nowPlaying = label;
-    L('▶ live publish', label);
-    return { ok: true, label };
+    L('▶ live publish', label, 'vol=' + S.musicVol);
+    return { ok: true, label, vol: S.musicVol };
   }
 
   // /play: URL(ローカルproxy経由の直リンク)を <audio> で progressive 再生し、
@@ -167,7 +180,7 @@
       catch (e) { out.rtm = { ok: false, error: err('joinRtm', e) }; }
       return out;
     },
-    playUrl, playLive, listAudioInputs, stopMusic, pauseMusic, resumeMusic, sendChat,
+    playUrl, playLive, listAudioInputs, setMusicVolume, setLoop, stopMusic, pauseMusic, resumeMusic, sendChat,
     // Node が polling で吸う
     drainInbox: () => { const x = S.inbox.slice(); S.inbox.length = 0; return x; },
     peekInbox: () => S.inbox.slice(),

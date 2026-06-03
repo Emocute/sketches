@@ -4,6 +4,34 @@
 
 ---
 
+## 2026-06-03 13:xx JST — 音量制御・汎用コマンド一式（1-2文字エイリアス）・キュー・チャット合体
+
+### 音量
+- music 配信に音量制御。既定 **15**（究感覚で 0〜100、100=原音が爆音だった）。`YAY_MUSIC_VOL` で上書き、`/v 0-100` でライブ調整。
+- Agora `setVolume`（custom track）。captureStream の `<audio>.volume` は publish 音量に効かないため track 側で制御。
+
+### 汎用コマンド（`/` でも `!` でも、1〜2文字エイリアス対応）
+- `/p 曲`=今すぐ /`/q 曲`=キュー追加 /`/s`=スキップ /`/x`=停止(キュー消) /`/ps`=一時停止 /`/r`=再開
+  /`/v 0-100`=音量 /`/np`=再生中+キュー /`/l`=ループ /`/lv`=システム音声 /`/d`=入力一覧 /`/c`=キュー消去
+  /`/pi`=ping /`/bye`=通話離脱 /`/h`=help。エイリアス表は `bot_agora.mjs CMD`。
+- **キュー自動送り**: 曲が終わると（page status の nowPlaying=null 検知）次の曲を自動再生。
+
+### チャット合体（既存 EmoCC）
+- EmoCC の脳（`lib/claude.mjs emoccReply`）は新 bot が既に使用＝チャット返信と音楽DJが1本(`bot_agora.mjs`)に統合済み。
+  旧 `bot.mjs`（DOM/BlackHole）は参考に残置。
+
+### 同一アカウント衝突（未解決の設計課題）
+- bot は EmoCC(11320230) 自身で入るので、究が同じ EmoCC で見ると衝突（蹴り合い）＝**究が通話を見れない/bot を蹴れない**。
+- 前進策: `YAY_WATCH_UID`（究本人の別アカuid）で「究が入ってる通話」を発見→EmoCC として join できるよう発見uidを分離。
+  → **bot 専用の別アカウントを用意すれば共存可**（要・究判断: 別アカ作成）。
+- 掃除: `yay_api.py leave <conference_id>` で EmoCC の幽霊参加を除去できる。
+
+### 停止の注意（再発防止）
+- `tmux kill-session` だけだと Playwright 起動の Chromium が**孤児化して publish し続ける**（音が止まらない）。
+  確実に止めるには `pkill -f bot_agora.mjs` + `pkill -f "ms-playwright.*chromium"`。stop フローのSIGTERMハンドラ化は要対応。
+
+---
+
 ## 2026-06-03 12:40 JST — 通話自動参加・音楽配信をreal-time化（DL方式廃止）
 
 ### 通話自動参加（待ち受け）

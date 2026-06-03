@@ -23,9 +23,12 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const loadState = () => (existsSync(CONFIG.stateFile) ? JSON.parse(readFileSync(CONFIG.stateFile, 'utf8')) : { seen: [] });
 const saveState = (s) => writeFileSync(CONFIG.stateFile, JSON.stringify(s, null, 2));
 
-// yay_api.py を叩いて creds JSON を得る（最終行が JSON）
+// yay_api.py を叩いて creds JSON を得る（最終行が JSON）。
+//   発見uid = YAY_WATCH_UID(究本人のuid) があればそれ、無ければ SELF_UID。
+//   別アカ運用時は WATCH_UID に究の通話を見張らせ、EmoCC(SELF) として join＝衝突せず共存。
+const DISCOVER_UID = String(process.env.YAY_WATCH_UID || SELF_UID);
 function fetchCreds() {
-  const args = process.env.YAY_CALL_ID ? ['creds', String(process.env.YAY_CALL_ID)] : ['active', SELF_UID];
+  const args = process.env.YAY_CALL_ID ? ['creds', String(process.env.YAY_CALL_ID)] : ['active', DISCOVER_UID];
   return new Promise((resolve, reject) => {
     execFile(PY, [API, ...args], { timeout: 30000 }, (err, stdout, stderr) => {
       const lines = (stdout || '').trim().split('\n').filter(Boolean);
@@ -62,21 +65,82 @@ function parseMsg(m) {
 
 let page, fileBase, creds;
 
-async function handleMusic(text) {
-  const mm = text.match(/^\/(play|yt|live|stop|pause|resume)\s*(.*)/i);
-  if (!mm) return null;
-  const [, cmdRaw, q] = mm; const cmd = cmdRaw.toLowerCase();
+// ===== コマンド体系（汎用・1〜2文字エイリアス対応）=====
+let queue = [];        // 未再生キュー（query文字列）
+let nowQuery = null;   // 再生中の曲名/ラベル
+let starting = false;  // 多重起動ガード
+
+// canonical → [aliases]（先頭が正式名）。`/` でも `!` でも発火。
+const CMD = {
+  help:   ['help', 'h', '?'],
+  play:   ['play', 'p'],
+  queue:  ['queue', 'q', 'add'],
+  skip:   ['skip', 's', 'next', 'n'],
+  stop:   ['stop', 'x'],
+  pause:  ['pause', 'ps'],
+  resume: ['resume', 're', 'r'],
+  vol:    ['vol', 'volume', 'v'],
+  np:     ['np', 'now', 'nowplaying'],
+  loop:   ['loop', 'l'],
+  live:   ['live', 'lv'],
+  dev:    ['devices', 'dev', 'd'],
+  clear:  ['clear', 'cls', 'c'],
+  ping:   ['ping', 'pi'],
+  leave:  ['leave', 'bye'],
+};
+const ALIAS = {}; for (const [k, vs] of Object.entries(CMD)) for (const v of vs) ALIAS[v] = k;
+const HELP =
+  '🎧 /p 曲=今すぐ /q 曲=追加 /s=次 /x=停止 /ps=一時停止 /r=再開 ' +
+  '/v 0-100=音量 /np=再生中 /l=ループ /lv=システム音声 /d=入力 /c=キュー消去 /h=help';
+
+// 1曲を解決→publish（real-time）
+async function startTrack(query) {
+  starting = true;
   try {
-    if (cmd === 'stop') { await agora.stopMusic(page); return '⏸ 停止'; }
-    if (cmd === 'pause') { await agora.pauseMusic(page); return '⏸ 一時停止'; }
-    if (cmd === 'resume') { await agora.resumeMusic(page); return '▶ 再開'; }
-    if (cmd === 'live') { await agora.playLive(page, q.trim() || null); return `▶ システム音声を配信中${q.trim() ? '（' + q.trim() + '）' : ''}`; }
-    if (!q.trim()) return '曲名を入れて（例: /play 曲名）';
-    // real-time: yt-dlp -g で直URLを一瞬で取り（DLなし）、ローカルproxy経由でprogressive配信。
-    const r = await music.resolveStreamUrl(q);
+    const r = await music.resolveStreamUrl(query);
     await agora.playUrl(page, agora.streamUrl(fileBase, r.url));
-    return `▶ ${q} を通話に流してる`;
-  } catch (e) { return `再生失敗: ${e.message}`; }
+    nowQuery = query;
+    return `▶ ${query}`;
+  } finally { starting = false; }
+}
+
+// テキスト → コマンド応答（コマンドでなければ null）
+async function handleCommand(text) {
+  const mm = String(text).match(/^\s*[!\/]\s*(\S+)\s*([\s\S]*)$/);
+  if (!mm) return null;
+  const cmd = ALIAS[mm[1].toLowerCase()];
+  const q = (mm[2] || '').trim();
+  if (!cmd) return null;
+  try {
+    switch (cmd) {
+      case 'help': return HELP;
+      case 'ping': return '🏓 pong';
+      case 'play':
+        if (!q) return '曲名を入れて（例: /p 曲名）';
+        return await startTrack(q);
+      case 'queue':
+        if (!q) return queue.length ? `📜 キュー(${queue.length}): ${queue.slice(0, 5).join(' / ')}` : 'キューは空';
+        queue.push(q);
+        if (!nowQuery && !starting) return await startTrack(queue.shift());
+        return `➕ 追加(${queue.length}): ${q}`;
+      case 'skip':
+        await agora.stopMusic(page); nowQuery = null;
+        return queue.length ? '⏭ スキップ' : '⏭ スキップ（キュー空）';
+      case 'stop':
+        queue = []; await agora.stopMusic(page); nowQuery = null;
+        return '⏹ 停止（キューも消去）';
+      case 'clear': queue = []; return '🧹 キュー消去';
+      case 'pause': await agora.pauseMusic(page); return '⏸ 一時停止';
+      case 'resume': await agora.resumeMusic(page); return '▶ 再開';
+      case 'vol': { const r = await agora.setMusicVolume(page, q); return r?.ok ? `🔊 音量 ${r.vol}` : '音量は 0〜100（例: /v 15）'; }
+      case 'np': return nowQuery ? `🎵 再生中: ${nowQuery}${queue.length ? ` / 次(${queue.length}): ${queue.slice(0, 3).join(' / ')}` : ''}` : (queue.length ? `📜 キュー(${queue.length}): ${queue.slice(0, 5).join(' / ')}` : '何も流してない');
+      case 'loop': { const r = await agora.setLoop(page); return r?.loop ? '🔁 ループON' : '➡ ループOFF'; }
+      case 'live': await agora.playLive(page, q || null); nowQuery = 'live'; return `▶ システム音声配信中${q ? '（' + q + '）' : ''}`;
+      case 'dev': { const ds = await agora.listAudioInputs(page); return '🎤 入力: ' + (ds.map((d) => d.label).filter(Boolean).join(' / ') || 'なし'); }
+      case 'leave': await agora.leave(page); nowQuery = null; queue = []; return '👋 通話から抜けた';
+      default: return null;
+    }
+  } catch (e) { return `エラー: ${e.message}`; }
 }
 
 async function main() {
@@ -110,6 +174,9 @@ async function main() {
   if (!joined.rtc?.ok) console.error('[bot] ⚠ RTC参加失敗（音楽流せない）:', joined.rtc?.error);
   if (!joined.rtm?.ok) console.error('[bot] ⚠ RTM参加失敗（チャット読/送不可）:', joined.rtm?.error, '→ RTMチャンネル名/形式の発見が必要');
 
+  // 初期音量（既定15、YAY_MUSIC_VOL で上書き可）
+  if (process.env.YAY_MUSIC_VOL) { const r = await agora.setMusicVolume(page, process.env.YAY_MUSIC_VOL); console.log('[bot] 初期音量', r?.vol); }
+
   const stateExisted = existsSync(CONFIG.stateFile);
   const seen = new Set(loadState().seen);
   console.log('[bot] 稼働開始', stateExisted ? '(seen継承)' : '(初回)');
@@ -117,11 +184,25 @@ async function main() {
   // テスト再生: YAY_TEST_PLAY="曲名" で起動時に1曲だけ流す（RTC publish 経路の実機確認用）。
   if (process.env.YAY_TEST_PLAY && joined.rtc?.ok) {
     console.log('[bot] ▶ TEST_PLAY:', process.env.YAY_TEST_PLAY);
-    const r = await handleMusic('/play ' + process.env.YAY_TEST_PLAY);
+    const r = await handleCommand('/play ' + process.env.YAY_TEST_PLAY);
     console.log('[bot] TEST_PLAY 結果:', r);
   }
 
   for (;;) {
+    // キュー自動送り: 再生が止まっててキューがあれば次を流す
+    if (!starting) {
+      try {
+        const st = await agora.status(page);
+        if (!st?.nowPlaying) {
+          if (queue.length) {
+            const r = await startTrack(queue.shift());
+            console.log('  ▶ next:', r);
+            if (canReply()) { await agora.sendChat(page, r).catch(() => {}); markReplied(); }
+          } else if (nowQuery && nowQuery !== 'live') { nowQuery = null; }
+        }
+      } catch {}
+    }
+
     let raw = [];
     try { raw = await agora.drainInbox(page); } catch (e) { console.error('drain err', e.message); }
     const msgs = raw.map(parseMsg).filter((m) => m.text);
@@ -132,7 +213,7 @@ async function main() {
       const ts = new Date().toLocaleTimeString('ja-JP');
       fresh.forEach((m) => console.log(`[${ts}] 新着 ${m.author}: ${m.text}`));
       for (const m of fresh) {
-        const mr = await handleMusic(m.text);
+        const mr = await handleCommand(m.text);
         if (mr && canReply()) { await agora.sendChat(page, mr).catch((e) => console.error('send', e.message)); markReplied(); console.log('  ♪', mr); }
       }
       const conv = fresh.filter((m) => !/^[!\/]/.test(m.text));
