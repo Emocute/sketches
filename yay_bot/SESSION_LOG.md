@@ -6,6 +6,8 @@
 
 ## 2026-06-03 14:xx JST — RTMフォーマット確定・なりきり人格・自発おしゃべり・チャットトグル
 
+**Session UUID**: a591a864-55d1-49c3-b272-3711ebbdaf4c
+
 ### RTM メッセージ形式を生通話で確定（SESSION_LOG「要発見」だった件）
 - 受信生メッセージ = **`<type> <JSON>`**。チャットは `chat {"text":"...","created_at_seconds":<unix>,"id":"<yay_uid>_<ms>"}`。
 - 旧 `parseMsg` は型プレフィックス(`chat `)を剥がせず: ①`/play`等が `/` 判定に当たらずコマンド未発火 ②本文がJSONごと残る。
