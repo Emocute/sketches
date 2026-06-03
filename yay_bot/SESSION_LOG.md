@@ -4,6 +4,16 @@
 
 ---
 
+## 2026-06-03 18:xx JST — 前セッション要約
+
+**Session UUID**: b288df71-82d6-4346-81b7-f5316df1a55a
+
+### 前セッション終了レポート圧縮
+- セッション `a591a864-55d1-49c3-b272-3711ebbdaf4c` の終了内容（SessionUUID追記・commit pushによるsession_protocol準拠完成）を50字以内に要約。
+- 要約文: 「SessionUUID追記をpushしsession_protocol準拠が完成した。」
+
+---
+
 ## 2026-06-03 14:xx JST — RTMフォーマット確定・なりきり人格・自発おしゃべり・チャットトグル
 
 **Session UUID**: a591a864-55d1-49c3-b272-3711ebbdaf4c
