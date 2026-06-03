@@ -90,7 +90,13 @@ async function main() {
 
   const a = await agora.launchAgora({ headless: !process.env.HEADFUL });
   page = a.page;
-  const joined = await agora.join(page, { appId: creds.app_id, channel: creds.channel, rtcToken: creds.rtc_token, rtmToken: creds.rtm_token, uid: creds.uid });
+  // RTC/RTM とも Agora アカウント = conference_call_user_uuid（文字列）。
+  //   トークンの crc_uid が uuid の CRC32 に一致（2026-06-03 実走で確認）。
+  const joined = await agora.join(page, {
+    appId: creds.app_id, channel: creds.channel,
+    rtcToken: creds.rtc_token, uid: creds.conference_call_user_uuid,
+    rtmToken: creds.rtm_token, rtmUid: creds.conference_call_user_uuid,
+  });
   console.log('[bot] join:', JSON.stringify(joined));
   if (!joined.rtc?.ok) console.error('[bot] ⚠ RTC参加失敗（音楽流せない）:', joined.rtc?.error);
   if (!joined.rtm?.ok) console.error('[bot] ⚠ RTM参加失敗（チャット読/送不可）:', joined.rtm?.error, '→ RTMチャンネル名/形式の発見が必要');

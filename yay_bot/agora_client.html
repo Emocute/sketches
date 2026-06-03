@@ -35,15 +35,19 @@
     S.appId = appId; S.channel = channel; S.uid = uid;
     AgoraRTC.setLogLevel(2);
     // 通話は communication。音声のみ publish。
-    S.rtc = AgoraRTC.createClient({ mode: 'rtc', codec: 'opus' });
+    // ※codec は映像コーデック指定欄（vp8/vp9/av1/h264/h265 のみ）。音声onlyでも有効値が必須。
+    //   'opus' を渡すと INVALID_PARAMS。音声publishには既定の vp8 でよい（映像は使わない）。
+    S.rtc = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
     S.rtc.on('user-published', async (user, mediaType) => {
       // 他参加者の音は購読しない（DJなので聞く必要なし＋CPU節約）。必要なら有効化。
       L('remote published', user.uid, mediaType);
     });
     S.rtc.on('exception', (ev) => L('rtc exception', ev.code, ev.msg));
     S.rtc.on('connection-state-change', (cur, prev, reason) => L('rtc state', prev, '→', cur, reason || ''));
-    // uid は Yay が token を発行した時の値（数値）。token を尊重。
-    const joinedUid = await S.rtc.join(appId, channel, rtcToken || null, Number(uid) || null);
+    // ★uid は conference_call_user_uuid（文字列アカウント）。RTCトークンの crc_uid が
+    //   この uuid の CRC32 に一致（2026-06-03 実走で確認）。Number()せず文字列のまま渡す
+    //   ＝Agora 文字列ユーザーアカウントで join。数値化すると NaN→ランダムuid→authorized failed。
+    const joinedUid = await S.rtc.join(appId, channel, rtcToken || null, uid || null);
     S.joinedRtc = true;
     L('RTC joined', 'channel=' + channel, 'uid=' + joinedUid);
     return { ok: true, uid: joinedUid };
@@ -77,11 +81,15 @@
   // ===== RTM（通話チャット）=====
   // 注意: Yay通話チャットのRTMチャンネル名・メッセージ形式は実通話で要発見（スパイク）。
   // 既定では RTC と同じ channel 名を購読し、来た生メッセージを inbox/log に貯める。
-  async function joinRtm({ appId, uid, rtmToken, channel }) {
+  async function joinRtm({ appId, uid, rtmUid, rtmToken, channel }) {
     const RTMNS = window.AgoraRTM || {};
     const RTMCtor = RTMNS.RTM || (RTMNS.default && RTMNS.default.RTM);
     if (!RTMCtor) throw new Error('AgoraRTM SDK未ロード');
-    S.rtm = new RTMCtor(appId, String(uid), { token: rtmToken });
+    // ★RTM の userId は Yay uid ではなく conference_call_user_uuid（RTMトークンの束縛先）。
+    //   2026-06-03 実走: 007トークンに uuid が埋まってて、uid で login すると署名検証失敗(-10005)。
+    const ruid = String(rtmUid || uid);
+    S.rtm = new RTMCtor(appId, ruid, { token: rtmToken });
+    S._rtmToken = rtmToken;
     S.rtm.addEventListener('status', (e) => L('rtm status', e.state, e.reason || ''));
     S.rtm.addEventListener('message', (e) => {
       // e: { channelName, channelType, publisher, message, messageType, ... }
@@ -90,7 +98,9 @@
       if (S.inbox.length > 500) S.inbox.splice(0, S.inbox.length - 500);
       L('RTM msg', e.publisher, '@' + e.channelName, typeof e.message === 'string' ? e.message.slice(0, 80) : '[non-string]');
     });
-    await S.rtm.login();
+    // ★token は login() に渡す必須（constructor だけだと static key 扱いで
+    //   -10005 DYNAMIC_ENABLED_BUT_STATIC_KEY になる。2026-06-03 実走で判明）。
+    await S.rtm.login({ token: rtmToken });
     S.joinedRtm = true;
     S.rtmChannel = channel;
     // MESSAGE チャンネルとして購読（通話チャットは message チャンネル想定）
@@ -111,7 +121,7 @@
       const out = { rtc: null, rtm: null };
       try { out.rtc = await joinRtc(creds); } catch (e) { out.rtc = { ok: false, error: err('joinRtc', e) }; }
       // RTM チャンネル名は creds.rtmChannel があればそれ、無ければ RTC channel を流用（発見対象）
-      try { out.rtm = await joinRtm({ appId: creds.appId, uid: creds.uid, rtmToken: creds.rtmToken || creds.rtm_token, channel: creds.rtmChannel || creds.channel }); }
+      try { out.rtm = await joinRtm({ appId: creds.appId, uid: creds.uid, rtmUid: creds.rtmUid || creds.conference_call_user_uuid, rtmToken: creds.rtmToken || creds.rtm_token, channel: creds.rtmChannel || creds.channel }); }
       catch (e) { out.rtm = { ok: false, error: err('joinRtm', e) }; }
       return out;
     },
