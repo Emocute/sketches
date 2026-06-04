@@ -67,35 +67,64 @@
     return { ok: true, uid: joinedUid };
   }
 
-  // 音量 0〜100（Agora setVolume と同スケール、100=原音）。既定は控えめに 15。
+  // ===== 配信ミックスバス（音楽 + TTS を 1 本にまとめて publish）=====
+  // 設計（2026-06-04）: 旧来は playUrl が毎回 stopMusic→新トラックpublish だったので、
+  //   TTS(読み上げ)が音楽トラックを丸ごと置換→BGMが消える事故になっていた。
+  //   解: WebAudio の MediaStreamDestination を 1 本だけ publish し、
+  //   musicGain（曲）と ttsGain（読み上げ）を両方そこへ合流。TTS中は musicGain をダッキング。
+  //   → 音楽を止めずに読み上げが乗る。音量は musicGain.gain で制御（Agora setVolume は使わない）。
   S.musicVol = (typeof S.musicVol === 'number') ? S.musicVol : 15;
+  S.duck = (typeof S.duck === 'number') ? S.duck : 0.25;   // TTS中の音楽残し率
+  const volToGain = (v) => Math.max(0, Math.min(100, Number(v) || 0)) / 100;
+
+  function ensurePublishBus() {
+    if (S.pub) return S.pub;
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const dest = ctx.createMediaStreamDestination();
+    const musicGain = ctx.createGain(); musicGain.gain.value = volToGain(S.musicVol);
+    const ttsGain = ctx.createGain(); ttsGain.gain.value = 1.0;
+    musicGain.connect(dest); ttsGain.connect(dest);
+    const [mst] = dest.stream.getAudioTracks();
+    const track = AgoraRTC.createCustomAudioTrack({ mediaStreamTrack: mst });
+    try { track.setVolume(100); } catch {}   // バス自体は原音。音量制御は musicGain 側で行う
+    S.pub = { ctx, dest, musicGain, ttsGain, track, published: false };
+    L('publish bus created', 'srcRate=' + ctx.sampleRate);
+    return S.pub;
+  }
+  async function ensurePublished() {
+    if (!S.joinedRtc) throw new Error('RTC未参加');
+    const p = ensurePublishBus();
+    if (p.ctx.state === 'suspended') { try { await p.ctx.resume(); } catch {} }
+    if (!p.published) { await S.rtc.publish([p.track]); p.published = true; L('▶ bus published'); }
+    return p;
+  }
+
+  // 音量 0〜100（100=原音）。既定は控えめに 15。musicGain を直接動かす。
   function setLoop(on) { S.loop = (typeof on === 'boolean') ? on : !S.loop; if (S.audioEl) S.audioEl.loop = S.loop; L('loop', S.loop); return { ok: true, loop: S.loop }; }
   function setMusicVolume(v) {
     let n = Number(v); if (!isFinite(n)) return { ok: false, error: 'NaN' };
     n = Math.max(0, Math.min(100, Math.round(n)));
     S.musicVol = n;
-    try { S.musicTrack?.setVolume(n); } catch (e) { err('setVolume', e); }
+    if (S.pub && !S.ducking) S.pub.musicGain.gain.value = volToGain(n);
     L('vol', n);
     return { ok: true, vol: n };
   }
 
-  // 共通: ライブ MediaStreamTrack を Agora custom track として publish（real-time配信の核）。
-  async function publishLiveTrack(mst, label) {
-    S.musicTrack = AgoraRTC.createCustomAudioTrack({ mediaStreamTrack: mst });
-    try { S.musicTrack.setVolume(S.musicVol); } catch (e) { err('setVolume', e); }  // 初期音量
-    await S.rtc.publish([S.musicTrack]);
-    S.nowPlaying = label;
-    L('▶ live publish', label, 'vol=' + S.musicVol);
-    return { ok: true, label, vol: S.musicVol };
+  // 音楽ソースだけを止める（バス publish は保持＝TTSは引き続き流せる）。
+  function stopMusicSource() {
+    try { S.musicNode?.disconnect(); } catch {}
+    try { if (S.audioEl) { S.audioEl.pause(); S.audioEl.src = ''; } } catch {}
+    try { S.liveStream?.getTracks().forEach((t) => t.stop()); } catch {}
+    S.musicNode = null; S.audioEl = null; S.liveStream = null; S.nowPlaying = null;
   }
 
   // /play: URL(ローカルproxy経由の直リンク)を <audio> で progressive 再生し、
-  //   captureStream で生トラックを取って publish。全DLせず即流れる＝real-time。
+  //   MediaElementSource で musicGain に合流。全DLせず即流れる＝real-time。
   async function playUrl(url, { loop = false } = {}) {
-    if (!S.joinedRtc) throw new Error('RTC未参加');
-    await stopMusic();
+    const p = await ensurePublished();
+    stopMusicSource();
     const a = new Audio();
-    a.crossOrigin = 'anonymous';   // proxyがCORS付与＝captureStreamがtaintされない
+    a.crossOrigin = 'anonymous';   // proxyがCORS付与＝MediaElementSourceがtaintされない
     a.preload = 'auto'; a.loop = loop; a.src = url;
     S.audioEl = a;
     await new Promise((res, rej) => {
@@ -105,18 +134,20 @@
       a.addEventListener('canplay', ok); a.addEventListener('error', ng);
       setTimeout(ok, 8000); // canplay来なくても8秒で見切り発車（progressiveなので流れ始める）
     });
+    const node = p.ctx.createMediaElementSource(a);
+    node.connect(p.musicGain);
+    S.musicNode = node;
     await a.play();
-    const stream = a.captureStream ? a.captureStream() : a.mozCaptureStream();
-    const [mst] = stream.getAudioTracks();
-    if (!mst) throw new Error('captureStream: 音声トラック無し');
-    a.addEventListener('ended', () => { if (!a.loop) { L('music ended'); stopMusic().catch(() => {}); } });
-    return publishLiveTrack(mst, url);
+    a.addEventListener('ended', () => { if (!a.loop) { L('music ended'); stopMusicSource(); } });
+    S.nowPlaying = url;
+    L('▶ music', url, 'vol=' + S.musicVol);
+    return { ok: true, label: url, vol: S.musicVol };
   }
 
-  // /live: システム音声入力（BlackHole等）を getUserMedia で掴んで publish。yt-dlp不要・完全real-time。
+  // /live: システム音声入力（BlackHole等）を getUserMedia で掴んで musicGain に合流。
   async function playLive(match) {
-    if (!S.joinedRtc) throw new Error('RTC未参加');
-    await stopMusic();
+    const p = await ensurePublished();
+    stopMusicSource();
     let constraints = { audio: true };
     if (match) {
       const devs = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'audioinput');
@@ -127,7 +158,52 @@
     const ms = await navigator.mediaDevices.getUserMedia(constraints);
     const [mst] = ms.getAudioTracks();
     if (!mst) throw new Error('getUserMedia: 音声トラック無し');
-    return publishLiveTrack(mst, 'live:' + (mst.label || match || 'default'));
+    const node = p.ctx.createMediaStreamSource(ms);
+    node.connect(p.musicGain);
+    S.liveStream = ms; S.musicNode = node;
+    S.nowPlaying = 'live:' + (mst.label || match || 'default');
+    L('▶ live', S.nowPlaying, 'vol=' + S.musicVol);
+    return { ok: true, label: S.nowPlaying, vol: S.musicVol };
+  }
+
+  // 読み上げ(TTS): WAV(ローカルproxy)を ttsGain に乗せて喋らせる。再生中は音楽をダッキング。
+  //   音楽トラックは触らない＝BGMが消えない。再生完了で resolve（Node が await できる）。
+  async function playTTS(url) {
+    const p = await ensurePublished();
+    return new Promise(async (resolve) => {
+      const a = new Audio();
+      a.crossOrigin = 'anonymous';
+      a.src = url;
+      let node = null, done = false;
+      const restore = (why) => {
+        if (done) return; done = true;
+        try { node?.disconnect(); } catch {}
+        S.ducking = false;
+        p.musicGain.gain.value = volToGain(S.musicVol);   // 現在設定の音量へ復帰
+        S.ttsEl = null;
+        L('🗣 tts end', why || '');
+        resolve({ ok: true });
+      };
+      try {
+        await new Promise((res, rej) => {
+          const ok = () => { a.removeEventListener('canplay', ok); a.removeEventListener('error', ng); res(); };
+          const ng = () => { a.removeEventListener('canplay', ok); a.removeEventListener('error', ng); rej(new Error('tts読込失敗')); };
+          a.addEventListener('canplay', ok); a.addEventListener('error', ng);
+          setTimeout(ok, 5000);
+        });
+        node = p.ctx.createMediaElementSource(a);
+        node.connect(p.ttsGain);
+        S.ttsEl = a;
+        // ダッキング: 音楽を duck 率まで下げる
+        S.ducking = true;
+        p.musicGain.gain.value = volToGain(S.musicVol) * S.duck;
+        a.addEventListener('ended', () => restore('ended'));
+        a.addEventListener('error', () => restore('error'));
+        await a.play();
+        L('🗣 tts play', url.slice(-40));
+        setTimeout(() => restore('timeout'), 20000);  // 保険（max20s）
+      } catch (e) { err('playTTS', e); restore('exc'); }
+    });
   }
 
   async function listAudioInputs() {
@@ -135,12 +211,9 @@
     return devs.filter((d) => d.kind === 'audioinput').map((d) => ({ id: d.deviceId, label: d.label }));
   }
 
+  // /stop /skip 用: 音楽ソースを止める（バスは publish 継続＝TTS は生きる）。
   async function stopMusic() {
-    if (!S.musicTrack && !S.audioEl) return { ok: true, idle: true };
-    try { if (S.musicTrack) await S.rtc.unpublish([S.musicTrack]); } catch (e) { err('unpublish', e); }
-    try { S.musicTrack?.close(); } catch {}
-    try { if (S.audioEl) { S.audioEl.pause(); S.audioEl.src = ''; } } catch {}
-    S.musicTrack = null; S.audioEl = null; S.nowPlaying = null;
+    stopMusicSource();
     L('⏸ stop music');
     return { ok: true };
   }
@@ -279,14 +352,19 @@
       catch (e) { out.rtm = { ok: false, error: err('joinRtm', e) }; }
       return out;
     },
-    playUrl, playLive, listAudioInputs, setMusicVolume, setLoop, stopMusic, pauseMusic, resumeMusic, sendChat,
+    playUrl, playLive, playTTS, listAudioInputs, setMusicVolume, setLoop, stopMusic, pauseMusic, resumeMusic, sendChat,
     startListen, stopListen, drainUtterances, listenStatus: () => ({ on: S.listen.on, sources: S.listen.sources.size, queued: S.utterances.length, srcRate: S.listen.srcRate }),
     // Node が polling で吸う
     drainInbox: () => { const x = S.inbox.slice(); S.inbox.length = 0; return x; },
     peekInbox: () => S.inbox.slice(),
     status: () => ({ joinedRtc: S.joinedRtc, joinedRtm: S.joinedRtm, channel: S.channel, rtmChannel: S.rtmChannel, uid: S.uid, nowPlaying: S.nowPlaying, errors: S.errors.slice(-10), inbox: S.inbox.length }),
     tail: (n = 60) => S.log.slice(-n),
-    leave: async () => { try { await stopMusic(); } catch {} try { await S.rtc?.leave(); } catch {} try { await S.rtm?.logout(); } catch {} S.joinedRtc = S.joinedRtm = false; return { ok: true }; },
+    leave: async () => {
+      try { stopMusicSource(); } catch {}
+      try { if (S.pub) { if (S.pub.published) await S.rtc?.unpublish([S.pub.track]); S.pub.track?.close?.(); await S.pub.ctx?.close?.(); S.pub = null; } } catch {}
+      try { await S.rtc?.leave(); } catch {} try { await S.rtm?.logout(); } catch {}
+      S.joinedRtc = S.joinedRtm = false; return { ok: true };
+    },
   };
   L('YayAgora API ready', 'rtc=' + (typeof AgoraRTC !== 'undefined'), 'rtm=' + (typeof AgoraRTM !== 'undefined'));
 })();

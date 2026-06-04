@@ -206,11 +206,11 @@ async function sayOut(text) {
     const r = await tts.speak(text, { voice: voiceKey });
     console.log('[sayOut] tts.speak result:', { ok: r.ok, engine: r.engine, file: r.file?.slice(-30) });
     if (!r.ok || !r.file) { console.error('[sayOut] ERR: no file', r); return; }
-    // WAV ファイルを Agora playUrl で再生（RTC publish）
+    // WAV ファイルを Agora playTTS で再生（音楽トラックは止めず ttsGain に乗せ、再生中はダッキング）
     const url = agora.fileUrl(fileBase, r.file);
-    console.log('[sayOut] playUrl call:', url.slice(-50));
-    const playResult = await agora.playUrl(page, url).catch((e) => { console.error('[sayOut] playUrl ERR:', e.message); return null; });
-    console.log('[sayOut] playUrl result:', playResult);
+    console.log('[sayOut] playTTS call:', url.slice(-50));
+    const playResult = await agora.playTTS(page, url).catch((e) => { console.error('[sayOut] playTTS ERR:', e.message); return null; });
+    console.log('[sayOut] playTTS result:', playResult);
   } catch (e) {
     console.error('[sayOut] ERR exception:', e.message, e.stack?.split('\n')[1]);
   }
