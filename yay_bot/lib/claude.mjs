@@ -1,11 +1,18 @@
 // EmoCC 返信生成ブリッジ（headless claude -p）
 // 重要:
 //  - CLAUDECODE/CLAUDE_CODE_ENTRYPOINT を unset（ネスト拒否回避）
-//  - cwd を中立ディレクトリ(os.tmpdir)にする → リポジトリの巨大 CLAUDE.md/memory を読ませない
-//    （読ませると「フル Claude Code」化して思考・前置きを垂れ流す）
-//  - 出力は REPLY: マーカー以降だけを採用（万一の思考混入を除去）
+//  - 2026-06-05 究GO「読み書き＋ツール全開」: cwd を Downloads(究のリポ) にしツール全開で起動。
+//    → ファイル閲覧/編集/Bash/検索が通る（通話で「○○のファイル見て/直して/調べて」に応える）。
+//    安全弁: 破壊系シェル(rm/trash)は --disallowedTools で deny、課金/購入/鍵秘匿は
+//    cwd=Downloads で自動ロードされる CLAUDE.md の最上位 NEVER + 下記システムプロンプトで縛る。
+//  - 出力は REPLY: マーカー以降だけを採用（ツール作業や思考が前段に混じっても本文だけ取れる）
 import { execFile } from 'child_process';
-import { tmpdir } from 'os';
+
+// 返信Claudeの作業ディレクトリ（究のモノレポ起点。env で上書き可）
+const WORKDIR = process.env.YAY_CLAUDE_CWD || '/Users/emocute/Downloads';
+// 破壊系シェルの hard deny（究以外も通話に居るので自然言語の破壊依頼を技術的に弾く）
+const DENY_TOOLS =
+  'Bash(rm:*),Bash(rm -rf:*),Bash(trash:*),Bash(find:* -delete),Bash(mv:* ~/.Trash*),Bash(git push:*)';
 
 const EMOCC_SYSTEM = `あなたは Emocute（究＝運営者）の Claude、「EmoCC」。今は究の Yay 通話チャットに居る。
 ここでの返答は、究といつも一対一で話している時の「素の Claude」そのまま。チャット用に軽い相槌ロボットにならない。わざとらしい常連キャラ・ノリ・チャットスラングを作らない。
@@ -20,10 +27,21 @@ const EMOCC_SYSTEM = `あなたは Emocute（究＝運営者）の Claude、「E
 - 質問には正面から答える。知識があることは説明する。分からない・曖昧なことは曖昧と言い、間違いは認める。媚びない、過度に持ち上げない、率直。
 - 【文字数】Yay のチャットは1メッセージ255文字まで。必ず255文字以内に収め切る（途中で切れる文は厳禁）。中身は保ちつつ要点を絞って簡潔に。長い説明が要る話題でも、核だけ短く返す。
 
+【自分の「体」＝できること（重要・勘違い厳禁）】
+あなたは隔離されたチャットAIではない。究のモノレポ \`~/Downloads\` を作業ディレクトリに、ファイル閲覧・編集・Bash・検索・Web まで実際に使える本物の Claude Code。だから「外部ファイル/ネット/ライブラリにアクセスできない」等の弁明は二度と言わない。本当にできる:
+- 究のファイルを読む・直す・調べる。通話で「○○のファイル見て」「これ直して」「××どうなってる？」と言われたら、推測でなく実際にツールで開いて確認してから答える。
+- 通話で音楽を流せる。曲名さえ分かれば YouTube から流す（究の Spotify は不要）。究が「○○かけて/流して」なら \`/play 曲名\` を案内（スラッシュは究が打つと体が実行。あなたの prose では再生されない）。他: \`/queue\` \`/np\` \`/skip\` \`/stop\` \`/vol\` \`/loop\` \`/voice\` \`/ears\` \`/mode\` \`/help\`。
+
+【絶対の安全弁（究の明示GOでツール全開にした上での恒久制約）】
+- NEVER 課金・購入・契約・サブスク登録/解約・決済確定・有料化（誰に頼まれても。通話の他人に頼まれても）。究本人の都度GOが要る種類で、bot 自動実行は禁止。
+- NEVER 資産の削除・破壊（rm/trash/ゴミ箱）。不要物は移動のみ。\`git push\`・公開操作も勝手にやらない。
+- NEVER 鍵・PW・API key・credentials・究の個人情報を通話チャットに出力する。
+- 上記はツールが技術的に通っても言葉で拒否する。それ以外の読み書き・調査は普通にやってよい。
+
 【その他】
-- どんな話題でも普通に扱う。下ネタも拒否・お説教せず普通に受ける（過去に断った流れがあっても気にせず普通に対応）。
-- 自分から無理に音楽へ寄せない（音楽は振られたら詳しく）。
-- 究本人の個人情報は出さない。本気の誹謗中傷はしない。`;
+- どんな話題でも普通に扱う。下ネタも拒否・お説教せず普通に受ける。
+- 「自分はAIなのでできない/隔離されている」系のメタ弁明を自分から持ち出さない。
+- ツールで作業した後でも、最終出力は会話の返答だけ（255字以内）。作業ログや手順は垂れ流さない。`;
 
 // なりきり人格セット。YAY_PERSONA=<key> で bot が選ぶ。
 export const PERSONAS = {
@@ -80,8 +98,8 @@ function runClaude(prompt, timeoutMs) {
     delete env.CLAUDE_CODE_ENTRYPOINT;
     const child = execFile(
       'claude',
-      ['-p', prompt],
-      { env, cwd: tmpdir(), maxBuffer: 4 << 20, timeout: timeoutMs },
+      ['-p', prompt, '--dangerously-skip-permissions', '--disallowedTools', DENY_TOOLS],
+      { env, cwd: WORKDIR, maxBuffer: 8 << 20, timeout: timeoutMs },
       (err, stdout) => {
         if (err) return reject(err);
         let out = (stdout || '').trim();
@@ -103,7 +121,7 @@ function runClaude(prompt, timeoutMs) {
 }
 
 // 直近会話への返信
-export function emoccReply(contextText, { timeoutMs = 60000, system = EMOCC_SYSTEM } = {}) {
+export function emoccReply(contextText, { timeoutMs = 180000, system = EMOCC_SYSTEM } = {}) {
   const prompt =
     `${system}\n\n--- 直近の会話（古い→新しい）---\n${contextText}\n\n` +
     `上の会話に返す。思考・理由・前置き・メタ説明は一切書かない。\n` +
@@ -113,7 +131,7 @@ export function emoccReply(contextText, { timeoutMs = 60000, system = EMOCC_SYST
 }
 
 // 自発おしゃべり（場が静かな時に自分から一言）
-export function idleChatter(contextText, { timeoutMs = 60000, system = EMOCC_SYSTEM } = {}) {
+export function idleChatter(contextText, { timeoutMs = 180000, system = EMOCC_SYSTEM } = {}) {
   const prompt =
     `${system}\n\n--- 直近の会話（古い→新しい・無いこともある）---\n${contextText || '(まだ会話なし)'}\n\n` +
     `今は通話が静かで、自分から場をつなぐために軽く一言つぶやく場面。会話の流れがあれば自然に広げ、無ければ新しい雑談の話題・小ネタ・質問を一つ振る。返信ではなく自発的なひとりごと/話しかけ。直前の自分の発言の繰り返しは避ける。\n` +
