@@ -202,13 +202,17 @@ async function sayOut(text) {
       succubus: 'zundamon_sad',   // サキュバス → 悲しい声（妖艶さ）
     };
     const voiceKey = voiceMap[personaKey] || undefined;
+    console.log('[sayOut] voiceKey=', voiceKey, 'persona=', personaKey);
     const r = await tts.speak(text, { voice: voiceKey });
-    if (!r.ok || !r.file) { console.error('tts: no file', r); return; }
+    console.log('[sayOut] tts.speak result:', { ok: r.ok, engine: r.engine, file: r.file?.slice(-30) });
+    if (!r.ok || !r.file) { console.error('[sayOut] ERR: no file', r); return; }
     // WAV ファイルを Agora playUrl で再生（RTC publish）
     const url = agora.fileUrl(fileBase, r.file);
-    await agora.playUrl(page, url).catch(() => {});  // 喋るのに失敗しても続行
+    console.log('[sayOut] playUrl call:', url.slice(-50));
+    const playResult = await agora.playUrl(page, url).catch((e) => { console.error('[sayOut] playUrl ERR:', e.message); return null; });
+    console.log('[sayOut] playUrl result:', playResult);
   } catch (e) {
-    console.error('sayOut err', e.message);
+    console.error('[sayOut] ERR exception:', e.message, e.stack?.split('\n')[1]);
   }
 }
 
