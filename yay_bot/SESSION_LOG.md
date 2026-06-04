@@ -4,6 +4,23 @@
 
 ---
 
+## 2026-06-04 — ミックスバス修正のコミット締め＋壊れたHEADの整合（並行セッション収束）
+
+**Session UUID**: E59B8570-2171-4410-8D0F-216488A3F682
+
+### 背景
+- 「Yay bot 開発続行」で引き継ぎ最優先（HANDOFF§既知バグ#1）の **読み上げ中BGM消失**を WebAudio ミックスバスで修正（実装内容は直下 3931190a 枠と同一）。
+- 着手後に**別セッション(3931190a)が並行して同一修正**をしていたと判明（SESSION_LOG が編集中に変化）。幸いディスク上のコード3ファイルは単一定義でクリーン（関数重複なし・JS構文OK・ヘッドレススモークで `playTTS` 公開＋`MediaStreamDestination`→`createCustomAudioTrack` の核経路 track=live を確認）。
+
+### やったこと（究GO「コミットして締める」）
+- working tree のミックスバス修正をコミット（fix）: `agora_client.html`/`lib/agora.mjs`/`bot_agora.mjs`。
+- **壊れたHEADの整合**: コミット済 `bot_agora.mjs` が `./lib/listen.mjs` を import しているのに `listen.mjs` 等が未追跡＝fresh checkout で壊れる状態だった。前セッションの音声機能未追跡ファイル（`lib/listen.mjs`/`scripts/voicevox_engine.sh`/`scripts/create_multiout.swift`/`_drafts/HANDOFF_2026-06-04.md`）を追跡化（feat）。
+
+### 残（実機確認・俺からは音を出さない＝no_audio_during_dev）
+- 生通話にEmoCCが入った状態で `./run_agora.sh`→音楽再生中に `/voice` ONで読み上げが乗り、BGMがダッキング後に復帰するか実通話で確認。クリーン再起動はHANDOFF§手順。
+
+---
+
 ## 2026-06-04 — TTS×音楽を WebAudio ミックスバス1本化（読み上げ中もBGMが消えない）
 
 **Session UUID**: 3931190a-47d0-4e0a-9248-76bcfb4f5582
