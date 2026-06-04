@@ -104,6 +104,11 @@ let queue = [];        // 未再生キュー（query文字列）
 let nowQuery = null;   // 再生中の曲名/ラベル
 let starting = false;  // 多重起動ガード
 
+// 話者ガード: この RTM uuid の発言だけツール全開（ファイル/Bash）。他人は会話のみ。
+//   /iam <合言葉> で本人が登録（合言葉は通話の他人のなりすまし防止）。state.json に永続。
+let ownerRtm = null;
+const OWNER_SECRET = process.env.YAY_OWNER_SECRET || 'kiwamu';
+
 // canonical → [aliases]（先頭が正式名）。`/` でも `!` でも発火。
 const CMD = {
   help:   ['help', 'h'],
@@ -131,6 +136,8 @@ const CMD = {
   qdel:   ['qd', 'qdel', 'rm', '消'],
   qup:    ['qu', 'qup', 'up', '上'],
   qdn:    ['qj', 'qdn', 'down', '下'],
+  iam:    ['iam', 'owner', 'オーナー', '俺'],   // 本人登録（/iam <合言葉>）
+  whoami: ['whoami', 'myid', '誰'],             // 自分のRTM IDを表示
 };
 const ALIAS = {}; for (const [k, vs] of Object.entries(CMD)) for (const v of vs) ALIAS[v] = k;
 // トグル状態
@@ -255,7 +262,7 @@ function qIndex(q) {
 }
 
 // テキスト → コマンド応答（コマンドでなければ null）
-async function handleCommand(text) {
+async function handleCommand(text, author = '?') {
   const mm = String(text).match(/^\s*[!\/]\s*(\S+)\s*([\s\S]*)$/);
   if (!mm) return null;
   const cmd = ALIAS[mm[1].toLowerCase()];
@@ -267,16 +274,25 @@ async function handleCommand(text) {
       case 'helpshort': return renderHelpShort();
       case 'status': return statusBlock();
       case 'ping': return '🏓 pong';
-      case 'play': {
-        if (!q) return '曲名を入れて（例: /p 曲名）';
-        const r = await startTrack(q);          // 正式タイトルは startTrack が再生前に通知
-        return r.ok ? null : notFoundMsg(q);
+      case 'whoami':
+        return `🪪 あなたのID: ${author}${ownerRtm ? (author === ownerRtm ? '（=登録オーナー✓）' : '（オーナーではない）') : '（オーナー未登録）'}`;
+      case 'iam': {
+        // 引数が現在のオーナー表示要求なら状態だけ返す
+        if (q === '?' || q === 'status') return ownerRtm ? `🔑 オーナー登録済: ${ownerRtm}` : '🔓 オーナー未登録（/iam 合言葉 で登録）';
+        if (q !== OWNER_SECRET) return '合言葉が違う（/iam <合言葉>）。なりすまし防止のため必要。';
+        ownerRtm = author;
+        try { const s = existsSync(CONFIG.stateFile) ? JSON.parse(readFileSync(CONFIG.stateFile, 'utf8')) : { seen: [] }; s.owner = author; writeFileSync(CONFIG.stateFile, JSON.stringify(s, null, 2)); } catch (e) { console.error('owner persist', e.message); }
+        console.log('[bot] owner登録:', author);
+        return `🔓 オーナー登録した。以降あなたの発言だけツール全開（ファイル閲覧/編集/Bash）で応じる。他の人は会話のみ。`;
       }
-      case 'queue':
+      case 'play':
+      case 'queue': {
         if (!q) return renderQueue();           // 引数なし = 番号付き一覧
+        // /play 一本化: 空いてれば即再生、再生中なら自動でキューに積む（/q と同挙動）
+        if (!nowQuery && !starting) { const r = await startTrack(q); return r.ok ? null : notFoundMsg(q); }
         queue.push(q);
-        if (!nowQuery && !starting) { const r = await startTrack(queue.shift()); return r.ok ? null : notFoundMsg(q); }
-        return `➕ 追加(${queue.length}): ${q}\n` + renderQueue();
+        return `➕ キューに追加(${queue.length}): ${q}\n` + renderQueue();
+      }
       case 'qlist': return renderQueue();
       case 'qdel': {
         if (!queue.length) return '📜 キューは空';
@@ -388,7 +404,10 @@ async function main() {
   try { await agora.drainInbox(page); } catch {}
 
   const stateExisted = existsSync(CONFIG.stateFile);
-  const seen = new Set(loadState().seen);
+  const st0 = loadState();
+  const seen = new Set(st0.seen);
+  ownerRtm = st0.owner || process.env.YAY_OWNER || null;
+  console.log('[bot] owner:', ownerRtm || '未登録（/iam ' + OWNER_SECRET + ' で登録）');
   console.log('[bot] 稼働開始', stateExisted ? '(seen継承)' : '(初回)');
   console.log('[bot] 人格:', personaKey || '通常', personaSys ? `/ 自発おしゃべり ${IDLE_MIN_MS / 1000}〜${IDLE_MAX_MS / 1000}s` : '/ 自発OFF', '（チャットで /zunda 切替）');
 
@@ -492,7 +511,7 @@ async function main() {
       const ts = new Date().toLocaleTimeString('ja-JP');
       fresh.forEach((m) => { console.log(`[${ts}] 新着 ${m.author}: ${m.text}`); pushLine(`${m.author}: ${m.text}`); });
       for (const m of fresh) {
-        const mr = await handleCommand(m.text);
+        const mr = await handleCommand(m.text, m.author);
         // コマンド応答は究の明示要求＝必ず返す（連投ガードは会話返信だけに掛ける。
         //   ここを canReply で塞ぐと /q /h /st 等がクールダウン中に握り潰され「効かない」に見える）。
         if (mr) { await sendYayChat(page, mr).catch((e) => console.error('send', e.message)); console.log('  ♪', mr); }
@@ -500,13 +519,16 @@ async function main() {
       const conv = fresh.filter((m) => !/^[!\/]/.test(m.text));
       if (conv.length && canReply()) {
         const context = recentLines.slice(-10).join('\n');
+        // 話者ガード: この返信が応じる発言が全てオーナー本人の時だけツール全開。
+        //   他人が混じる/オーナー未登録なら会話のみ（ファイル/Bash 不可）。
+        const tools = !!ownerRtm && conv.every((m) => m.author === ownerRtm);
         try {
-          let reply = (await emoccReply(context, { system: personaSys })).replace(/^[!\/]\S*\s*/, '').trim();
+          let reply = (await emoccReply(context, { system: personaSys, tools })).replace(/^[!\/]\S*\s*/, '').trim();
           if (reply) { await sendYayChat(page, reply); markReplied(); pushLine(`自分: ${reply}`); lastActivityAt = Date.now(); console.log('  → 返信:', reply); await sayOut(reply); }
           else console.log('  → [skip]');
         } catch (e) { console.error('reply err', e.message); }
       } else if (conv.length) console.log('  → 連投ガードで保留');
-      saveState({ seen: [...seen].slice(-2000) });
+      saveState({ seen: [...seen].slice(-2000), owner: ownerRtm });
     }
     await sleep(CONFIG.pollMs);
   }
