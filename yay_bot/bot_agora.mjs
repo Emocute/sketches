@@ -180,9 +180,9 @@ function renderHelpShort() {
   return [
     '🎧 EmoCC コマンド（簡易）',
     '/voice /ears /mode <m> /zunda … 機能 on/off',
-    '/p <曲> /q <曲> /s /x /ps /r /v <n> … 再生制御',
-    '/np /l /lv /c … 再生情報・キュー',
-    '/d /st /h /? /pi /bye … その他',
+    '/p <曲> /s /x /ps /r /v <n> /l /np … 再生制御',
+    '/q（一覧）/q <曲>（追加）/qd <N> /qu <N> /qj <N> /c … キュー',
+    '/lv /d /st /pi /bye … その他',
     '詳細: /h',
   ].join('\n');
 }
@@ -493,7 +493,9 @@ async function main() {
       fresh.forEach((m) => { console.log(`[${ts}] 新着 ${m.author}: ${m.text}`); pushLine(`${m.author}: ${m.text}`); });
       for (const m of fresh) {
         const mr = await handleCommand(m.text);
-        if (mr && canReply()) { await sendYayChat(page, mr).catch((e) => console.error('send', e.message)); markReplied(); console.log('  ♪', mr); }
+        // コマンド応答は究の明示要求＝必ず返す（連投ガードは会話返信だけに掛ける。
+        //   ここを canReply で塞ぐと /q /h /st 等がクールダウン中に握り潰され「効かない」に見える）。
+        if (mr) { await sendYayChat(page, mr).catch((e) => console.error('send', e.message)); console.log('  ♪', mr); }
       }
       const conv = fresh.filter((m) => !/^[!\/]/.test(m.text));
       if (conv.length && canReply()) {
