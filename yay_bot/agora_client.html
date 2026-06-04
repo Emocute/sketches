@@ -18,6 +18,9 @@
     rtc: null, rtm: null, rtmChannel: null,
     musicTrack: null, joinedRtc: false, joinedRtm: false,
     nowPlaying: null, log: [], inbox: [], errors: [],
+    remoteTracks: new Map(),  // uid → IRemoteAudioTrack（聞き取り用）
+    utterances: [],           // 切り出した発話 {b64,rate,ms}（Node が drain）
+    listen: { on: false, ctx: null, bus: null, proc: null, sources: new Map(), buf: [], voiced: false, hold: 0, srcRate: 48000, thresh: 0.012 },
   };
   window.__yay = S;
   const logEl = document.getElementById('log');
@@ -39,9 +42,20 @@
     //   'opus' を渡すと INVALID_PARAMS。音声publishには既定の vp8 でよい（映像は使わない）。
     S.rtc = AgoraRTC.createClient({ mode: 'rtc', codec: 'vp8' });
     S.rtc.on('user-published', async (user, mediaType) => {
-      // 他参加者の音は購読しない（DJなので聞く必要なし＋CPU節約）。必要なら有効化。
       L('remote published', user.uid, mediaType);
+      if (mediaType !== 'audio') return;
+      // 聞き取り用に購読する。★.play() は呼ばない＝スピーカー出力しない（Yay出力→BlackHoleへの
+      //   ハウリング/自分の音楽との混線を防ぐ）。WebAudio で解析だけする。
+      try {
+        await S.rtc.subscribe(user, 'audio');
+        S.remoteTracks.set(String(user.uid), user.audioTrack);
+        if (S.listen.on) attachRemote(String(user.uid), user.audioTrack);
+      } catch (e) { err('subscribe', e); }
     });
+    S.rtc.on('user-unpublished', (user, mediaType) => {
+      if (mediaType === 'audio') { detachRemote(String(user.uid)); S.remoteTracks.delete(String(user.uid)); }
+    });
+    S.rtc.on('user-left', (user) => { detachRemote(String(user.uid)); S.remoteTracks.delete(String(user.uid)); });
     S.rtc.on('exception', (ev) => L('rtc exception', ev.code, ev.msg));
     S.rtc.on('connection-state-change', (cur, prev, reason) => L('rtc state', prev, '→', cur, reason || ''));
     // ★uid は conference_call_user_uuid（文字列アカウント）。RTCトークンの crc_uid が
@@ -133,6 +147,91 @@
   function pauseMusic() { try { S.audioEl?.pause(); } catch {} L('pause'); return { ok: !!S.audioEl }; }
   function resumeMusic() { try { S.audioEl?.play(); } catch {} L('resume'); return { ok: !!S.audioEl }; }
 
+  // ===== 通話音声の聞き取り（remote audio → 16k mono PCM → Node が whisper へ）=====
+  // 設計: 各 remote の音声トラックを WebAudio の mix bus に集約 → ScriptProcessor で RMS-VAD。
+  //   発話区間だけ切り出し 16kHz mono Int16 に変換 → base64 で S.utterances に積む。Node が drain。
+  //   ★destination には繋ぐが出力は書かない（無音）＝スピーカーに漏らさない。
+  function resampleTo16k(input, inRate) {
+    if (inRate === 16000) return input;
+    const ratio = inRate / 16000;
+    const outLen = Math.floor(input.length / ratio);
+    const out = new Float32Array(outLen);
+    for (let i = 0; i < outLen; i++) {
+      const idx = i * ratio, i0 = Math.floor(idx), i1 = Math.min(i0 + 1, input.length - 1), f = idx - i0;
+      out[i] = input[i0] * (1 - f) + input[i1] * f;
+    }
+    return out;
+  }
+  function flushUtterance() {
+    const u = S.listen;
+    if (!u.buf.length) { u.voiced = false; u.hold = 0; return; }
+    let total = 0; for (const f of u.buf) total += f.length;
+    const pcm = new Float32Array(total); let o = 0; for (const f of u.buf) { pcm.set(f, o); o += f.length; }
+    u.buf.length = 0; u.voiced = false; u.hold = 0;
+    const out16 = resampleTo16k(pcm, u.srcRate);
+    const ms = Math.round(out16.length / 16000 * 1000);
+    if (ms < 350) return;  // 短すぎる雑音は捨てる
+    const i16 = new Int16Array(out16.length);
+    for (let i = 0; i < out16.length; i++) { let s = Math.max(-1, Math.min(1, out16[i])); i16[i] = s < 0 ? s * 0x8000 : s * 0x7fff; }
+    const bytes = new Uint8Array(i16.buffer); let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    S.utterances.push({ b64: btoa(bin), rate: 16000, ms });
+    if (S.utterances.length > 30) S.utterances.shift();
+    L('utterance', ms + 'ms', 'q=' + S.utterances.length);
+  }
+  function ensureListenGraph() {
+    if (S.listen.ctx) return;
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const bus = ctx.createGain(); bus.gain.value = 1;
+    const proc = ctx.createScriptProcessor(4096, 1, 1);
+    const THRESH = Number(S.listen.thresh) || 0.012;   // RMS 閾（環境で要調整）
+    const HOLD_MAX = 8;                                  // 無音が約0.68s続いたら区切る
+    proc.onaudioprocess = (e) => {
+      if (!S.listen.on) return;
+      const ch = e.inputBuffer.getChannelData(0);
+      let sum = 0; for (let i = 0; i < ch.length; i++) sum += ch[i] * ch[i];
+      const rms = Math.sqrt(sum / ch.length);
+      const u = S.listen;
+      if (rms >= THRESH) { u.voiced = true; u.hold = 0; u.buf.push(new Float32Array(ch)); }
+      else if (u.voiced) { u.hold++; u.buf.push(new Float32Array(ch)); if (u.hold >= HOLD_MAX) flushUtterance(); }
+      if (u.voiced) { let tot = 0; for (const f of u.buf) tot += f.length; if (tot > u.srcRate * 12) flushUtterance(); }  // 暴走防止12s上限
+    };
+    bus.connect(proc); proc.connect(ctx.destination);   // proc は無音出力（onaudioprocessでoutを書かない）
+    S.listen.ctx = ctx; S.listen.bus = bus; S.listen.proc = proc; S.listen.srcRate = ctx.sampleRate;
+    L('listen graph', 'srcRate=' + ctx.sampleRate);
+  }
+  function attachRemote(uid, track) {
+    try {
+      ensureListenGraph();
+      const mst = track.getMediaStreamTrack();
+      const src = S.listen.ctx.createMediaStreamSource(new MediaStream([mst]));
+      src.connect(S.listen.bus);
+      S.listen.sources.set(uid, src);
+      L('listen attach', uid, 'n=' + S.listen.sources.size);
+    } catch (e) { err('attachRemote', e); }
+  }
+  function detachRemote(uid) {
+    const s = S.listen.sources.get(uid);
+    if (s) { try { s.disconnect(); } catch {} S.listen.sources.delete(uid); L('listen detach', uid); }
+  }
+  function startListen(opts) {
+    ensureListenGraph();
+    if (opts && typeof opts.thresh === 'number') S.listen.thresh = opts.thresh;
+    if (S.listen.ctx.state === 'suspended') S.listen.ctx.resume();
+    S.listen.on = true;
+    for (const [uid, track] of S.remoteTracks) if (!S.listen.sources.has(uid)) attachRemote(uid, track);
+    L('👂 listen ON', 'sources=' + S.listen.sources.size);
+    return { ok: true, sources: S.listen.sources.size };
+  }
+  function stopListen() {
+    S.listen.on = false;
+    for (const [uid, s] of S.listen.sources) { try { s.disconnect(); } catch {} }
+    S.listen.sources.clear(); S.listen.buf.length = 0; S.listen.voiced = false; S.listen.hold = 0;
+    L('listen OFF');
+    return { ok: true };
+  }
+  function drainUtterances() { const x = S.utterances.slice(); S.utterances.length = 0; return x; }
+
   // ===== RTM（通話チャット）=====
   // 注意: Yay通話チャットのRTMチャンネル名・メッセージ形式は実通話で要発見（スパイク）。
   // 既定では RTC と同じ channel 名を購読し、来た生メッセージを inbox/log に貯める。
@@ -181,6 +280,7 @@
       return out;
     },
     playUrl, playLive, listAudioInputs, setMusicVolume, setLoop, stopMusic, pauseMusic, resumeMusic, sendChat,
+    startListen, stopListen, drainUtterances, listenStatus: () => ({ on: S.listen.on, sources: S.listen.sources.size, queued: S.utterances.length, srcRate: S.listen.srcRate }),
     // Node が polling で吸う
     drainInbox: () => { const x = S.inbox.slice(); S.inbox.length = 0; return x; },
     peekInbox: () => S.inbox.slice(),

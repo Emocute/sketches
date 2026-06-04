@@ -106,6 +106,11 @@ export const drainInbox = (page) => ev(page, () => window.YayAgora.drainInbox())
 export const status = (page) => ev(page, () => window.YayAgora.status());
 export const tail = (page, n) => ev(page, (k) => window.YayAgora.tail(k), n);
 export const leave = (page) => ev(page, () => window.YayAgora.leave());
+// 聞き取り（通話音声の文字起こし用）
+export const startListen = (page, opts) => ev(page, (o) => window.YayAgora.startListen(o), opts || {});
+export const stopListen = (page) => ev(page, () => window.YayAgora.stopListen());
+export const drainUtterances = (page) => ev(page, () => window.YayAgora.drainUtterances());
+export const listenStatus = (page) => ev(page, () => window.YayAgora.listenStatus());
 
 // --- selftest: トークン無しで SDK ロード/ページAPI を検証 ---
 if (process.argv[1] && process.argv[1].endsWith('agora.mjs') && process.argv[2] === 'selftest') {

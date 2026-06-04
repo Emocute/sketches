@@ -46,11 +46,14 @@ export async function resolveStreamUrl(query, { timeout = 30000 } = {}) {
   if (!q) throw new Error('曲名が空');
   if (/^https?:\/\/.+\.(mp3|m4a|aac|ogg|opus|wav|flac)(\?|$)/i.test(q)) return { url: q, query: q };
   const target = /^https?:\/\//i.test(q) ? q : `ytsearch1:${q}`;
-  // m4a(itag140)優先。-g は URL のみ出力（DLなし）。
-  const out = await sh('yt-dlp', ['-g', '-f', 'bestaudio[ext=m4a]/bestaudio/best', '--no-playlist', target], { timeout });
-  const url = (out || '').trim().split('\n').filter(Boolean).pop();
-  if (!url || !/^https?:\/\//.test(url)) throw new Error('yt-dlp -g がURLを返さない');
-  return { url, query: q };
+  // m4a(itag140)優先。-g は URL のみ出力（DLなし）。--print で正式タイトルも同時取得。
+  const out = await sh('yt-dlp', ['-g', '--print', 'T:%(title)s', '-f', 'bestaudio[ext=m4a]/bestaudio/best', '--no-playlist', target], { timeout });
+  const lines = (out || '').trim().split('\n').filter(Boolean);
+  const url = lines.filter((l) => /^https?:\/\//.test(l)).pop();
+  const tline = lines.find((l) => l.startsWith('T:'));
+  const title = tline ? tline.slice(2).trim() : q;
+  if (!url) throw new Error('yt-dlp がURLを返さない');
+  return { url, title, query: q };
 }
 
 // /play 入力 → { path } （ローカル絶対パス、旧DL方式。フォールバック用に残置）
