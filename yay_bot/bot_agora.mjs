@@ -15,6 +15,8 @@ import { CONFIG } from './config.mjs';
 import { emoccReply, idleChatter, PERSONAS } from './lib/claude.mjs';
 import * as agora from './lib/agora.mjs';
 import * as music from './lib/music_agora.mjs';
+import * as listen from './lib/listen.mjs';
+import * as tts from './lib/tts.mjs';
 
 const PY = fileURLToPath(new URL('./.venv/bin/python', import.meta.url));
 const API = fileURLToPath(new URL('./yay_api.py', import.meta.url));
@@ -23,7 +25,11 @@ const SELF_UID = String(process.env.YAY_SELF_UID || '11320230');
 let personaKey = String(process.env.YAY_PERSONA || '').toLowerCase();
 let personaSys = PERSONAS[personaKey] || undefined;
 // 人格名の別名（日本語/略称 → canonical key）
-const PERSONA_ALIAS = { zunda: 'zundamon', zundamon: 'zundamon', 'ずんだ': 'zundamon', 'ずんだもん': 'zundamon' };
+const PERSONA_ALIAS = {
+  zunda: 'zundamon', zundamon: 'zundamon', 'ずんだ': 'zundamon', 'ずんだもん': 'zundamon',
+  natsuki: 'natsuki', 'なつき': 'natsuki', '夏希': 'natsuki', 'natsu': 'natsuki',
+  succubus: 'succubus', 'succ': 'succubus', 'サキュバス': 'succubus', 'インキュバス': 'succubus',
+};
 // 自発おしゃべりのスケジュール（モジュールスコープ＝/mode から即発火させられる）
 let lastActivityAt = 0, nextIdleAt = 0;
 // 自発おしゃべりの間隔（中スパン）。YAY_IDLE_MIN/MAX 秒で上書き可。0=無効。
@@ -100,7 +106,8 @@ let starting = false;  // 多重起動ガード
 
 // canonical → [aliases]（先頭が正式名）。`/` でも `!` でも発火。
 const CMD = {
-  help:   ['help', 'h', '?'],
+  help:   ['help', 'h'],
+  helpshort: ['?'],
   play:   ['play', 'p'],
   queue:  ['queue', 'q', 'add'],
   skip:   ['skip', 's', 'next', 'n'],
@@ -117,18 +124,93 @@ const CMD = {
   leave:  ['leave', 'bye'],
   mode:   ['mode', 'm', 'persona'],
   zunda:  ['zunda', 'ずんだ'],
+  ears:   ['ears', 'listen', '耳', '聞く', 'kiku'],
+  voice:  ['voice', 'yomi', 'tts', '読み', '読み上げ', '喋る', 'koe'],
+  status: ['status', 'st', '状態', 'state'],
+  qlist:  ['ql', 'qlist', 'きゅー', 'リスト'],
+  qdel:   ['qd', 'qdel', 'rm', '消'],
+  qup:    ['qu', 'qup', 'up', '上'],
+  qdn:    ['qj', 'qdn', 'down', '下'],
 };
 const ALIAS = {}; for (const [k, vs] of Object.entries(CMD)) for (const v of vs) ALIAS[v] = k;
-const HELP = [
-  '🎧 コマンド一覧',
-  '/p 曲 = 今すぐ再生',
-  '/q 曲 = キューに追加',
-  '/s = 次へ  /x = 停止  /ps = 一時停止  /r = 再開',
-  '/v 0-100 = 音量  /np = 再生中  /l = ループ',
-  '/lv = システム音声  /d = 入力  /c = キュー消去',
-  '/zunda = ずんだもんON/OFF  /mode off = 通常',
-  '/h = ヘルプ',
-].join('\n');
+// トグル状態
+let listening = false;  // 聞き取り（通話音声→文字起こし→返信）
+let speaking = false;   // 読み上げ（返信のTTS＝ずんだもん声）
+
+const onoff = (b) => (b ? '🟢ON' : '⚪OFF');
+// いまの状態ブロック（/st と /h の冒頭で共用）
+function statusBlock() {
+  return [
+    `🗣 読み上げ: ${onoff(speaking)}（ずんだもん声）`,
+    `👂 聞き取り: ${onoff(listening)}`,
+    `🎭 ずんだもん語尾: ${onoff(personaKey === 'zundamon')}`,
+    nowQuery ? `🎵 再生中: ${nowQuery}` : '🎵 再生: なし',
+  ].join('\n');
+}
+function renderHelpFull() {
+  return [
+    '🎧 EmoCC コマンド（詳細）',
+    '― いまの状態 ―',
+    statusBlock(),
+    '― 切替（各コマンドでトグル / on・off 明示も可）―',
+    '/voice（読）= 読み上げ。返信を自動でずんだもん声で喋る',
+    '/ears（聞）= 聞き取り。通話の音声を文字起こし→自動返信',
+    '/mode <モード> = 人格切替（zundamon/off 等）',
+    '  ・/zunda = ずんだもん語尾 on/off',
+    '― 音楽再生 ―',
+    '/p <曲> = 再生開始',
+    '/q <曲> = キューに追加（再生中なら直後に再生）',
+    '/s（次）= スキップ / /x（停止）= 全停止',
+    '/ps = 一時停止 / /r = 再開',
+    '/v 0-100 = 音量設定（既定15）',
+    '/np = 再生中の曲 / /l = 一曲ループ',
+    '/lv [match] = システム音声配信（例: /lv mic）',
+    '/c = キュー消去',
+    '― キュー操作 ―',
+    '/q / /qlist = キュー一覧（番号付き）',
+    '/qd <N> = N番削除 / /qu <N> = N番を前へ / /qj <N> = N番を後ろへ',
+    '― その他 ―',
+    '/d = 音声入力デバイス一覧',
+    '/st = 状態確認 / /h = 詳細ヘルプ / /? = 簡易ヘルプ',
+    '/pi = ping / /bye = 通話から退出',
+  ].join('\n');
+}
+
+function renderHelpShort() {
+  return [
+    '🎧 EmoCC コマンド（簡易）',
+    '/voice /ears /mode <m> /zunda … 機能 on/off',
+    '/p <曲> /q <曲> /s /x /ps /r /v <n> … 再生制御',
+    '/np /l /lv /c … 再生情報・キュー',
+    '/d /st /h /? /pi /bye … その他',
+    '詳細: /h',
+  ].join('\n');
+}
+
+function renderHelp() {
+  return renderHelpFull();
+}
+// 返信を喋る（speaking時のみ）。TTS で WAV 生成 → Agora RTC に publish。
+// 人格に応じたボイスパックを選択。
+async function sayOut(text) {
+  if (!speaking) return;
+  try {
+    // 人格に応じたボイス選択
+    const voiceMap = {
+      zundamon: 'zundamon',       // ずんだもん
+      natsuki: 'akari',            // ナツキ → あかり（辛辣）
+      succubus: 'zundamon_sad',   // サキュバス → 悲しい声（妖艶さ）
+    };
+    const voiceKey = voiceMap[personaKey] || undefined;
+    const r = await tts.speak(text, { voice: voiceKey });
+    if (!r.ok || !r.file) { console.error('tts: no file', r); return; }
+    // WAV ファイルを Agora playUrl で再生（RTC publish）
+    const url = agora.fileUrl(fileBase, r.file);
+    await agora.playUrl(page, url).catch(() => {});  // 喋るのに失敗しても続行
+  } catch (e) {
+    console.error('sayOut err', e.message);
+  }
+}
 
 // 人格の実行時切替（再起動不要）。ON にしたら起動直後と同じく一発目を即出す。
 function setPersona(key) {
@@ -138,15 +220,34 @@ function setPersona(key) {
   return '🎭 通常モードに戻した（自発おしゃべりOFF）';
 }
 
-// 1曲を解決→publish（real-time）
+// 1曲を解決→publish（real-time）。解決した正式タイトルを「流す前」にチャットへ出す。
+//   見つからなければ {ok:false,notfound:true} を返す（呼び出し側が ❌ で通知）。
 async function startTrack(query) {
   starting = true;
   try {
-    const r = await music.resolveStreamUrl(query);
+    let r;
+    try { r = await music.resolveStreamUrl(query); }
+    catch (e) { console.error('  resolve失敗:', e.message); return { ok: false, notfound: true, query }; }
+    const title = r.title || query;
+    await sendYayChat(page, `🎵 ${title}`).catch(() => {});  // ★再生前に正式タイトルを通知
     await agora.playUrl(page, agora.streamUrl(fileBase, r.url));
-    nowQuery = query;
-    return `▶ ${query}`;
+    nowQuery = title;                                        // /np 表示も正式タイトルに
+    return { ok: true, title };
   } finally { starting = false; }
+}
+const notFoundMsg = (q) => `❌ 見つかりませんでした: ${q}`;
+
+// キューを番号付きで表示
+function renderQueue() {
+  const head = nowQuery ? `🎵 再生中: ${nowQuery}` : '🎵 再生: なし';
+  if (!queue.length) return `${head}\n📜 キューは空`;
+  const lines = queue.map((s, i) => `${i + 1}. ${s}`).join('\n');
+  return `${head}\n📜 キュー(${queue.length})\n${lines}`;
+}
+// 番号引数（1始まり）→ 0始まりindex（範囲外は -1）
+function qIndex(q) {
+  const n = parseInt(q, 10);
+  return (Number.isInteger(n) && n >= 1 && n <= queue.length) ? n - 1 : -1;
 }
 
 // テキスト → コマンド応答（コマンドでなければ null）
@@ -158,16 +259,39 @@ async function handleCommand(text) {
   if (!cmd) return null;
   try {
     switch (cmd) {
-      case 'help': return HELP;
+      case 'help': return renderHelp();
+      case 'helpshort': return renderHelpShort();
+      case 'status': return statusBlock();
       case 'ping': return '🏓 pong';
-      case 'play':
+      case 'play': {
         if (!q) return '曲名を入れて（例: /p 曲名）';
-        return await startTrack(q);
+        const r = await startTrack(q);          // 正式タイトルは startTrack が再生前に通知
+        return r.ok ? null : notFoundMsg(q);
+      }
       case 'queue':
-        if (!q) return queue.length ? `📜 キュー(${queue.length}): ${queue.slice(0, 5).join(' / ')}` : 'キューは空';
+        if (!q) return renderQueue();           // 引数なし = 番号付き一覧
         queue.push(q);
-        if (!nowQuery && !starting) return await startTrack(queue.shift());
-        return `➕ 追加(${queue.length}): ${q}`;
+        if (!nowQuery && !starting) { const r = await startTrack(queue.shift()); return r.ok ? null : notFoundMsg(q); }
+        return `➕ 追加(${queue.length}): ${q}\n` + renderQueue();
+      case 'qlist': return renderQueue();
+      case 'qdel': {
+        if (!queue.length) return '📜 キューは空';
+        const i = qIndex(q); if (i < 0) return `番号を指定して（1〜${queue.length}）例: /qd 2`;
+        const [x] = queue.splice(i, 1);
+        return `🗑 ${i + 1}. ${x} を削除\n` + renderQueue();
+      }
+      case 'qup': {
+        const i = qIndex(q); if (i < 0) return `番号を指定して（1〜${queue.length}）例: /qu 2`;
+        if (i === 0) return 'もう先頭だよ\n' + renderQueue();
+        [queue[i - 1], queue[i]] = [queue[i], queue[i - 1]];
+        return `⬆ ${i + 1}→${i} へ移動\n` + renderQueue();
+      }
+      case 'qdn': {
+        const i = qIndex(q); if (i < 0) return `番号を指定して（1〜${queue.length}）例: /qj 2`;
+        if (i === queue.length - 1) return 'もう末尾だよ\n' + renderQueue();
+        [queue[i + 1], queue[i]] = [queue[i], queue[i + 1]];
+        return `⬇ ${i + 1}→${i + 2} へ移動\n` + renderQueue();
+      }
       case 'skip':
         await agora.stopMusic(page); nowQuery = null;
         return queue.length ? '⏭ スキップ' : '⏭ スキップ（キュー空）';
@@ -179,7 +303,7 @@ async function handleCommand(text) {
       case 'resume': await agora.resumeMusic(page); return '▶ 再開';
       case 'vol': { const r = await agora.setMusicVolume(page, q); return r?.ok ? `🔊 音量 ${r.vol}` : '音量は 0〜100（例: /v 15）'; }
       case 'np': return nowQuery ? `🎵 再生中: ${nowQuery}${queue.length ? ` / 次(${queue.length}): ${queue.slice(0, 3).join(' / ')}` : ''}` : (queue.length ? `📜 キュー(${queue.length}): ${queue.slice(0, 5).join(' / ')}` : '何も流してない');
-      case 'loop': { const r = await agora.setLoop(page); return r?.loop ? '🔁 ループON' : '➡ ループOFF'; }
+      case 'loop': { const r = await agora.setLoop(page); return r?.loop ? '🔁 一曲ループON（今の曲を繰り返す）' : '➡ 一曲ループOFF'; }
       case 'live': await agora.playLive(page, q || null); nowQuery = 'live'; return `▶ システム音声配信中${q ? '（' + q + '）' : ''}`;
       case 'dev': { const ds = await agora.listAudioInputs(page); return '🎤 入力: ' + (ds.map((d) => d.label).filter(Boolean).join(' / ') || 'なし'); }
       case 'leave': await agora.leave(page); nowQuery = null; queue = []; return '👋 通話から抜けた';
@@ -193,6 +317,25 @@ async function handleCommand(text) {
       }
       case 'zunda':  // トグル
         return setPersona(personaKey === 'zundamon' ? '' : 'zundamon');
+      case 'ears': {  // 通話音声の聞き取りトグル
+        const want = q.toLowerCase();
+        const turnOff = ['off', 'stop', 'なし', 'オフ', '0'].includes(want);
+        const turnOn = ['on', 'start', 'オン', '1'].includes(want);
+        if (turnOff || (!turnOn && listening)) {
+          await agora.stopListen(page); listening = false; return '🙉 聞き取りOFF';
+        }
+        if (!listen.modelReady()) return `whisper モデルが無い: ${listen.modelPath()}`;
+        const r = await agora.startListen(page); listening = true;
+        return `👂 聞き取りON（接続音声 ${r?.sources ?? 0}）${personaKey ? ` / ${personaKey}で返す` : ''}`;
+      }
+      case 'voice': {  // 読み上げトグル
+        const want = q.toLowerCase();
+        const turnOff = ['off', 'stop', 'なし', 'オフ', '0'].includes(want);
+        const turnOn = ['on', 'start', 'オン', '1'].includes(want);
+        if (turnOff || (!turnOn && speaking)) { speaking = false; return '🔇 読み上げOFF'; }
+        await tts.voicevoxAlive(); speaking = true;
+        return `🗣 読み上げON（${tts.engineName()}）`;
+      }
       default: return null;
     }
   } catch (e) { return `エラー: ${e.message}`; }
@@ -259,6 +402,29 @@ async function main() {
     console.log('[bot] TEST_PLAY 結果:', r);
   }
 
+  // 自動ライブ取り込み: YAY_AUTO_LIVE="BlackHole" 等で join 直後にシステム音声入力を掴んで配信開始。
+  //   Spotify DJ 運用（Spotify→複数出力装置→BlackHole→ここで取り込み）で究が /lv を打たずに済む。
+  if (process.env.YAY_AUTO_LIVE && joined.rtc?.ok) {
+    const m = String(process.env.YAY_AUTO_LIVE);
+    console.log('[bot] ▶ AUTO_LIVE:', m);
+    const r = await handleCommand('/lv ' + m);
+    console.log('[bot] AUTO_LIVE 結果:', r);
+  }
+
+  // 自動聞き取り: YAY_LISTEN=1 で join 直後に通話音声の文字起こし→返信を有効化。
+  if (process.env.YAY_LISTEN && joined.rtc?.ok) {
+    if (listen.modelReady()) {
+      const r = await agora.startListen(page); listening = true;
+      console.log('[bot] 👂 AUTO_LISTEN ON sources=', r?.sources, 'model=', listen.modelPath());
+    } else console.error('[bot] ⚠ YAY_LISTEN 指定だが whisper モデル無し:', listen.modelPath());
+  }
+
+  // 自動読み上げ: YAY_TTS=1 で返信のTTSを有効化。
+  if (process.env.YAY_TTS) {
+    await tts.voicevoxAlive(); speaking = true;
+    console.log('[bot] 🗣 AUTO_TTS ON engine=', tts.engineName());
+  }
+
   for (;;) {
     // キュー自動送り: 再生が止まっててキューがあれば次を流す
     if (!starting) {
@@ -266,12 +432,32 @@ async function main() {
         const st = await agora.status(page);
         if (!st?.nowPlaying) {
           if (queue.length) {
-            const r = await startTrack(queue.shift());
+            const r = await startTrack(queue.shift());   // タイトル通知は startTrack 内で実施済み
             console.log('  ▶ next:', r);
-            if (canReply()) { await sendYayChat(page, r).catch(() => {}); markReplied(); }
           } else if (nowQuery && nowQuery !== 'live') { nowQuery = null; }
         }
       } catch {}
+    }
+
+    // 通話音声の聞き取り: 切り出された発話を whisper で文字起こし → EmoCC（人格反映）で返信
+    if (listening) {
+      let utts = [];
+      try { utts = await agora.drainUtterances(page); } catch (e) { console.error('drainUtt', e.message); }
+      for (const u of utts) {
+        let heard = '';
+        try { heard = await listen.transcribe(u.b64, u.rate); } catch (e) { console.error('whisper', e.message); }
+        if (!heard) continue;
+        console.log(`  👂 聞: ${heard}`);
+        pushLine(`声: ${heard}`);
+        lastActivityAt = Date.now();
+        if (canReply()) {
+          const context = recentLines.slice(-10).join('\n');
+          try {
+            const reply = (await emoccReply(context, { system: personaSys })).replace(/^[!\/]\S*\s*/, '').trim();
+            if (reply) { await sendYayChat(page, reply); markReplied(); pushLine(`自分: ${reply}`); console.log('  → 声返信:', reply); await sayOut(reply); }
+          } catch (e) { console.error('voice reply err', e.message); }
+        }
+      }
     }
 
     // 自発おしゃべり（人格指定時のみ）: 場が静かなら中スパンで自分から一言
@@ -285,6 +471,7 @@ async function main() {
           pushLine(`自分: ${line}`);
           lastActivityAt = Date.now();
           console.log('  💬 idle:', line);
+          await sayOut(line);
         }
       } catch (e) { console.error('idle err', e.message); }
       nextIdleAt = Date.now() + idleSpan();
@@ -309,7 +496,7 @@ async function main() {
         const context = recentLines.slice(-10).join('\n');
         try {
           let reply = (await emoccReply(context, { system: personaSys })).replace(/^[!\/]\S*\s*/, '').trim();
-          if (reply) { await sendYayChat(page, reply); markReplied(); pushLine(`自分: ${reply}`); lastActivityAt = Date.now(); console.log('  → 返信:', reply); }
+          if (reply) { await sendYayChat(page, reply); markReplied(); pushLine(`自分: ${reply}`); lastActivityAt = Date.now(); console.log('  → 返信:', reply); await sayOut(reply); }
           else console.log('  → [skip]');
         } catch (e) { console.error('reply err', e.message); }
       } else if (conv.length) console.log('  → 連投ガードで保留');
