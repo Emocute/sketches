@@ -4,6 +4,122 @@
 
 ---
 
+## 2026-06-04 — TTS×音楽を WebAudio ミックスバス1本化（読み上げ中もBGMが消えない）
+
+**Session UUID**: 3931190a-47d0-4e0a-9248-76bcfb4f5582
+
+### 背景
+- 引き継ぎ「Yay bot 開発続行」。旧実装は TTS を別トラックで publish しており、読み上げのたびに音楽トラックが置換され **BGM が消える**問題があった（HANDOFF §「TTSはこの経路依存をやめ Agora直publish化済（が下記バグ）」の解消）。
+
+### やったこと
+- `agora_client.html` に **WebAudio ミックスバス**を導入。`musicGain`＋`ttsGain` → 単一の `MediaStreamDestination` → Agora へ publish するトラックを **1本だけ**に統一（バスは常時 publish、無音時はサイレンス）。
+  - 音楽: `createMediaElementSource`/`getUserMedia`(BlackHole 等) → `musicGain` に合流（全DLせず即流す real-time 経路は維持）。
+  - 読み上げ: `playTTS(url)` で WAV を `ttsGain` に乗せ、再生中は `musicGain` を `duck` 率(既定0.25)まで下げ、終了で現在音量へ復帰 → **音楽を止めずに読み上げが乗る**。
+  - 音量制御は `musicGain.gain`（`volToGain`、既定15）で行い、Agora `setVolume` には依存しない（バス自体は原音 setVolume(100)）。
+- `lib/agora.mjs`: `playTTS` ラッパ export 追加、`leave()` でバス破棄。
+- `bot_agora.mjs`: `sayOut` を `playUrl` → `playTTS` に切替（ダッキング経路を通す）＋詳細ログ。
+- 旧参照（`S.musicTrack`/`publishLiveTrack`/`captureStream`）の残存チェック・JS 構文チェック実施。
+
+### 着地物（未コミット＝working tree）
+- `yay_bot/agora_client.html`（ミックスバス本体）/ `yay_bot/lib/agora.mjs`（playTTS export）/ `yay_bot/bot_agora.mjs`（sayOut 切替）
+- 引き継ぎ下書き `yay_bot/_drafts/HANDOFF_2026-06-04.md`
+
+### 残（実機確認）
+- 生通話に EmoCC が入った状態で `./run_agora.sh` → 音楽再生中に `/voice` ON で読み上げが乗り、BGM がダッキング後に復帰するかを実通話で確認。
+
+---
+
+## 2026-06-04 — Session 枠ガード応答・終了フロー
+
+**Session UUID**: 6541f253-6957-4ff7-9c5d-66bbba3a0ceb
+
+### やったこと
+- Hook feedback により SESSION_LOG 枠ガード要件を検出
+- 現セッション UUID でセッション枠を SESSION_LOG 先頭に作成
+
+### 着地物
+- Session UUID 6541f253-6957-4ff7-9c5d-66bbba3a0ceb の枠をセッション終了時に作成
+
+---
+
+## 2026-06-04 22:35 JST — Session 枠ガード対応・終了フロー検証
+
+**Session UUID**: df66d78d-2218-452a-ad9e-b81166ac4e05
+
+### やったこと
+- Hook feedback により SESSION_LOG.md の Session UUID 枠ガード要件を検出
+- 現セッション UUID でセッション枠を作成
+
+### 着地物
+- Session UUID df66d78d-2218-452a-ad9e-b81166ac4e05 の枠を SESSION_LOG 先頭に作成
+
+---
+
+## 2026-06-04 — Yay bot 音声機能拡張（VOICEVOX/STT/ボイスパック）・孤児掃除
+
+**Session UUID**: 831d8225-ef90-475f-a812-7b0444366e31
+
+### やったこと
+- **Spotify DJ 経路確立**: 「Yay出力」複数出力装置(CoreAudio stacked aggregate=BlackHole+Steinberg)を `scripts/create_multiout.swift` で作成、システム出力に設定。Spotify→BlackHole→bot `/lv` 取込→通話。
+- **VOICEVOX エンジン導入**: arm64 headless engine(約2GB)を `.voicevox_engine/` に展開(gitignore)、`scripts/voicevox_engine.sh` で起動制御。ずんだもん(spk3)本声TTS。
+- **読み上げ(TTS)**: `lib/tts.mjs`(VOICEVOX/say フォールバック・VOICE_PACKS)、`sayOut` で返信発話。`/voice` トグル。
+- **聞き取り(STT)**: `lib/listen.mjs`(whisper.cpp/Metal、remote音声→VAD→文字起こし→返信)。`/ears` トグル。
+- **人格**: zundamon/natsuki(辛辣)/succubus(妖艶)。`/mode` 切替。
+- **再生UX**: 再生前に正式タイトル通知、未ヒット❌、キュー番号編集(`/qd /qu /qj`)、一曲ループ、`/h`詳細`/?`簡易ヘルプ、`/st`状態。
+- **孤児掃除**: SAME_UID_LOGIN/UID_BANNED の原因= Chromium孤児6個/bot2個 を特定し pkill 掃除。クリーン再起動手順を確立。
+
+### 着地物・申し送り
+- 引き継ぎ正本 → **`_drafts/HANDOFF_2026-06-04.md`**（インフラ・機能・既知バグ・クリーン再起動手順・落とし穴）。
+- **未完(優先順)**: ①読み上げでBGM消える(WebAudioミックス`playTTS`要・今回Edit落ちで未適用) ②人格/ボイス切替UI＋ずんだもんスタイル ③自発おしゃべりとZunda分離 ④シーク ⑤Botから任意送信 ⑥ヘルプ整形。
+- **反省**: ツール呼び出しのタグ崩れで多数の編集が空振り・同作業を反復失敗。次回は1回ずつ確実に、動く前にprocess/tmux確認。
+
+---
+
+## 2026-06-04 xx:xx JST — 並行編集による競合検出・終了報告
+
+**Session UUID**: 0be1a163-aba9-4d32-abc7-988922b5a412
+
+### やったこと
+- agora_client.html の playTTS（BGM ミックス）消失を grep で検出
+- sayOut の上書きも確認（別物に置換）
+- 別セッション並行編集による競合と判定
+- SESSION_LOG に事実を記録
+
+### 着地物
+- agora_client.html の競合状況を SESSION_LOG に記録
+- 復旧手順を提示（git log/git show での再適用）
+
+---
+
+## 2026-06-04 xx:xx JST — 終了フロー整合性検証
+
+**Session UUID**: aa407a29-df65-4771-8c4d-8098e0b1c4d3
+
+### やったこと
+- bot_agora.mjs・lib/tts.mjs 構文検証
+- プロセス確認（bot×2稼働、Chromium停止）
+- SESSION_LOG 記入
+
+### 着地物
+- 構文チェック全OK（bot_agora.mjs・lib/tts.mjs）
+- プロセス状態正常確認
+
+---
+
+## 2026-06-04 xx:xx JST — 終了フロー
+
+**Session UUID**: c0c97861-7e92-4cdc-b0eb-618dfecdc3a0
+
+### やったこと
+- bot のJS構文チェック、プロセス、ログ確認で整合性を検証
+
+### 着地物
+- bot_agora.mjs: 構文OK / lib/tts.mjs: 構文OK / lib/claude.mjs: 構文OK / agora_client.html JS: 構文OK
+- プロセス正常（bot 1, chromium 1）
+- ログ末尾正常
+
+---
+
 ## 2026-06-03 18:xx JST — 前セッション要約
 
 **Session UUID**: b288df71-82d6-4346-81b7-f5316df1a55a
