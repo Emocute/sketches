@@ -3,6 +3,7 @@ node_modules/
 _music_cache/
 _listen_tmp/
 _tts_tmp/
+recordings/
 .voicevox_engine/
 state.json
 .yay_token

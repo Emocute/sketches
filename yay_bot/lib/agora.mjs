@@ -108,6 +108,12 @@ export const drainInbox = (page) => ev(page, () => window.YayAgora.drainInbox())
 export const status = (page) => ev(page, () => window.YayAgora.status());
 export const tail = (page, n) => ev(page, (k) => window.YayAgora.tail(k), n);
 export const leave = (page) => ev(page, () => window.YayAgora.leave());
+// 録音（通話まるごと → webm/opus チャンクを Node が回収）
+export const startRecord = (page) => ev(page, () => window.YayAgora.startRecord());
+export const stopRecord = (page) => ev(page, () => window.YayAgora.stopRecord());
+export const drainRecChunks = (page) => ev(page, () => window.YayAgora.drainRecChunks());
+export const recStatus = (page) => ev(page, () => window.YayAgora.recStatus());
+
 // 聞き取り（通話音声の文字起こし用）
 export const startListen = (page, opts) => ev(page, (o) => window.YayAgora.startListen(o), opts || {});
 export const stopListen = (page) => ev(page, () => window.YayAgora.stopListen());

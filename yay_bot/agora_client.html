@@ -50,12 +50,13 @@
         await S.rtc.subscribe(user, 'audio');
         S.remoteTracks.set(String(user.uid), user.audioTrack);
         if (S.listen.on) attachRemote(String(user.uid), user.audioTrack);
+        if (S.rec) recAttach(String(user.uid), user.audioTrack);   // 録音中なら新規参加者も録る
       } catch (e) { err('subscribe', e); }
     });
     S.rtc.on('user-unpublished', (user, mediaType) => {
-      if (mediaType === 'audio') { detachRemote(String(user.uid)); S.remoteTracks.delete(String(user.uid)); }
+      if (mediaType === 'audio') { detachRemote(String(user.uid)); recDetach(String(user.uid)); S.remoteTracks.delete(String(user.uid)); }
     });
-    S.rtc.on('user-left', (user) => { detachRemote(String(user.uid)); S.remoteTracks.delete(String(user.uid)); });
+    S.rtc.on('user-left', (user) => { detachRemote(String(user.uid)); recDetach(String(user.uid)); S.remoteTracks.delete(String(user.uid)); });
     S.rtc.on('exception', (ev) => L('rtc exception', ev.code, ev.msg));
     S.rtc.on('connection-state-change', (cur, prev, reason) => L('rtc state', prev, '→', cur, reason || ''));
     // ★uid は conference_call_user_uuid（文字列アカウント）。RTCトークンの crc_uid が
@@ -305,6 +306,60 @@
   }
   function drainUtterances() { const x = S.utterances.slice(); S.utterances.length = 0; return x; }
 
+  // ===== 録音（通話の全員の声 + 自分が流す音楽を 1 本にミックス → MediaRecorder）=====
+  // 専用 AudioContext で remoteTracks と publish bus の出力ストリームを合流し webm/opus を吐く。
+  // Node 側が drainRecChunks で base64 チャンクを逐次回収しファイルへ追記（長時間でもメモリ安全）。
+  function recAttach(uid, track) {
+    if (!S.rec) return;
+    try {
+      const mst = track.getMediaStreamTrack();
+      const src = S.rec.ctx.createMediaStreamSource(new MediaStream([mst]));
+      src.connect(S.rec.mix); S.rec.sources.set(uid, src);
+    } catch (e) { err('recAttach', e); }
+  }
+  function recDetach(uid) {
+    if (!S.rec) return;
+    const s = S.rec.sources.get(uid);
+    if (s) { try { s.disconnect(); } catch {} S.rec.sources.delete(uid); }
+  }
+  async function startRecord() {
+    if (S.rec) return { ok: false, reason: '既に録音中' };
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    const ctx = new Ctx();
+    const mix = ctx.createGain(); mix.gain.value = 1;
+    const dest = ctx.createMediaStreamDestination();
+    mix.connect(dest);
+    S.rec = { ctx, mix, dest, sources: new Map(), pending: [], rec: null, musicSrc: null, mime: '' };
+    for (const [uid, track] of S.remoteTracks) recAttach(uid, track);   // 今居る全参加者
+    try { if (S.pub?.dest?.stream) { const m = ctx.createMediaStreamSource(S.pub.dest.stream); m.connect(mix); S.rec.musicSrc = m; } } catch (e) { err('rec music', e); }
+    const mime = (window.MediaRecorder && MediaRecorder.isTypeSupported('audio/webm;codecs=opus')) ? 'audio/webm;codecs=opus' : 'audio/webm';
+    const mr = new MediaRecorder(dest.stream, { mimeType: mime, audioBitsPerSecond: 128000 });
+    S.rec.mime = mime;
+    mr.ondataavailable = (e) => {
+      if (!e.data || !e.data.size) return;
+      const r = new FileReader();
+      r.onload = () => { if (S.rec) S.rec.pending.push(String(r.result).split(',')[1]); };
+      r.readAsDataURL(e.data);
+    };
+    mr.start(3000);   // 3秒ごとにチャンク
+    S.rec.rec = mr;
+    L('● record start', mime);
+    return { ok: true, mime };
+  }
+  function drainRecChunks() { if (!S.rec) return []; const x = S.rec.pending.slice(); S.rec.pending.length = 0; return x; }
+  async function stopRecord() {
+    if (!S.rec) return { ok: false, reason: '録音してない' };
+    const r = S.rec;
+    await new Promise((res) => { r.rec.onstop = res; try { r.rec.stop(); } catch { res(); } });
+    await new Promise((res) => setTimeout(res, 300));   // FileReader コールバック待ち
+    const rest = r.pending.slice();
+    try { r.sources.forEach((s) => s.disconnect()); r.musicSrc?.disconnect(); r.mix.disconnect(); await r.ctx.close(); } catch {}
+    S.rec = null;
+    L('■ record stop');
+    return { ok: true, chunks: rest, mime: r.mime };
+  }
+  function recStatus() { return { on: !!S.rec, sources: S.rec ? S.rec.sources.size : 0, queued: S.rec ? S.rec.pending.length : 0 }; }
+
   // ===== RTM（通話チャット）=====
   // 注意: Yay通話チャットのRTMチャンネル名・メッセージ形式は実通話で要発見（スパイク）。
   // 既定では RTC と同じ channel 名を購読し、来た生メッセージを inbox/log に貯める。
@@ -354,6 +409,7 @@
     },
     playUrl, playLive, playTTS, listAudioInputs, setMusicVolume, setLoop, stopMusic, pauseMusic, resumeMusic, sendChat,
     startListen, stopListen, drainUtterances, listenStatus: () => ({ on: S.listen.on, sources: S.listen.sources.size, queued: S.utterances.length, srcRate: S.listen.srcRate }),
+    startRecord, stopRecord, drainRecChunks, recStatus,
     // Node が polling で吸う
     drainInbox: () => { const x = S.inbox.slice(); S.inbox.length = 0; return x; },
     peekInbox: () => S.inbox.slice(),
