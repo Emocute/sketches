@@ -15,6 +15,7 @@ import { CONFIG } from './config.mjs';
 import { emoccReply, idleChatter, PERSONAS } from './lib/claude.mjs';
 import * as agora from './lib/agora.mjs';
 import * as music from './lib/music_agora.mjs';
+import * as spotify from './lib/music.mjs';   // 旧Spotify/BlackHole経路を再利用（/sp 自動操作）
 import * as listen from './lib/listen.mjs';
 import * as tts from './lib/tts.mjs';
 
@@ -138,6 +139,9 @@ const CMD = {
   qdn:    ['qj', 'qdn', 'down', '下'],
   iam:    ['iam', 'owner', 'オーナー', '俺'],   // 本人登録（/iam <合言葉>）
   whoami: ['whoami', 'myid', '誰'],             // 自分のRTM IDを表示
+  sp:     ['sp', 'spotify', 'スポ', 'スポティ'],  // Spotify自動操作→BlackHole→RTC
+  volup:  ['volup', 'vu', '音量上げ'],
+  voldown:['voldown', 'vd', '音量下げ'],
 };
 const ALIAS = {}; for (const [k, vs] of Object.entries(CMD)) for (const v of vs) ALIAS[v] = k;
 // トグル状態
@@ -248,6 +252,53 @@ async function startTrack(query) {
 }
 const notFoundMsg = (q) => `❌ 見つかりませんでした: ${q}`;
 
+// ── Spotify 自動操作（Playwright で Spotify Web 検索→再生 → BlackHole → RTC publish）──
+let musicReady = false;          // music ブラウザ(9223) に connectMusic 済みか
+let lastVol = Number(process.env.YAY_MUSIC_VOL || 15);  // 直近音量（相対調整用）
+
+async function ensureMusicBrowser() {
+  const up = async () => { try { const r = await fetch('http://127.0.0.1:9223/json/version'); return r.ok; } catch { return false; } };
+  if (await up()) return true;
+  // 9223 が無ければ launcher を起動して待つ
+  try { execFile('zsh', [fileURLToPath(new URL('./scripts/launch_music.sh', import.meta.url))], { cwd: fileURLToPath(new URL('.', import.meta.url)) }); } catch (e) { console.error('launch_music', e.message); }
+  for (let i = 0; i < 24; i++) { if (await up()) return true; await sleep(500); }
+  return false;
+}
+
+async function startSpotify(query) {
+  if (!(await ensureMusicBrowser())) return { ok: false, reason: '音楽ブラウザ(9223)が起動できない' };
+  try {
+    if (!musicReady) { await spotify.connectMusic(); musicReady = true; }
+    const r = await spotify.playSpotify(query);   // 検索→再生→BlackHole へ setSinkId（検証付き）
+    if (!r.route?.ok) return { ok: false, reason: r.route?.reason || 'BlackHole 経路NG', drm: true };
+    await agora.playLive(page, 'BlackHole');       // BlackHole 入力を RTC に publish
+    nowQuery = 'Spotify: ' + query;
+    return { ok: true };
+  } catch (e) { musicReady = false; return { ok: false, reason: e.message }; }
+}
+
+// 自然言語 → スラッシュコマンド（オーナー本人の発言だけに適用）。制御意図でなければ null。
+function nlToCommand(text) {
+  const t = String(text).trim();
+  let m;
+  if ((m = t.match(/(?:音量|ボリューム|ボリュ)\D*?(\d{1,3})/))) return `/vol ${m[1]}`;
+  if (/(?:音量|ボリューム|音)/.test(t) && /(上げ|大きく|でかく|あげて|うるさ)/.test(t)) return '/volup';
+  if (/(?:音量|ボリューム|音)/.test(t) && /(下げ|小さく|さげて|ちいさ|静か|絞)/.test(t)) return '/voldown';
+  if (/(一時停止|ポーズ|ちょっと止め)/.test(t)) return '/pause';   // stop より先（「一時停止」に「停止」が含まれるため）
+  if (/(再開|続きから|戻して再生)/.test(t)) return '/resume';
+  if (/(止めて|停めて|ストップ|止めろ|停止|音楽.*消)/.test(t)) return '/stop';   // 「やめて」は会話で誤爆するため除外
+  if (/(次の?曲|次に?して|次いって|スキップ|とばして|飛ばして|チェンジして)/.test(t)) return '/skip';
+  const pv = t.match(/(かけて|流して|再生して|プレイして|聴きたい|聞きたい|かけろ|流せ|プレイ|かけ)/);
+  if (pv) {
+    const onSpotify = /spotify|スポティファイ|スポ(?!ーツ)/i.test(t);
+    let q = t.slice(0, pv.index).replace(/spotify|スポティファイ|スポ(?!ーツ)/ig, '').trim();
+    q = q.replace(/^(で|の|を)\s*/, '').replace(/(を|の曲|って)\s*$/, '').trim();
+    if (!q) return null;
+    return onSpotify ? `/sp ${q}` : `/play ${q}`;
+  }
+  return null;
+}
+
 // キューを番号付きで表示
 function renderQueue() {
   const head = nowQuery ? `🎵 再生中: ${nowQuery}` : '🎵 再生: なし';
@@ -321,7 +372,18 @@ async function handleCommand(text, author = '?') {
       case 'clear': queue = []; return '🧹 キュー消去';
       case 'pause': await agora.pauseMusic(page); return '⏸ 一時停止';
       case 'resume': await agora.resumeMusic(page); return '▶ 再開';
-      case 'vol': { const r = await agora.setMusicVolume(page, q); return r?.ok ? `🔊 音量 ${r.vol}` : '音量は 0〜100（例: /v 15）'; }
+      case 'vol': { const r = await agora.setMusicVolume(page, q); if (r?.ok) lastVol = r.vol; return r?.ok ? `🔊 音量 ${r.vol}` : '音量は 0〜100（例: /v 15）'; }
+      case 'volup': { const v = Math.min(100, lastVol + 10); const r = await agora.setMusicVolume(page, v); if (r?.ok) lastVol = r.vol; return `🔊 音量 ${r?.vol ?? v}`; }
+      case 'voldown': { const v = Math.max(0, lastVol - 10); const r = await agora.setMusicVolume(page, v); if (r?.ok) lastVol = r.vol; return `🔉 音量 ${r?.vol ?? v}`; }
+      case 'sp': {
+        if (!q) return 'Spotifyで流す曲名を入れて（例: /sp 相対性理論）';
+        await sendYayChat(page, `🎧 Spotify検索: ${q}`).catch(() => {});
+        const r = await startSpotify(q);
+        if (r.ok) return `🎧 Spotify再生中: ${q}（BlackHole経由で通話へ）`;
+        // DRM/経路NG → YouTube へ自動フォールバック
+        const y = await startTrack(q);
+        return y.ok ? `⚠ Spotify不可(${r.reason})→YouTubeで流した` : `❌ Spotify/YouTube どちらも失敗: ${q}（${r.reason}）`;
+      }
       case 'np': return nowQuery ? `🎵 再生中: ${nowQuery}${queue.length ? ` / 次(${queue.length}): ${queue.slice(0, 3).join(' / ')}` : ''}` : (queue.length ? `📜 キュー(${queue.length}): ${queue.slice(0, 5).join(' / ')}` : '何も流してない');
       case 'loop': { const r = await agora.setLoop(page); return r?.loop ? '🔁 一曲ループON（今の曲を繰り返す）' : '➡ 一曲ループOFF'; }
       case 'live': await agora.playLive(page, q || null); nowQuery = 'live'; return `▶ システム音声配信中${q ? '（' + q + '）' : ''}`;
@@ -510,13 +572,19 @@ async function main() {
       lastActivityAt = Date.now();
       const ts = new Date().toLocaleTimeString('ja-JP');
       fresh.forEach((m) => { console.log(`[${ts}] 新着 ${m.author}: ${m.text}`); pushLine(`${m.author}: ${m.text}`); });
+      const nlHandled = new Set();
       for (const m of fresh) {
-        const mr = await handleCommand(m.text, m.author);
+        let mr = await handleCommand(m.text, m.author);
+        // オーナー本人の自然言語は音楽コマンドに翻訳して実行（「○○流して」「止めて」「Spotifyで○○」等）
+        if (mr === null && m.author === ownerRtm && !/^[!\/]/.test(m.text)) {
+          const nl = nlToCommand(m.text);
+          if (nl) { nlHandled.add(m.id); console.log('  🗣→cmd', nl); mr = await handleCommand(nl, m.author); }
+        }
         // コマンド応答は究の明示要求＝必ず返す（連投ガードは会話返信だけに掛ける。
         //   ここを canReply で塞ぐと /q /h /st 等がクールダウン中に握り潰され「効かない」に見える）。
         if (mr) { await sendYayChat(page, mr).catch((e) => console.error('send', e.message)); console.log('  ♪', mr); }
       }
-      const conv = fresh.filter((m) => !/^[!\/]/.test(m.text));
+      const conv = fresh.filter((m) => !/^[!\/]/.test(m.text) && !nlHandled.has(m.id));
       if (conv.length && canReply()) {
         const context = recentLines.slice(-10).join('\n');
         // 話者ガード: この返信が応じる発言が全てオーナー本人の時だけツール全開。
