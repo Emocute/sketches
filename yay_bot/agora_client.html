@@ -246,60 +246,62 @@
     }
     return out;
   }
-  function flushUtterance() {
-    const u = S.listen;
-    if (!u.buf.length) { u.voiced = false; u.hold = 0; return; }
-    let total = 0; for (const f of u.buf) total += f.length;
-    const pcm = new Float32Array(total); let o = 0; for (const f of u.buf) { pcm.set(f, o); o += f.length; }
-    u.buf.length = 0; u.voiced = false; u.hold = 0;
-    const out16 = resampleTo16k(pcm, u.srcRate);
+  // ★話者別VAD（2026-06-07）: remote ごとに ScriptProcessor+VAD を持たせ、発話に uid を付ける。
+  //   旧: 全員を1本のbusに混ぜて区切る→誰の声か不明。新: source 単位で区切り {b64,rate,ms,uid}。
+  //   Node 側が uid(=conference_call_user_uuid) を chat で学習した名前に解決して「○○（声）」にする。
+  function flushUtterance(uid, st) {
+    if (!st.buf.length) { st.voiced = false; st.hold = 0; return; }
+    let total = 0; for (const f of st.buf) total += f.length;
+    const pcm = new Float32Array(total); let o = 0; for (const f of st.buf) { pcm.set(f, o); o += f.length; }
+    st.buf.length = 0; st.voiced = false; st.hold = 0;
+    const out16 = resampleTo16k(pcm, S.listen.srcRate);
     const ms = Math.round(out16.length / 16000 * 1000);
     if (ms < 350) return;  // 短すぎる雑音は捨てる
     const i16 = new Int16Array(out16.length);
     for (let i = 0; i < out16.length; i++) { let s = Math.max(-1, Math.min(1, out16[i])); i16[i] = s < 0 ? s * 0x8000 : s * 0x7fff; }
     const bytes = new Uint8Array(i16.buffer); let bin = '';
     for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
-    S.utterances.push({ b64: btoa(bin), rate: 16000, ms });
+    S.utterances.push({ b64: btoa(bin), rate: 16000, ms, uid: String(uid) });
     if (S.utterances.length > 30) S.utterances.shift();
-    L('utterance', ms + 'ms', 'q=' + S.utterances.length);
+    L('utterance', uid, ms + 'ms', 'q=' + S.utterances.length);
   }
-  function ensureListenGraph() {
+  function ensureListenCtx() {
     if (S.listen.ctx) return;
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const bus = ctx.createGain(); bus.gain.value = 1;
-    const proc = ctx.createScriptProcessor(4096, 1, 1);
-    const THRESH = Number(S.listen.thresh) || 0.012;   // RMS 閾（環境で要調整）
-    const HOLD_MAX = 8;                                  // 無音が約0.68s続いたら区切る
-    proc.onaudioprocess = (e) => {
-      if (!S.listen.on) return;
-      const ch = e.inputBuffer.getChannelData(0);
-      let sum = 0; for (let i = 0; i < ch.length; i++) sum += ch[i] * ch[i];
-      const rms = Math.sqrt(sum / ch.length);
-      const u = S.listen;
-      if (rms >= THRESH) { u.voiced = true; u.hold = 0; u.buf.push(new Float32Array(ch)); }
-      else if (u.voiced) { u.hold++; u.buf.push(new Float32Array(ch)); if (u.hold >= HOLD_MAX) flushUtterance(); }
-      if (u.voiced) { let tot = 0; for (const f of u.buf) tot += f.length; if (tot > u.srcRate * 12) flushUtterance(); }  // 暴走防止12s上限
-    };
-    bus.connect(proc); proc.connect(ctx.destination);   // proc は無音出力（onaudioprocessでoutを書かない）
-    S.listen.ctx = ctx; S.listen.bus = bus; S.listen.proc = proc; S.listen.srcRate = ctx.sampleRate;
-    L('listen graph', 'srcRate=' + ctx.sampleRate);
+    S.listen.ctx = ctx; S.listen.srcRate = ctx.sampleRate;
+    L('listen ctx', 'srcRate=' + ctx.sampleRate);
   }
   function attachRemote(uid, track) {
     try {
-      ensureListenGraph();
+      ensureListenCtx();
+      if (S.listen.sources.has(String(uid))) return;   // 二重 attach 防止
+      const ctx = S.listen.ctx;
       const mst = track.getMediaStreamTrack();
-      const src = S.listen.ctx.createMediaStreamSource(new MediaStream([mst]));
-      src.connect(S.listen.bus);
-      S.listen.sources.set(uid, src);
+      const src = ctx.createMediaStreamSource(new MediaStream([mst]));
+      const proc = ctx.createScriptProcessor(4096, 1, 1);
+      const st = { buf: [], voiced: false, hold: 0 };   // この話者専用の VAD 状態
+      const HOLD_MAX = 8;                                // 無音が約0.68s続いたら区切る
+      proc.onaudioprocess = (e) => {
+        if (!S.listen.on) return;
+        const ch = e.inputBuffer.getChannelData(0);
+        let sum = 0; for (let i = 0; i < ch.length; i++) sum += ch[i] * ch[i];
+        const rms = Math.sqrt(sum / ch.length);
+        const THRESH = Number(S.listen.thresh) || 0.012;
+        if (rms >= THRESH) { st.voiced = true; st.hold = 0; st.buf.push(new Float32Array(ch)); }
+        else if (st.voiced) { st.hold++; st.buf.push(new Float32Array(ch)); if (st.hold >= HOLD_MAX) flushUtterance(uid, st); }
+        if (st.voiced) { let tot = 0; for (const f of st.buf) tot += f.length; if (tot > S.listen.srcRate * 12) flushUtterance(uid, st); }  // 暴走防止12s上限
+      };
+      src.connect(proc); proc.connect(ctx.destination);   // proc は無音出力（outを書かない）
+      S.listen.sources.set(String(uid), { src, proc, st });
       L('listen attach', uid, 'n=' + S.listen.sources.size);
     } catch (e) { err('attachRemote', e); }
   }
   function detachRemote(uid) {
-    const s = S.listen.sources.get(uid);
-    if (s) { try { s.disconnect(); } catch {} S.listen.sources.delete(uid); L('listen detach', uid); }
+    const e = S.listen.sources.get(String(uid));
+    if (e) { try { flushUtterance(String(uid), e.st); } catch {} try { e.src.disconnect(); e.proc.disconnect(); } catch {} S.listen.sources.delete(String(uid)); L('listen detach', uid); }
   }
   function startListen(opts) {
-    ensureListenGraph();
+    ensureListenCtx();
     if (opts && typeof opts.thresh === 'number') S.listen.thresh = opts.thresh;
     if (S.listen.ctx.state === 'suspended') S.listen.ctx.resume();
     S.listen.on = true;
@@ -309,8 +311,8 @@
   }
   function stopListen() {
     S.listen.on = false;
-    for (const [uid, s] of S.listen.sources) { try { s.disconnect(); } catch {} }
-    S.listen.sources.clear(); S.listen.buf.length = 0; S.listen.voiced = false; S.listen.hold = 0;
+    for (const [uid, e] of S.listen.sources) { try { e.src.disconnect(); e.proc.disconnect(); } catch {} }
+    S.listen.sources.clear();
     L('listen OFF');
     return { ok: true };
   }

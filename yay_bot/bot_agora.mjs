@@ -90,7 +90,12 @@ function parseMsg(m) {
   } catch {}
   if (type !== 'chat') text = '';   // チャット以外は無視
   text = String(text || '').trim();
-  return { id: msgId ? `id:${msgId}` : `${author}|${m.ts}|${text}`, author, text, type };
+  // ★送信者の Yay user id を抽出: Yay は msg の id を "<yayUserId>_<ts>" 形式で振る
+  //   （2026-06-07 実走確認: 究=9714060_..., bot=11320230_...）。publisher(uuid) は通話ごとに
+  //   変わるが、この yayUserId は安定＝名簿(id→nickname)と結合して名前で認識できる。
+  let userId = null;
+  if (msgId) { const um = /^(\d+)_/.exec(String(msgId)); if (um) userId = um[1]; }
+  return { id: msgId ? `id:${msgId}` : `${author}|${m.ts}|${text}`, author, userId, text, type };
 }
 
 // Yayが表示できる送信エンベロープ。受信と同形式: `chat {"text","created_at_seconds","id"}`。
@@ -110,9 +115,10 @@ let nowIsSpotify = false; // 現在の再生が Spotify(live BlackHole)経路か
 let spEndedPolls = 0;  // Spotify 再生終了の連続検知カウンタ（自動送りの誤検知防止）
 let starting = false;  // 多重起動ガード
 
-// 話者ガード: この RTM uuid の発言だけツール全開（ファイル/Bash）。他人は会話のみ。
+// 話者ガード: このオーナーの発言だけツール全開（ファイル/Bash）。他人は会話のみ。
 //   /iam <合言葉> で本人が登録（合言葉は通話の他人のなりすまし防止）。state.json に永続。
-let ownerRtm = null;
+//   ★判定は安定した Yay user id（uuid は通話ごとに変わり跨ぐと壊れるため。2026-06-07）。
+let ownerYayId = null;
 const OWNER_SECRET = process.env.YAY_OWNER_SECRET || 'kiwamu';
 
 // canonical → [aliases]（先頭が正式名）。`/` でも `!` でも発火。
@@ -451,7 +457,23 @@ async function stopCallRecording() {
 //   差分で join/leave を検出して名前付きで挨拶する。声は既存 playTTS（音楽を自動ダッキング）。
 const JC = () => CONFIG.jingle || {};
 let jingleOn = JC().enabled !== false;
-const roster = new Map();   // userId(str) → { nick, lastSeen, present }
+const roster = new Map();   // Yay userId(str) → { nick, lastSeen, present }
+// publisher(uuid・通話ごとに変わる) → Yay userId（chat の id 接頭辞から学習）。声の話者名解決にも使う。
+const uuidToYayId = new Map();
+const yayIdToNick = (id) => (id != null ? roster.get(String(id))?.nick : null) || null;
+// チャット発言者の表示名: Yay id→nick を最優先、無ければ uuid 学習経由、最後は短縮 uuid。
+function speakerName(m) {
+  const yid = m.userId || uuidToYayId.get(m.author) || null;
+  return yayIdToNick(yid) || (yid ? `user${yid}` : (m.author ? String(m.author).slice(0, 6) : '誰か'));
+}
+// 声の発話の話者名: utterance.uid(=publisher uuid) → 学習済み yayId → nick。未学習なら「誰か」。
+function speakerNameByUuid(uuid) {
+  return yayIdToNick(uuidToYayId.get(String(uuid))) || '誰か';
+}
+// 今この通話に居る人の名前一覧（在室かつ nick 既知）。返信文脈のヘッダに使う。
+function presentNames() {
+  return [...roster.values()].filter((r) => r.present && r.nick).map((r) => r.nick);
+}
 let memberSeeded = false;   // 初回ポーリングは無言でシード（既存メンバーに連打しない）
 let lastMemberPollAt = 0;
 let lastJingleAt = 0;
@@ -563,7 +585,8 @@ function qIndex(q) {
 }
 
 // テキスト → コマンド応答（コマンドでなければ null）
-async function handleCommand(text, author = '?') {
+//   author=publisher uuid（通話内一意）、userId=Yay user id（安定。owner 判定に使う）。
+async function handleCommand(text, author = '?', userId = null) {
   const mm = String(text).match(/^\s*[!\/]\s*(\S+)\s*([\s\S]*)$/);
   if (!mm) return null;
   const cmd = ALIAS[mm[1].toLowerCase()];
@@ -575,16 +598,20 @@ async function handleCommand(text, author = '?') {
       case 'helpshort': return renderHelpShort();
       case 'status': return statusBlock();
       case 'ping': return '🏓 pong';
-      case 'whoami':
-        return `🪪 あなたのID: ${author}${ownerRtm ? (author === ownerRtm ? '（=登録オーナー✓）' : '（オーナーではない）') : '（オーナー未登録）'}`;
+      case 'whoami': {
+        const me = userId ? `${speakerName({ author, userId })}(id ${userId})` : author;
+        const isOwner = userId && ownerYayId && String(userId) === String(ownerYayId);
+        return `🪪 あなた: ${me}${ownerYayId ? (isOwner ? '（=登録オーナー✓）' : '（オーナーではない）') : '（オーナー未登録）'}`;
+      }
       case 'iam': {
         // 引数が現在のオーナー表示要求なら状態だけ返す
-        if (q === '?' || q === 'status') return ownerRtm ? `🔑 オーナー登録済: ${ownerRtm}` : '🔓 オーナー未登録（/iam 合言葉 で登録）';
+        if (q === '?' || q === 'status') return ownerYayId ? `🔑 オーナー登録済: ${yayIdToNick(ownerYayId) || 'id ' + ownerYayId}` : '🔓 オーナー未登録（/iam 合言葉 で登録）';
         if (q !== OWNER_SECRET) return '合言葉が違う（/iam <合言葉>）。なりすまし防止のため必要。';
-        ownerRtm = author;
-        try { const s = existsSync(CONFIG.stateFile) ? JSON.parse(readFileSync(CONFIG.stateFile, 'utf8')) : { seen: [] }; s.owner = author; writeFileSync(CONFIG.stateFile, JSON.stringify(s, null, 2)); } catch (e) { console.error('owner persist', e.message); }
-        console.log('[bot] owner登録:', author);
-        return `🔓 オーナー登録した。以降あなたの発言だけツール全開（ファイル閲覧/編集/Bash）で応じる。他の人は会話のみ。`;
+        if (!userId) return 'あなたの Yay ID が取れなかった（チャットから /iam を送って）。';
+        ownerYayId = String(userId);
+        try { const s = existsSync(CONFIG.stateFile) ? JSON.parse(readFileSync(CONFIG.stateFile, 'utf8')) : { seen: [] }; s.ownerYayId = ownerYayId; writeFileSync(CONFIG.stateFile, JSON.stringify(s, null, 2)); } catch (e) { console.error('owner persist', e.message); }
+        console.log('[bot] owner登録: yayId', ownerYayId, yayIdToNick(ownerYayId) || '');
+        return `🔓 オーナー登録した（${yayIdToNick(ownerYayId) || 'id ' + ownerYayId}）。以降あなたの発言だけツール全開（ファイル閲覧/編集/Bash）で応じる。他の人は会話のみ。`;
       }
       case 'play':
       case 'queue': {
@@ -756,8 +783,8 @@ async function main() {
   const stateExisted = existsSync(CONFIG.stateFile);
   const st0 = loadState();
   const seen = new Set(st0.seen);
-  ownerRtm = st0.owner || process.env.YAY_OWNER || null;
-  console.log('[bot] owner:', ownerRtm || '未登録（/iam ' + OWNER_SECRET + ' で登録）');
+  ownerYayId = st0.ownerYayId || process.env.YAY_OWNER_YAYID || null;
+  console.log('[bot] owner(yayId):', ownerYayId || '未登録（/iam ' + OWNER_SECRET + ' で登録）');
   console.log('[bot] 稼働開始', stateExisted ? '(seen継承)' : '(初回)');
   console.log('[bot] 人格:', personaKey || '通常', '/ 自発おしゃべり:', idleChatOn ? `ON(${IDLE_MIN_MS / 1000}〜${IDLE_MAX_MS / 1000}s)` : 'OFF', '（/zunda 語尾・/idle 自発）');
   console.log('[bot] 入退室あいさつ:', jingleOn ? `ON(名簿${(JC().pollMs || 12000) / 1000}sおき・声${JC().voice === false ? 'OFF' : 'ON'})` : 'OFF', '（/jingle で切替）');
@@ -765,6 +792,12 @@ async function main() {
   // 自発おしゃべり用の状態
   const recentLines = [];       // ローリング会話履歴（古→新）
   const pushLine = (s) => { recentLines.push(s); if (recentLines.length > 14) recentLines.shift(); };
+  // 返信用文脈: 先頭に「今居る人」を付け、各行頭の名前で発言者を示す（誰が何を言ったか・名前で呼べる）。
+  const buildCtx = () => {
+    const present = presentNames();
+    const head = present.length ? `（今この通話に居る人: ${present.join('、')}。各行頭の「名前:」が発言者で、「（声）」は音声発言。相手は名前で呼んでよい）\n` : '';
+    return head + recentLines.slice(-10).join('\n');
+  };
   // 自発おしゃべりONで起動した場合は直後に一発目を出す（以降は中スパン）。OFFなら通常待機。
   lastActivityAt = idleChatOn ? Date.now() - IDLE_QUIET_MS - 1 : Date.now();
   nextIdleAt = Date.now();
@@ -851,14 +884,15 @@ async function main() {
         let heard = '';
         try { heard = await listen.transcribe(u.b64, u.rate); } catch (e) { console.error('whisper', e.message); }
         if (!heard) continue;
-        console.log(`  👂 聞: ${heard}`);
-        pushLine(`声: ${heard}`);
+        const vname = speakerNameByUuid(u.uid);   // 声の話者名（chat で学習済みなら名前、未学習は「誰か」）
+        console.log(`  👂 聞[${vname}]: ${heard}`);
+        pushLine(`${vname}（声）: ${heard}`);
         lastActivityAt = Date.now();
         if (canReply()) {
-          const context = recentLines.slice(-10).join('\n');
+          const context = buildCtx();
           try {
             const out = await emoccReply(context, { system: personaSys });
-            if (out.action) { console.log('  🎬 ACTION(声):', out.action); const ar = await handleCommand(out.action, ownerRtm || 'voice'); if (ar) await sendYayChat(page, ar).catch(() => {}); }
+            if (out.action) { console.log('  🎬 ACTION(声):', out.action); const ar = await handleCommand(out.action, u.uid, uuidToYayId.get(String(u.uid))); if (ar) await sendYayChat(page, ar).catch(() => {}); }
             const reply = (out.reply || '').replace(/^[!\/]\S*\s*/, '').trim();
             if (reply) { await sendYayChat(page, reply); markReplied(); pushLine(`自分: ${reply}`); console.log('  → 声返信:', reply); await sayOut(reply); }
           } catch (e) { console.error('voice reply err', e.message); }
@@ -870,7 +904,7 @@ async function main() {
     if (idleChatOn && IDLE_MAX_MS > 0 && Date.now() >= nextIdleAt
         && (Date.now() - lastActivityAt) > IDLE_QUIET_MS && canReply()) {
       try {
-        const ctx = recentLines.slice(-10).join('\n');
+        const ctx = buildCtx();
         const line = (await idleChatter(ctx, { system: personaSys })).replace(/^[!\/]\S*\s*/, '').trim();
         if (line) {
           await sendYayChat(page, line); markReplied();
@@ -892,20 +926,24 @@ async function main() {
     let raw = [];
     try { raw = await agora.drainInbox(page); } catch (e) { console.error('drain err', e.message); }
     const msgs = raw.map(parseMsg).filter((m) => m.text);
-    const fresh = msgs.filter((m) => !seen.has(m.id) && m.author !== SELF_RTM);
+    // 自己除外: publisher uuid でも Yay id でも自分なら弾く（取りこぼし二重ガード）。
+    const fresh = msgs.filter((m) => !seen.has(m.id) && m.author !== SELF_RTM && String(m.userId || '') !== String(SELF_UID));
     fresh.forEach((m) => seen.add(m.id));
+    // 名前学習: chat には送信者 Yay id が乗る＝publisher uuid ↔ Yay id を覚える（声の話者名解決に効く）。
+    fresh.forEach((m) => { if (m.userId && m.author) uuidToYayId.set(String(m.author), String(m.userId)); });
 
     if (fresh.length) {
       lastActivityAt = Date.now();
       const ts = new Date().toLocaleTimeString('ja-JP');
-      fresh.forEach((m) => { console.log(`[${ts}] 新着 ${m.author}: ${m.text}`); pushLine(`${m.author}: ${m.text}`); });
+      fresh.forEach((m) => { const nm = speakerName(m); console.log(`[${ts}] 新着 ${nm}: ${m.text}`); pushLine(`${nm}: ${m.text}`); });
+      const isOwner = (m) => !!ownerYayId && String(m.userId || '') === String(ownerYayId);
       const nlHandled = new Set();
       for (const m of fresh) {
-        let mr = await handleCommand(m.text, m.author);
+        let mr = await handleCommand(m.text, m.author, m.userId);
         // オーナー本人の自然言語は音楽コマンドに翻訳して実行（「○○流して」「止めて」「Spotifyで○○」等）
-        if (mr === null && m.author === ownerRtm && !/^[!\/]/.test(m.text)) {
+        if (mr === null && isOwner(m) && !/^[!\/]/.test(m.text)) {
           const nl = nlToCommand(m.text);
-          if (nl) { nlHandled.add(m.id); console.log('  🗣→cmd', nl); mr = await handleCommand(nl, m.author); }
+          if (nl) { nlHandled.add(m.id); console.log('  🗣→cmd', nl); mr = await handleCommand(nl, m.author, m.userId); }
         }
         // コマンド応答は究の明示要求＝必ず返す（連投ガードは会話返信だけに掛ける。
         //   ここを canReply で塞ぐと /q /h /st 等がクールダウン中に握り潰され「効かない」に見える）。
@@ -913,23 +951,23 @@ async function main() {
       }
       const conv = fresh.filter((m) => !/^[!\/]/.test(m.text) && !nlHandled.has(m.id));
       if (conv.length && canReply()) {
-        const context = recentLines.slice(-10).join('\n');
+        const context = buildCtx();
         // 話者ガード: この返信が応じる発言が全てオーナー本人の時だけツール全開。
         //   他人が混じる/オーナー未登録なら会話のみ（ファイル/Bash 不可）。
         // 高速化(2026-06-06): 通常会話は tools=false の軽量パス（CLAUDE.md 読込無し＝最速）。
         //   ファイル/コード/開発依頼が明確な時だけ tools 全開に昇格（cwd=Downloads で重い）。
-        const ownerOnly = !!ownerRtm && conv.every((m) => m.author === ownerRtm);
+        const ownerOnly = !!ownerYayId && conv.every(isOwner);
         const tools = ownerOnly && conv.some((m) => wantsTools(m.text));
         try {
           const out = await emoccReply(context, { system: personaSys, tools });
           // LLM が音楽操作を判断したら ACTION 行を実体コマンドとして実行（/play 等）
-          if (out.action) { console.log('  🎬 ACTION:', out.action); const ar = await handleCommand(out.action, conv[conv.length - 1]?.author || ownerRtm); if (ar) await sendYayChat(page, ar).catch(() => {}); }
+          if (out.action) { console.log('  🎬 ACTION:', out.action); const lm = conv[conv.length - 1]; const ar = await handleCommand(out.action, lm?.author, lm?.userId); if (ar) await sendYayChat(page, ar).catch(() => {}); }
           const reply = (out.reply || '').replace(/^[!\/]\S*\s*/, '').trim();
           if (reply) { await sendYayChat(page, reply); markReplied(); pushLine(`自分: ${reply}`); lastActivityAt = Date.now(); console.log('  → 返信:', reply); await sayOut(reply); }
           else if (!out.action) console.log('  → [skip]');
         } catch (e) { console.error('reply err', e.message); }
       } else if (conv.length) console.log('  → 連投ガードで保留');
-      saveState({ seen: [...seen].slice(-2000), owner: ownerRtm });
+      saveState({ seen: [...seen].slice(-2000), ownerYayId });
     }
     await sleep(CONFIG.pollMs);
   }
