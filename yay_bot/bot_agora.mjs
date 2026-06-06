@@ -48,7 +48,9 @@ const saveState = (s) => writeFileSync(CONFIG.stateFile, JSON.stringify(s, null,
 // yay_api.py を叩いて creds JSON を得る（最終行が JSON）。
 //   発見uid = YAY_WATCH_UID(究本人のuid) があればそれ、無ければ SELF_UID。
 //   別アカ運用時は WATCH_UID に究の通話を見張らせ、EmoCC(SELF) として join＝衝突せず共存。
-const DISCOVER_UID = String(process.env.YAY_WATCH_UID || SELF_UID);
+const DISCOVER_UID = String(process.env.YAY_WATCH_UID || CONFIG.watchYayId || SELF_UID);
+// 監視運用か（究=えものアカウントを見張って枠に自動入室）。SELF と違う＝別アカ監視モード。
+const WATCHING = String(DISCOVER_UID) !== String(SELF_UID);
 function fetchCreds() {
   const args = process.env.YAY_CALL_ID ? ['creds', String(process.env.YAY_CALL_ID)] : ['active', DISCOVER_UID];
   return new Promise((resolve, reject) => {
@@ -106,7 +108,7 @@ function yayEnvelope(text) {
 }
 const sendYayChat = (p, text) => agora.sendChat(p, yayEnvelope(text));
 
-let page, fileBase, creds;
+let page, fileBase, creds, browser, fileServer;
 
 // ===== コマンド体系（汎用・1〜2文字エイリアス対応）=====
 let queue = [];        // 未再生キュー（query文字列）
@@ -755,6 +757,11 @@ async function handleCommand(text, author = '?', userId = null) {
 }
 
 async function main() {
+  // 前回の browser/file server を掃除（監視運用で枠を渡り歩く時のリーク防止）。
+  try { if (browser) await browser.close(); } catch {}
+  try { if (fileServer) fileServer.close(); } catch {}
+  browser = null; fileServer = null;
+
   // 取りこぼし回収（失敗しない仕組みの核）: 通話に入る前＝起動の最初に必ず走らせる。
   //   前回クラッシュ/kill で mp3 化されなかった webm を救う。通話が無くても回収される（冪等・背景）。
   recoverOrphanRecordings();   // await しない＝待ち受けと並行で変換
@@ -773,12 +780,13 @@ async function main() {
   console.log('[bot] ✓ 通話発見→自動参加 channel=%s uid=%s rtm=%s', creds.channel, creds.uid, creds.rtm_token ? 'yes' : 'no');
 
   const fs = await agora.startFileServer(0);
+  fileServer = fs.server;
   fileBase = `http://127.0.0.1:${fs.port}`;
   console.log('[bot] file server', fileBase);
 
   // ★クライアントHTMLは file:// でなく loopback HTTP から開く（PNA 回避＝音が通る。2026-06-07）
   const a = await agora.launchAgora({ headless: !process.env.HEADFUL, pageUrl: `${fileBase}/client` });
-  page = a.page;
+  page = a.page; browser = a.browser;
   // RTC/RTM とも Agora アカウント = conference_call_user_uuid（文字列）。
   //   トークンの crc_uid が uuid の CRC32 に一致（2026-06-03 実走で確認）。
   const joined = await agora.join(page, {
@@ -804,8 +812,8 @@ async function main() {
   const stateExisted = existsSync(CONFIG.stateFile);
   const st0 = loadState();
   const seen = new Set(st0.seen);
-  ownerYayId = st0.ownerYayId || process.env.YAY_OWNER_YAYID || null;
-  console.log('[bot] owner(yayId):', ownerYayId || '未登録（/iam ' + OWNER_SECRET + ' で登録）');
+  ownerYayId = st0.ownerYayId || process.env.YAY_OWNER_YAYID || CONFIG.ownerYayId || null;
+  console.log('[bot] owner(yayId):', ownerYayId || '未登録（/iam ' + OWNER_SECRET + ' で登録）', WATCHING ? `/ 監視=${DISCOVER_UID}（枠に自動入室）` : '/ 自分の通話を待機');
   console.log('[bot] 稼働開始', stateExisted ? '(seen継承)' : '(初回)');
   console.log('[bot] 人格:', personaKey || '通常', '/ 自発おしゃべり:', idleChatOn ? `ON(${IDLE_MIN_MS / 1000}〜${IDLE_MAX_MS / 1000}s)` : 'OFF', '（/zunda 語尾・/idle 自発）');
   console.log('[bot] 入退室あいさつ:', jingleOn ? `ON(名簿${(JC().pollMs || 12000) / 1000}sおき・声${JC().voice === false ? 'OFF' : 'ON'})` : 'OFF', '（/jingle で切替）');
@@ -873,7 +881,30 @@ async function main() {
     await startCallRecording(process.env.YAY_CALL_ID || creds.conference_id || creds.channel);
   }
 
+  // 監視通話の継続確認用（WATCHING 時のみ使う）
+  let watchMiss = 0, lastWatchAt = Date.now();
+
   for (;;) {
+    // 監視運用: 究(えも)の枠が終わった/別枠に移ったら離脱して再探索（次の枠を待つ）。
+    //   get_active_call_post はゆらぐので、終了判定は連続 miss で確定（誤離脱防止）。
+    if (WATCHING && Date.now() - lastWatchAt > (CONFIG.watchCheckMs || 20000)) {
+      lastWatchAt = Date.now();
+      const a = await fetchCreds().catch(() => null);   // active(DISCOVER_UID)
+      if (a && a.ok && a.conference_id && String(a.conference_id) !== String(creds.conference_id)) {
+        watchMiss = 0;
+        console.log('[bot] 究が別の枠へ移動→切替（', creds.conference_id, '→', a.conference_id, '）');
+        await stopCallRecording(); try { await agora.leave(page); } catch {}
+        throw new Error('watched call switched');   // 外側 wrapper が main 再実行→新しい枠へ
+      } else if (!a || !a.ok) {
+        watchMiss++;
+        if (watchMiss >= (CONFIG.watchMissToLeave || 3)) {
+          console.log('[bot] 究の枠が終了→離脱して次の枠を待つ（miss', watchMiss, '）');
+          await stopCallRecording(); try { await agora.leave(page); } catch {}
+          throw new Error('watched call ended');
+        }
+      } else watchMiss = 0;
+    }
+
     // キュー自動送り: 再生が止まっててキューがあれば次を流す（Spotify/YouTube 両対応）
     if (!starting) {
       try {

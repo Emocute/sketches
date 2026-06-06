@@ -5,6 +5,16 @@ export const CONFIG = {
   cdpUrl: 'http://127.0.0.1:9222', // localhost だと ::1(IPv6) に解決され刺さる。Chrome の口は 127.0.0.1 のみ
   selfName: 'Emo Claude', // 表示名（参考）
   selfUserHref: '/user/11320230', // Emo Claude の user id。自分の投稿はこれで確実に除外（名前パースに依存しない）
+
+  // ── オーナー＆監視（2026-06-07 究指示）──
+  //   究のアカウント = えも（Yay user id 9714060）。常にオーナー（/iam 不要）。
+  //   watchYayId のアカウントを見張り、そのアカウントが通話(枠)に入ったら bot も自動参加する。
+  //   仕組み: get_active_call_post(watchYayId) で枠を発見 → get_conference_call で bot 自身の
+  //   agora creds(uuid/token) が出る（実証済）→ Agora 直結。枠が終わったら離脱して次の枠を待つ。
+  ownerYayId: '9714060',   // 究=えも。常時オーナー（YAY_OWNER_YAYID / state で上書き可）
+  watchYayId: '9714060',   // 監視対象=えも。YAY_WATCH_UID で上書き可。SELF にすると自分の通話を待つ旧挙動
+  watchCheckMs: 20000,     // 監視通話の継続確認の間隔
+  watchMissToLeave: 3,     // 連続この回数「枠なし」を見たら離脱（API のゆらぎ対策）
   // ── 機能フラグ ──
   // Spotify Web Player 自動操作（BlackHole 経路）。Premium 契約 + Vivaldi 要。
   // false にするとすべての Spotify 再生パスが無効化され YouTube のみになる。
