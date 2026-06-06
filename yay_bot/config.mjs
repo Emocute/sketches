@@ -24,6 +24,19 @@ export const CONFIG = {
   maxRepliesPerMin: 10, // 自己ループは href 除外で根絶済なので緩め（暴走バックストップのみ）
   replyCooldownMs: 2000, // 最低クールダウン（返せない方が問題なので短め）
 
+  // ── 入退室ジングル（参加者名簿の差分→挨拶。チャット＋ずんだもん声）──
+  //   名前は通話の participant 一覧(Yay user)から取る（Agora の uuid は名前に紐付かないため）。
+  //   声は既存の playTTS 経路（音楽を自動ダッキングして上に乗る）。/jingle で実行時 ON/OFF。
+  jingle: {
+    enabled: true,        // 既定ON（/jingle off で止める）
+    pollMs: 12000,        // 名簿ポーリング間隔（python spawn なので控えめ）
+    rejoinGraceMs: 90000, // 退室→この時間内の再入室は「おかえり」、5秒以内の瞬断は無音（フラップ抑制）
+    minGapMs: 8000,       // ジングル最短間隔（同時入室の連発抑制。1件ずつ捌く）
+    voice: true,          // 声を出す（false ならチャット挨拶のみ）
+    quietHours: [1, 7],   // [開始時,終了時) この帯は声を出さずチャットのみ（深夜配慮）。null で無効
+    maxQueue: 8,          // 溜まり過ぎ防止（超えたら古いものから捨てる）
+  },
+
   // 状態ファイル
   stateFile: new URL('./state.json', import.meta.url).pathname,
 

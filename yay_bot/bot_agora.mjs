@@ -149,6 +149,7 @@ const CMD = {
   volup:  ['volup', 'vu', '音量上げ'],
   voldown:['voldown', 'vd', '音量下げ'],
   rec:    ['rec', 'record', '録音'],            // 録音 状態/保存/停止/開始
+  jingle: ['jingle', 'aisatsu', '挨拶', 'あいさつ', 'いらっしゃい'],  // 入退室あいさつ on/off
 };
 const ALIAS = {}; for (const [k, vs] of Object.entries(CMD)) for (const v of vs) ALIAS[v] = k;
 // トグル状態
@@ -163,6 +164,7 @@ function statusBlock() {
     `👂 聞き取り: ${onoff(listening)}`,
     `🎭 ずんだもん語尾: ${onoff(personaKey === 'zundamon')}`,
     `💬 自発おしゃべり: ${onoff(idleChatOn)}`,
+    `🎉 入退室あいさつ: ${onoff(jingleOn)}`,
     nowQuery ? `🎵 再生中: ${nowQuery}` : '🎵 再生: なし',
   ].join('\n');
 }
@@ -178,6 +180,7 @@ function renderHelpFull() {
     '/mode <モード> = 人格切替（zundamon/off 等）',
     '  ・/zunda = ずんだもん語尾 on/off（声・語尾のみ）',
     '/idle = 自発おしゃべり on/off（人格と独立。静かな時に自分から一言）',
+    '/jingle = 入退室あいさつ on/off（入ってきた人に名前で「いらっしゃい」）',
     '― 音楽再生 ―',
     '/p <曲/URL> = 再生開始（曲名は Spotify 優先→無ければ YouTube、URL は自動判別）',
     '/q <曲> = キューに追加（再生中なら直後に再生）',
@@ -200,7 +203,7 @@ function renderHelpFull() {
 function renderHelpShort() {
   return [
     '🎧 EmoCC コマンド（簡易）',
-    '/voice /vv <n> /ears /mode <m> /zunda /idle … 機能 on/off',
+    '/voice /vv <n> /ears /mode <m> /zunda /idle /jingle … 機能 on/off',
     '/p <曲> /s /x /ps /r /v <n> /l /np … 再生制御',
     '/q（一覧）/q <曲>（追加）/qd <N> /qu <N> /qj <N> /c … キュー',
     '/lv /d /st /pi /bye … その他',
@@ -405,6 +408,110 @@ async function stopCallRecording() {
   return out;
 }
 
+// ── 入退室ジングル（参加者名簿の差分 → 挨拶。チャット＋ずんだもん声）──
+//   設計: Agora の uid(conference_call_user_uuid) は不透明で名前に紐付かない。
+//   そこで yay_api.py members で通話の participant 一覧(Yay user=id/nickname)を周期取得し、
+//   差分で join/leave を検出して名前付きで挨拶する。声は既存 playTTS（音楽を自動ダッキング）。
+const JC = () => CONFIG.jingle || {};
+let jingleOn = JC().enabled !== false;
+const roster = new Map();   // userId(str) → { nick, lastSeen, present }
+let memberSeeded = false;   // 初回ポーリングは無言でシード（既存メンバーに連打しない）
+let lastMemberPollAt = 0;
+let lastJingleAt = 0;
+let jingleQueue = [];        // {kind:'join'|'leave', nick, returning}
+
+// 名簿取得（python 1回 spawn、最終行 JSON）
+function fetchMembers(callId) {
+  return new Promise((resolve) => {
+    execFile(PY, [API, 'members', String(callId)], { timeout: 20000 }, (err, stdout) => {
+      const lines = (stdout || '').trim().split('\n').filter(Boolean);
+      for (let i = lines.length - 1; i >= 0; i--) { try { return resolve(JSON.parse(lines[i])); } catch {} }
+      resolve({ ok: false });
+    });
+  });
+}
+
+function greetWord() {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 11) return 'おはよ';
+  if (h >= 11 && h < 18) return 'やっほー';
+  return 'こんばんは';
+}
+function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function jingleLine({ kind, nick, returning }) {
+  const who = nick || '誰か';
+  if (kind === 'leave') return pick([`${who} またね`, `${who} ばいばい`, `${who} おつかれ`, `${who}、また来てね`]);
+  if (returning) return pick([`${who} おかえり`, `${who} 戻ってきた`, `おっ ${who} おかえり`]);
+  const g = greetWord();
+  return pick([`${who} ${g}！いらっしゃい`, `${g} ${who}！来てくれた`, `${who} いらっしゃい`, `お、${who} 来た！${g}`]);
+}
+function inQuietHours() {
+  const qh = JC().quietHours;
+  if (!Array.isArray(qh) || qh.length !== 2) return false;
+  const h = new Date().getHours(); const [a, b] = qh;
+  return a <= b ? (h >= a && h < b) : (h >= a || h < b);   // 跨ぎ(例: 23-7)も対応
+}
+// ジングルの声（返信TTS の speaking トグルとは独立。voice/quietHours で制御）
+async function sayJingle(text) {
+  if (JC().voice === false || inQuietHours()) return;
+  try {
+    const r = await tts.speak(text, { voice: 'zundamon' });
+    if (!r.ok || !r.file) return;
+    await agora.playTTS(page, agora.fileUrl(fileBase, r.file)).catch((e) => console.error('[jingle] playTTS', e.message));
+  } catch (e) { console.error('[jingle] say', e.message); }
+}
+// 名簿ポーリング＋差分（throttle はここで持つ。loop から毎周回呼んでよい）
+async function pollMembersAndDiff() {
+  if (!jingleOn) return;
+  const callId = process.env.YAY_CALL_ID || creds?.conference_id || creds?.channel;
+  if (!callId) return;
+  const now = Date.now();
+  if (now - lastMemberPollAt < (JC().pollMs || 12000)) return;
+  lastMemberPollAt = now;
+  let res; try { res = await fetchMembers(callId); } catch { return; }
+  if (!res?.ok || !Array.isArray(res.users)) return;
+  const selfId = String(SELF_UID);
+  const seenNow = new Set();
+  for (const u of res.users) {
+    const id = String(u.id ?? '');
+    if (!id || id === selfId) continue;     // 自分(Emo)は除外
+    seenNow.add(id);
+    const prev = roster.get(id);
+    const nick = u.nickname || prev?.nick || null;
+    if (!prev || !prev.present) {
+      if (memberSeeded) {
+        const gap = prev ? (now - (prev.lastSeen || 0)) : Infinity;
+        const flap = prev && gap < 5000;                 // 5秒以内の瞬断=回線フラップ→無音
+        const returning = !!prev && gap < (JC().rejoinGraceMs || 90000);
+        if (!flap) jingleQueue.push({ kind: 'join', nick, returning });
+      }
+    }
+    roster.set(id, { nick, lastSeen: now, present: true });
+  }
+  for (const [id, info] of roster) {
+    if (info.present && !seenNow.has(id)) {
+      info.present = false; info.lastSeen = now;
+      if (memberSeeded) jingleQueue.push({ kind: 'leave', nick: info.nick, returning: false });
+    }
+  }
+  const cap = JC().maxQueue || 8;
+  if (jingleQueue.length > cap) jingleQueue = jingleQueue.slice(-cap);
+  memberSeeded = true;
+}
+// キュー消化（rate limit。1周回1件）
+async function drainJingle() {
+  if (!jingleOn || !jingleQueue.length) return;
+  const now = Date.now();
+  if (now - lastJingleAt < (JC().minGapMs || 8000)) return;
+  const j = jingleQueue.shift();
+  lastJingleAt = now;
+  const line = jingleLine(j);
+  const emoji = j.kind === 'leave' ? '👋' : '🎉';
+  try { await sendYayChat(page, `${emoji} ${line}`); } catch (e) { console.error('[jingle] chat', e.message); }
+  await sayJingle(line);
+  console.log(`  ${emoji} jingle:`, line);
+}
+
 // キューを番号付きで表示
 function renderQueue() {
   const head = nowQuery ? `🎵 再生中: ${nowQuery}` : '🎵 再生: なし';
@@ -506,6 +613,14 @@ async function handleCommand(text, author = '?') {
         const st = await agora.recStatus(page);
         return recState?.active ? `🔴 録音中（${Math.round((Date.now() - recState.startedAt) / 60000)}分 / 音源${st?.sources ?? '?'}）: ${recState.webmPath.split('/').pop()}` : '⚪ 録音停止中（/rec on で開始）';
       }
+      case 'jingle': {  // 入退室あいさつ ON/OFF（人格・読み上げとは独立）
+        const want = q.toLowerCase();
+        if (want === '?' || want === 'status') return `🎉 入退室あいさつ: ${jingleOn ? 'ON' : 'OFF'}（声${JC().voice === false ? 'OFF' : 'ON'} / 在室${[...roster.values()].filter((r) => r.present).length}人）`;
+        if (['on', 'start', 'オン', '1'].includes(want)) { jingleOn = true; return '🎉 入退室あいさつON（入ってきた人に挨拶する）'; }
+        if (['off', 'stop', 'オフ', '0', 'なし'].includes(want)) { jingleOn = false; jingleQueue = []; return '🤫 入退室あいさつOFF'; }
+        jingleOn = !jingleOn; if (!jingleOn) jingleQueue = [];
+        return jingleOn ? '🎉 入退室あいさつON' : '🤫 入退室あいさつOFF';
+      }
       case 'leave': await stopCallRecording(); await agora.leave(page); nowQuery = null; queue = []; return '👋 通話から抜けた（録音はmp3化して保存）';
       case 'mode': {
         const want = q.toLowerCase();
@@ -603,6 +718,7 @@ async function main() {
   console.log('[bot] owner:', ownerRtm || '未登録（/iam ' + OWNER_SECRET + ' で登録）');
   console.log('[bot] 稼働開始', stateExisted ? '(seen継承)' : '(初回)');
   console.log('[bot] 人格:', personaKey || '通常', '/ 自発おしゃべり:', idleChatOn ? `ON(${IDLE_MIN_MS / 1000}〜${IDLE_MAX_MS / 1000}s)` : 'OFF', '（/zunda 語尾・/idle 自発）');
+  console.log('[bot] 入退室あいさつ:', jingleOn ? `ON(名簿${(JC().pollMs || 12000) / 1000}sおき・声${JC().voice === false ? 'OFF' : 'ON'})` : 'OFF', '（/jingle で切替）');
 
   // 自発おしゃべり用の状態
   const recentLines = [];       // ローリング会話履歴（古→新）
@@ -715,6 +831,10 @@ async function main() {
     }
 
     await drainRecToFile();   // 録音チャンクをファイルへ追記（常時）
+
+    // 入退室ジングル: 名簿を周期取得して差分→挨拶（throttle は関数内）
+    try { await pollMembersAndDiff(); } catch (e) { console.error('jingle poll', e.message); }
+    try { await drainJingle(); } catch (e) { console.error('jingle drain', e.message); }
 
     let raw = [];
     try { raw = await agora.drainInbox(page); } catch (e) { console.error('drain err', e.message); }
