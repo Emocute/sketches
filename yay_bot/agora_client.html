@@ -76,7 +76,7 @@
   //   → 音楽を止めずに読み上げが乗る。音量は musicGain.gain で制御（Agora setVolume は使わない）。
   S.musicVol = (typeof S.musicVol === 'number') ? S.musicVol : 2;   // 既定音量（2026-06-07 究指示 15→2）
   S.ttsVol = (typeof S.ttsVol === 'number') ? S.ttsVol : 30;   // 読み上げ(ずんだもん声)音量。既定控えめ
-  S.duck = (typeof S.duck === 'number') ? S.duck : 0.25;   // TTS中の音楽残し率
+  S.duck = (typeof S.duck === 'number') ? S.duck : 0.7;   // TTS中の音楽残し率（2026-06-07 0.25→0.7。下げすぎで音楽が消える対策）
   const volToGain = (v) => Math.max(0, Math.min(100, Number(v) || 0)) / 100;
 
   function ensurePublishBus() {
@@ -119,6 +119,17 @@
     if (S.pub) S.pub.ttsGain.gain.value = volToGain(n);
     L('ttsvol', n);
     return { ok: true, vol: n };
+  }
+  // ダッキング率 0〜100(%) または 0〜1。TTS中に音楽を「残す」割合（100=下げない）。
+  //   ducking 中なら即反映（耳で調整できる）。
+  function setDuck(v) {
+    let n = Number(v); if (!isFinite(n)) return { ok: false, error: 'NaN' };
+    if (n > 1) n = n / 100;
+    n = Math.max(0, Math.min(1, n));
+    S.duck = n;
+    if (S.ducking && S.pub) S.pub.musicGain.gain.value = volToGain(S.musicVol) * S.duck;
+    L('duck', S.duck);
+    return { ok: true, duck: Math.round(S.duck * 100) };
   }
 
   // 音楽ソースだけを止める（バス publish は保持＝TTSは引き続き流せる）。
@@ -419,7 +430,7 @@
       catch (e) { out.rtm = { ok: false, error: err('joinRtm', e) }; }
       return out;
     },
-    playUrl, playLive, playTTS, listAudioInputs, setMusicVolume, setTtsVolume, setLoop, stopMusic, pauseMusic, resumeMusic, sendChat,
+    playUrl, playLive, playTTS, listAudioInputs, setMusicVolume, setTtsVolume, setDuck, setLoop, stopMusic, pauseMusic, resumeMusic, sendChat,
     startListen, stopListen, drainUtterances, listenStatus: () => ({ on: S.listen.on, sources: S.listen.sources.size, queued: S.utterances.length, srcRate: S.listen.srcRate }),
     startRecord, stopRecord, drainRecChunks, recStatus,
     // Node が polling で吸う

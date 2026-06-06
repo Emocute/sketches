@@ -143,6 +143,7 @@ const CMD = {
   zunda:  ['zunda', 'ずんだ'],
   idle:   ['idle', 'jihatsu', 'chatter', '自発', 'おしゃべり', '独り言'],  // 自発おしゃべり ON/OFF（人格と独立）
   ttsvol: ['vv', 'koevol', '声量', '声音量'],   // 読み上げ(ずんだもん声)の音量 0-100
+  duck:   ['duck', 'ダッキング', '音楽残し'],    // TTS中の音楽残し率 0-100（大=音楽を下げない）
   ears:   ['ears', 'listen', '耳', '聞く', 'kiku'],
   voice:  ['voice', 'yomi', 'tts', '読み', '読み上げ', '喋る', 'koe'],
   status: ['status', 'st', '状態', 'state'],
@@ -166,7 +167,7 @@ const onoff = (b) => (b ? '🟢ON' : '⚪OFF');
 // いまの状態ブロック（/st と /h の冒頭で共用）
 function statusBlock() {
   return [
-    `🗣 読み上げ: ${onoff(speaking)}（ずんだもん声 / 音量${lastTtsVol}）`,
+    `🗣 読み上げ: ${onoff(speaking)}（ずんだもん声・声色自動 / 音量${lastTtsVol} / 音楽残し${lastDuck}%）`,
     `👂 聞き取り: ${onoff(listening)}`,
     `🎭 ずんだもん語尾: ${onoff(personaKey === 'zundamon')}`,
     `💬 自発おしゃべり: ${onoff(idleChatOn)}`,
@@ -182,6 +183,7 @@ function renderHelpFull() {
     '― 切替（各コマンドでトグル / on・off 明示も可）―',
     '/voice（読）= 読み上げ。返信を自動でずんだもん声で喋る',
     '/vv 0-100 = 読み上げ(ずんだもん声)の音量（既定30）',
+    '/duck 0-100 = 声の時の音楽残し率（既定70。大=音楽を下げない）',
     '/ears（聞）= 聞き取り。通話の音声を文字起こし→自動返信',
     '/mode <モード> = 人格切替（zundamon/off 等）',
     '  ・/zunda = ずんだもん語尾 on/off（声・語尾のみ）',
@@ -220,12 +222,24 @@ function renderHelpShort() {
 function renderHelp() {
   return renderHelpFull();
 }
+// ずんだもんの声色を文章の感情で選ぶ（究指示 2026-06-07: 状況で判断して変える）。
+//   ずんだもん以外の声は使わない（2026-06-06）ので zundamon の normal/power/sad 3 種から選択。
+//   sad（謝罪・気遣い・落ち込み）を先に判定 → power（高揚・応援・興奮）→ 既定 normal。
+function pickZundaVoice(text) {
+  const t = String(text || '');
+  if (/(ごめん|すまん|申し訳|残念|悲し|つら|辛|寂し|さみし|しんど|大丈夫\?|無理しない|心配|可哀|かわいそう|……|。。。)/.test(t)) return 'zundamon_sad';
+  if (/(やった|すごい|最高|いくぞ|いこう|がんば|ファイト|うれし|嬉し|わーい|やっほ|テンション|ずんだパワー|！！|!!|🎉)/.test(t)) return 'zundamon_power';
+  // 「！」が複数 or 末尾が「！」連発なら元気側に寄せる
+  if ((t.match(/[!！]/g) || []).length >= 2) return 'zundamon_power';
+  return 'zundamon';
+}
+
 // 返信を喋る（speaking時のみ）。TTS で WAV 生成 → Agora RTC に publish。
-// 声は常にずんだもん固定（究指示 2026-06-06: ずんだもん以外の声は使わない）。
+// 声は常にずんだもん（声色 normal/power/sad は文章の感情で自動選択）。
 async function sayOut(text) {
   if (!speaking) return;
   try {
-    const voiceKey = 'zundamon';   // 人格に関わらず常にずんだもん声
+    const voiceKey = pickZundaVoice(text);   // ずんだもんの声色を状況で選ぶ
     console.log('[sayOut] voiceKey=', voiceKey, 'persona=', personaKey);
     const r = await tts.speak(text, { voice: voiceKey });
     console.log('[sayOut] tts.speak result:', { ok: r.ok, engine: r.engine, file: r.file?.slice(-30) });
@@ -276,6 +290,7 @@ const notFoundMsg = (q) => `❌ 見つかりませんでした: ${q}`;
 let musicReady = false;          // music ブラウザ(9223) に connectMusic 済みか
 let lastVol = Number(process.env.YAY_MUSIC_VOL || 2);  // 直近音量（相対調整用）。既定2（2026-06-07 究指示 15→2）
 let lastTtsVol = Number(process.env.YAY_TTS_VOL || 30);  // 直近の読み上げ音量（/vv 表示用）
+let lastDuck = Number(process.env.YAY_DUCK || 70);  // TTS中の音楽残し率%（既定70。/duck で調整）
 
 async function ensureMusicBrowser() {
   const up = async () => { try { const r = await fetch('http://127.0.0.1:9223/json/version'); return r.ok; } catch { return false; } };
@@ -514,7 +529,7 @@ function inQuietHours() {
 async function sayJingle(text) {
   if (JC().voice === false || inQuietHours()) return;
   try {
-    const r = await tts.speak(text, { voice: 'zundamon' });
+    const r = await tts.speak(text, { voice: pickZundaVoice(text) });
     if (!r.ok || !r.file) return;
     await agora.playTTS(page, agora.fileUrl(fileBase, r.file)).catch((e) => console.error('[jingle] playTTS', e.message));
   } catch (e) { console.error('[jingle] say', e.message); }
@@ -709,6 +724,12 @@ async function handleCommand(text, author = '?', userId = null) {
         if (r?.ok) lastTtsVol = r.vol;
         return r?.ok ? `🔈 読み上げ音量 ${r.vol}` : '音量は 0〜100（例: /vv 30）';
       }
+      case 'duck': {  // TTS中の音楽残し率 0-100（大きいほど音楽を下げない）
+        if (!q) return `🎚 ダッキング(声の時の音楽残し): ${lastDuck}%（変更は /duck 0-100。大=音楽そのまま）`;
+        const r = await agora.setDuck(page, q);
+        if (r?.ok) lastDuck = r.duck;
+        return r?.ok ? `🎚 ダッキング ${r.duck}%（声の時も音楽を ${r.duck}% 残す）` : 'ダッキングは 0〜100（例: /duck 70）';
+      }
       case 'ears': {  // 通話音声の聞き取りトグル
         const want = q.toLowerCase();
         const turnOff = ['off', 'stop', 'なし', 'オフ', '0'].includes(want);
@@ -803,6 +824,8 @@ async function main() {
   nextIdleAt = Date.now();
   // 読み上げ音量を初期反映（env/既定）。publish バス未生成でも S.ttsVol に保持される。
   try { await agora.setTtsVolume(page, lastTtsVol); } catch {}
+  // ダッキング率を初期反映（既定70%＝声の時も音楽をしっかり残す）。
+  try { const r = await agora.setDuck(page, lastDuck); if (r?.ok) lastDuck = r.duck; } catch {}
 
   // テスト再生: YAY_TEST_PLAY="曲名" で起動時に1曲だけ流す（RTC publish 経路の実機確認用）。
   if (process.env.YAY_TEST_PLAY && joined.rtc?.ok) {
