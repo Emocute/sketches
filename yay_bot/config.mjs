@@ -5,6 +5,11 @@ export const CONFIG = {
   cdpUrl: 'http://127.0.0.1:9222', // localhost だと ::1(IPv6) に解決され刺さる。Chrome の口は 127.0.0.1 のみ
   selfName: 'Emo Claude', // 表示名（参考）
   selfUserHref: '/user/11320230', // Emo Claude の user id。自分の投稿はこれで確実に除外（名前パースに依存しない）
+  // ── 機能フラグ ──
+  // Spotify Web Player 自動操作（BlackHole 経路）。Premium 契約 + Vivaldi 要。
+  // false にするとすべての Spotify 再生パスが無効化され YouTube のみになる。
+  spotifyEnabled: false,
+
   // 音楽用ブラウザ（別アプリ＝OS で音を分離できる）。Vivaldi 専用プロファイル
   musicProfile: '/Users/emocute/.claude/playwright-profile-music',
   vivaldiPath: '/Applications/Vivaldi.app/Contents/MacOS/Vivaldi',
@@ -13,11 +18,11 @@ export const CONFIG = {
   // 対象チャット（究が URL をくれたら差し込む）
   chatUrl: process.env.YAY_CHAT_URL || '',
 
-  // ポーリング
-  pollMs: 7000, // 10s（反応を詰めた）
-  idleBackoffMs: 30000, // 無活動が続いたら 45s に伸ばす
+  // ポーリング（応答高速化 2026-06-06: メッセージ/コマンド取得の待ちを詰めた）
+  pollMs: 2500, // 受信ポーリング間隔。コマンド体感を速く（CDP drainInbox は軽い）
+  idleBackoffMs: 30000, // 無活動が続いたら伸ばす
   maxRepliesPerMin: 10, // 自己ループは href 除外で根絶済なので緩め（暴走バックストップのみ）
-  replyCooldownMs: 3000, // 最低クールダウンも短く（返せない方が問題）
+  replyCooldownMs: 2000, // 最低クールダウン（返せない方が問題なので短め）
 
   // 状態ファイル
   stateFile: new URL('./state.json', import.meta.url).pathname,

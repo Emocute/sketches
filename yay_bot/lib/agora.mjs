@@ -98,6 +98,7 @@ export const playLive = (page, match) => ev(page, (m) => window.YayAgora.playLiv
 // 読み上げ: TTS WAV(ローカルproxy)を ttsGain に乗せて喋らせる。音楽は止めずダッキング。
 export const playTTS = (page, url) => ev(page, (u) => window.YayAgora.playTTS(u), url);
 export const setMusicVolume = (page, v) => ev(page, (n) => window.YayAgora.setMusicVolume(n), v);
+export const setTtsVolume = (page, v) => ev(page, (n) => window.YayAgora.setTtsVolume(n), v);
 export const setLoop = (page, on) => ev(page, (o) => window.YayAgora.setLoop(o), on);
 export const listAudioInputs = (page) => ev(page, () => window.YayAgora.listAudioInputs());
 export const stopMusic = (page) => ev(page, () => window.YayAgora.stopMusic());

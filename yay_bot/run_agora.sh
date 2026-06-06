@@ -13,6 +13,9 @@ if ! .venv/bin/python yay_api.py check >/tmp/yay_check.json 2>&1; then
 fi
 echo "✓ token ok"
 
+echo "▶ VOICEVOX エンジン確認（ずんだもん声の TTS バックエンド）"
+zsh scripts/voicevox_engine.sh start 2>&1 | tail -1 || echo "⚠ VOICEVOX 起動失敗（say にフォールバックする）"
+
 echo "▶ bot 起動（tmux: yay_bot）"
 tmux kill-session -t yay_bot 2>/dev/null
 sleep 1

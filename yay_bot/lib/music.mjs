@@ -79,14 +79,58 @@ export async function playYouTube(query) {
   return { service: 'youtube', query, route: await routeToBlackHole() };
 }
 
-// Spotify Web は Widevine DRM のため setSinkId が弾かれる場合がある（→ /yt を既定推奨）。
 // 既契約 Premium 前提。未ログイン/無料だと再生が始まらない。
+//   query は「曲名(検索→先頭をダブルクリック再生)」または「Spotify URL/URI(直接開いて再生)」を受ける。
+//   CONFIG.spotifyEnabled=false の時は呼び出し元でガード済みのはずだが、念のため二重ガード。
 export async function playSpotify(query) {
-  await page.goto('https://open.spotify.com/search/' + encodeURIComponent(query) + '/tracks', { waitUntil: 'domcontentloaded' });
-  await page.waitForTimeout(3000);
-  await page.locator('[data-testid="track-list"] [role="row"]').first().dblclick().catch(() => {});
-  await page.waitForTimeout(2000);
-  return { service: 'spotify', query, route: await routeToBlackHole() };
+  if (!CONFIG.spotifyEnabled) throw new Error('Spotify disabled (config.spotifyEnabled=false)');
+  const q = String(query).trim();
+  const isUrl = /^https?:\/\/open\.spotify\.com\//i.test(q) || /^spotify:/i.test(q);
+  if (isUrl) {
+    let url = q;
+    if (/^spotify:/i.test(q)) url = 'https://open.spotify.com/' + q.replace(/^spotify:/i, '').replace(/:/g, '/');
+    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(2500);
+    // ページ上部の大きい再生ボタン → ダメなら先頭トラックをダブルクリック
+    const playBtn = page.locator('[data-testid="action-bar-row"] button[data-testid="play-button"], button[data-testid="play-button"]').first();
+    if (await playBtn.count().catch(() => 0)) await playBtn.click().catch(() => {});
+    else await page.locator('[data-testid="track-list"] [role="row"]').first().dblclick().catch(() => {});
+    await page.waitForTimeout(1500);
+  } else {
+    await page.goto('https://open.spotify.com/search/' + encodeURIComponent(q) + '/tracks', { waitUntil: 'domcontentloaded' });
+    await page.waitForTimeout(3000);
+    await page.locator('[data-testid="track-list"] [role="row"]').first().dblclick().catch(() => {});
+    await page.waitForTimeout(2000);
+  }
+  return { service: 'spotify', query: q, route: await routeToBlackHole() };
+}
+
+// Web Player の再生状態を読む（自動送りの終了判定用）。
+//   再生中=playpause ボタンの aria-label が「一時停止/pause」を指す。停止/終了=「再生/play」。
+export async function playbackState(p = page) {
+  try {
+    if (!p) return { ok: false };
+    return await p.evaluate(() => {
+      const btn = document.querySelector('[data-testid="control-button-playpause"]');
+      const label = (btn?.getAttribute('aria-label') || '').toLowerCase();
+      const playing = /pause|一時停止|stop|停止/.test(label);
+      const title = document.querySelector('[data-testid="context-item-info-title"]')?.textContent || '';
+      return { ok: true, playing, title, label };
+    });
+  } catch { return { ok: false }; }
+}
+
+// 再生再開（/resume 用）。playpause が「再生」状態なら押す。
+export async function resume(p = page) {
+  try {
+    return await p.evaluate(() => {
+      const btn = document.querySelector('[data-testid="control-button-playpause"]');
+      const label = (btn?.getAttribute('aria-label') || '').toLowerCase();
+      if (/play|再生/.test(label) && !/pause|一時停止/.test(label)) btn.click();
+      document.querySelectorAll('audio,video').forEach((el) => el.play && el.play().catch(() => {}));
+      return true;
+    });
+  } catch { return false; }
 }
 
 // keepalive：アイドルの音楽ブラウザは OS に回収されやすい。CDP で定期的に触って生かす

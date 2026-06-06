@@ -23,8 +23,11 @@ const PY = fileURLToPath(new URL('./.venv/bin/python', import.meta.url));
 const API = fileURLToPath(new URL('./yay_api.py', import.meta.url));
 const SELF_UID = String(process.env.YAY_SELF_UID || '11320230');
 // なりきり人格（YAY_PERSONA=zundamon 等が初期値）。チャットから /mode で実行時切替できる。
+//   ※ 人格(語尾/声色) と 自発おしゃべり(idleChatOn) は独立トグル（究指示 2026-06-06: 分離）。
 let personaKey = String(process.env.YAY_PERSONA || '').toLowerCase();
 let personaSys = PERSONAS[personaKey] || undefined;
+// 自発おしゃべり（場が静かな時に自分から一言）。人格とは無関係に ON/OFF できる。
+let idleChatOn = /^(1|on|true|yes)$/i.test(String(process.env.YAY_IDLE_ON || ''));
 // 人格名の別名（日本語/略称 → canonical key）
 const PERSONA_ALIAS = {
   zunda: 'zundamon', zundamon: 'zundamon', 'ずんだ': 'zundamon', 'ずんだもん': 'zundamon',
@@ -103,6 +106,8 @@ let page, fileBase, creds;
 // ===== コマンド体系（汎用・1〜2文字エイリアス対応）=====
 let queue = [];        // 未再生キュー（query文字列）
 let nowQuery = null;   // 再生中の曲名/ラベル
+let nowIsSpotify = false; // 現在の再生が Spotify(live BlackHole)経路か（skip/stop/自動送りの判定用）
+let spEndedPolls = 0;  // Spotify 再生終了の連続検知カウンタ（自動送りの誤検知防止）
 let starting = false;  // 多重起動ガード
 
 // 話者ガード: この RTM uuid の発言だけツール全開（ファイル/Bash）。他人は会話のみ。
@@ -114,7 +119,7 @@ const OWNER_SECRET = process.env.YAY_OWNER_SECRET || 'kiwamu';
 const CMD = {
   help:   ['help', 'h'],
   helpshort: ['?'],
-  play:   ['play', 'p'],
+  play:   ['play', 'p', 'sp', 'spotify', 'スポ', 'スポティ'],  // 一本化: 曲名=Spotify優先→YouTube自動切替、URLは種別で振分
   queue:  ['queue', 'q', 'add'],
   skip:   ['skip', 's', 'next', 'n'],
   stop:   ['stop', 'x'],
@@ -130,6 +135,8 @@ const CMD = {
   leave:  ['leave', 'bye'],
   mode:   ['mode', 'm', 'persona'],
   zunda:  ['zunda', 'ずんだ'],
+  idle:   ['idle', 'jihatsu', 'chatter', '自発', 'おしゃべり', '独り言'],  // 自発おしゃべり ON/OFF（人格と独立）
+  ttsvol: ['vv', 'koevol', '声量', '声音量'],   // 読み上げ(ずんだもん声)の音量 0-100
   ears:   ['ears', 'listen', '耳', '聞く', 'kiku'],
   voice:  ['voice', 'yomi', 'tts', '読み', '読み上げ', '喋る', 'koe'],
   status: ['status', 'st', '状態', 'state'],
@@ -139,7 +146,6 @@ const CMD = {
   qdn:    ['qj', 'qdn', 'down', '下'],
   iam:    ['iam', 'owner', 'オーナー', '俺'],   // 本人登録（/iam <合言葉>）
   whoami: ['whoami', 'myid', '誰'],             // 自分のRTM IDを表示
-  sp:     ['sp', 'spotify', 'スポ', 'スポティ'],  // Spotify自動操作→BlackHole→RTC
   volup:  ['volup', 'vu', '音量上げ'],
   voldown:['voldown', 'vd', '音量下げ'],
   rec:    ['rec', 'record', '録音'],            // 録音 状態/保存/停止/開始
@@ -153,9 +159,10 @@ const onoff = (b) => (b ? '🟢ON' : '⚪OFF');
 // いまの状態ブロック（/st と /h の冒頭で共用）
 function statusBlock() {
   return [
-    `🗣 読み上げ: ${onoff(speaking)}（ずんだもん声）`,
+    `🗣 読み上げ: ${onoff(speaking)}（ずんだもん声 / 音量${lastTtsVol}）`,
     `👂 聞き取り: ${onoff(listening)}`,
     `🎭 ずんだもん語尾: ${onoff(personaKey === 'zundamon')}`,
+    `💬 自発おしゃべり: ${onoff(idleChatOn)}`,
     nowQuery ? `🎵 再生中: ${nowQuery}` : '🎵 再生: なし',
   ].join('\n');
 }
@@ -166,11 +173,13 @@ function renderHelpFull() {
     statusBlock(),
     '― 切替（各コマンドでトグル / on・off 明示も可）―',
     '/voice（読）= 読み上げ。返信を自動でずんだもん声で喋る',
+    '/vv 0-100 = 読み上げ(ずんだもん声)の音量（既定30）',
     '/ears（聞）= 聞き取り。通話の音声を文字起こし→自動返信',
     '/mode <モード> = 人格切替（zundamon/off 等）',
-    '  ・/zunda = ずんだもん語尾 on/off',
+    '  ・/zunda = ずんだもん語尾 on/off（声・語尾のみ）',
+    '/idle = 自発おしゃべり on/off（人格と独立。静かな時に自分から一言）',
     '― 音楽再生 ―',
-    '/p <曲> = 再生開始',
+    '/p <曲/URL> = 再生開始（曲名は Spotify 優先→無ければ YouTube、URL は自動判別）',
     '/q <曲> = キューに追加（再生中なら直後に再生）',
     '/s（次）= スキップ / /x（停止）= 全停止',
     '/ps = 一時停止 / /r = 再開',
@@ -191,7 +200,7 @@ function renderHelpFull() {
 function renderHelpShort() {
   return [
     '🎧 EmoCC コマンド（簡易）',
-    '/voice /ears /mode <m> /zunda … 機能 on/off',
+    '/voice /vv <n> /ears /mode <m> /zunda /idle … 機能 on/off',
     '/p <曲> /s /x /ps /r /v <n> /l /np … 再生制御',
     '/q（一覧）/q <曲>（追加）/qd <N> /qu <N> /qj <N> /c … キュー',
     '/lv /d /st /pi /bye … その他',
@@ -203,17 +212,11 @@ function renderHelp() {
   return renderHelpFull();
 }
 // 返信を喋る（speaking時のみ）。TTS で WAV 生成 → Agora RTC に publish。
-// 人格に応じたボイスパックを選択。
+// 声は常にずんだもん固定（究指示 2026-06-06: ずんだもん以外の声は使わない）。
 async function sayOut(text) {
   if (!speaking) return;
   try {
-    // 人格に応じたボイス選択
-    const voiceMap = {
-      zundamon: 'zundamon',       // ずんだもん
-      natsuki: 'akari',            // ナツキ → あかり（辛辣）
-      succubus: 'zundamon_sad',   // サキュバス → 悲しい声（妖艶さ）
-    };
-    const voiceKey = voiceMap[personaKey] || undefined;
+    const voiceKey = 'zundamon';   // 人格に関わらず常にずんだもん声
     console.log('[sayOut] voiceKey=', voiceKey, 'persona=', personaKey);
     const r = await tts.speak(text, { voice: voiceKey });
     console.log('[sayOut] tts.speak result:', { ok: r.ok, engine: r.engine, file: r.file?.slice(-30) });
@@ -228,12 +231,18 @@ async function sayOut(text) {
   }
 }
 
-// 人格の実行時切替（再起動不要）。ON にしたら起動直後と同じく一発目を即出す。
+// 人格の実行時切替（再起動不要）。語尾/声色のみ。自発おしゃべりとは独立（/idle で別管理）。
 function setPersona(key) {
   personaKey = key || '';
   personaSys = personaKey ? PERSONAS[personaKey] : undefined;
-  if (personaSys) { lastActivityAt = Date.now() - IDLE_QUIET_MS - 1; nextIdleAt = Date.now(); return `🎭 ${personaKey} モードON（自発おしゃべり ${IDLE_MIN_MS / 1000}〜${IDLE_MAX_MS / 1000}s）`; }
-  return '🎭 通常モードに戻した（自発おしゃべりOFF）';
+  return personaSys ? `🎭 ${personaKey} モードON（語尾/口調）。自発おしゃべりは別（/idle）` : '🎭 通常モードに戻した（語尾オフ）';
+}
+
+// 自発おしゃべりの ON/OFF（人格とは独立）。ONにしたら直後に一発目を出す。
+function setIdleChat(on) {
+  idleChatOn = !!on;
+  if (idleChatOn) { lastActivityAt = Date.now() - IDLE_QUIET_MS - 1; nextIdleAt = Date.now(); return `💬 自発おしゃべりON（${IDLE_MIN_MS / 1000}〜${IDLE_MAX_MS / 1000}s おきに静かなら一言）`; }
+  return '💬 自発おしゃべりOFF';
 }
 
 // 1曲を解決→publish（real-time）。解決した正式タイトルを「流す前」にチャットへ出す。
@@ -248,6 +257,7 @@ async function startTrack(query) {
     await sendYayChat(page, `🎵 ${title}`).catch(() => {});  // ★再生前に正式タイトルを通知
     await agora.playUrl(page, agora.streamUrl(fileBase, r.url));
     nowQuery = title;                                        // /np 表示も正式タイトルに
+    nowIsSpotify = false;
     return { ok: true, title };
   } finally { starting = false; }
 }
@@ -256,6 +266,7 @@ const notFoundMsg = (q) => `❌ 見つかりませんでした: ${q}`;
 // ── Spotify 自動操作（Playwright で Spotify Web 検索→再生 → BlackHole → RTC publish）──
 let musicReady = false;          // music ブラウザ(9223) に connectMusic 済みか
 let lastVol = Number(process.env.YAY_MUSIC_VOL || 15);  // 直近音量（相対調整用）
+let lastTtsVol = Number(process.env.YAY_TTS_VOL || 30);  // 直近の読み上げ音量（/vv 表示用）
 
 async function ensureMusicBrowser() {
   const up = async () => { try { const r = await fetch('http://127.0.0.1:9223/json/version'); return r.ok; } catch { return false; } };
@@ -267,15 +278,53 @@ async function ensureMusicBrowser() {
 }
 
 async function startSpotify(query) {
+  if (!CONFIG.spotifyEnabled) return { ok: false, reason: 'Spotify 無効（config.spotifyEnabled=false）' };
   if (!(await ensureMusicBrowser())) return { ok: false, reason: '音楽ブラウザ(9223)が起動できない' };
   try {
     if (!musicReady) { await spotify.connectMusic(); musicReady = true; }
-    const r = await spotify.playSpotify(query);   // 検索→再生→BlackHole へ setSinkId（検証付き）
+    await sendYayChat(page, `🎧 Spotify: ${query}`).catch(() => {});  // 再生前に通知（全呼び出し共通）
+    const r = await spotify.playSpotify(query);   // 検索/URL→再生→BlackHole へ setSinkId（検証付き）
     if (!r.route?.ok) return { ok: false, reason: r.route?.reason || 'BlackHole 経路NG', drm: true };
     await agora.playLive(page, 'BlackHole');       // BlackHole 入力を RTC に publish
     nowQuery = 'Spotify: ' + query;
+    nowIsSpotify = true;
     return { ok: true };
   } catch (e) { musicReady = false; return { ok: false, reason: e.message }; }
+}
+
+// URL 判定
+const isHttpUrl = (s) => /^https?:\/\//i.test(String(s).trim());
+const isSpotifyRef = (s) => { const t = String(s).trim(); return /open\.spotify\.com/i.test(t) || /^spotify:/i.test(t); };
+
+// 統合再生エンジン（/play 一本化）。曲名=Spotify優先→YouTube自動切替、URLは種別で振分。
+//   Spotify URL → Spotify Web Player で直接 / 他URL → yt-dlp / 曲名 → Spotify→(失敗時)YouTube。
+//   CONFIG.spotifyEnabled=false 時: Spotify URL はエラー、曲名は直接 YouTube へ。
+async function startAny(query) {
+  const q = String(query).trim();
+  if (!q) return { ok: false, notfound: true, query: q };
+  if (isSpotifyRef(q)) {
+    if (!CONFIG.spotifyEnabled) return { ok: false, notfound: true, query: q, reason: 'Spotify 無効（YouTube では Spotify URL は再生不可）' };
+    const r = await startSpotify(q);
+    return r.ok ? { ok: true, src: 'spotify' } : { ok: false, notfound: true, query: q, reason: r.reason };
+  }
+  if (isHttpUrl(q)) {   // YouTube 等の動画/音声 URL は yt-dlp 経路
+    const r = await startTrack(q);
+    return r.ok ? { ok: true, src: 'yt' } : { ok: false, notfound: true, query: q };
+  }
+  // ただの曲名: Spotify が有効なら Spotify 優先 → ダメなら YouTube。無効なら直接 YouTube。
+  if (CONFIG.spotifyEnabled) {
+    const sp = await startSpotify(q);
+    if (sp.ok) return { ok: true, src: 'spotify' };
+    console.log('  Spotify不可→YouTube fallback:', sp.reason);
+  }
+  const yt = await startTrack(q);
+  return yt.ok ? { ok: true, src: 'yt' } : { ok: false, notfound: true, query: q };
+}
+
+// ファイル/コード/開発系の意図か（true の時だけ重い tools 全開パスへ昇格）。
+//   ヒットしなければ高速な会話パス（cwd=tmp・CLAUDE.md 読込無し）で返す。
+function wantsTools(text) {
+  return /ファイル|フォルダ|ディレクトリ|repo|リポ|コード|code|スクリプト|直して|修正|実装|追加して|書いて|バグ|エラー|例外|ログ|grep|検索して|調べて|開いて|見て|確認して|読んで|テスト|ビルド|デプロイ|push|commit|git|どうなって|中身|\.(mjs|jsx?|tsx?|py|json|md|html|css|vue|sh|toml|ya?ml)\b/i.test(String(text));
 }
 
 // 自然言語 → スラッシュコマンド（オーナー本人の発言だけに適用）。制御意図でなければ null。
@@ -294,11 +343,11 @@ function nlToCommand(text) {
   if (/(次の?曲|次に?して|次いって|スキップ|とばして|飛ばして|チェンジして)/.test(t)) return '/skip';
   const pv = t.match(/(かけて|流して|再生して|プレイして|聴きたい|聞きたい|かけろ|流せ|プレイ|かけ)/);
   if (pv) {
-    const onSpotify = /spotify|スポティファイ|スポ(?!ーツ)/i.test(t);
+    // /play 一本化: Spotify/YouTube の振り分けは startAny が自動でやるので語句から外すだけ
     let q = t.slice(0, pv.index).replace(/spotify|スポティファイ|スポ(?!ーツ)/ig, '').trim();
     q = q.replace(/^(で|の|を)\s*/, '').replace(/(を|の曲|って)\s*$/, '').trim();
     if (!q) return null;
-    return onSpotify ? `/sp ${q}` : `/play ${q}`;
+    return `/play ${q}`;
   }
   return null;
 }
@@ -396,8 +445,8 @@ async function handleCommand(text, author = '?') {
       case 'play':
       case 'queue': {
         if (!q) return renderQueue();           // 引数なし = 番号付き一覧
-        // /play 一本化: 空いてれば即再生、再生中なら自動でキューに積む（/q と同挙動）
-        if (!nowQuery && !starting) { const r = await startTrack(q); return r.ok ? null : notFoundMsg(q); }
+        // /play 一本化: 空いてれば即再生（曲名=Spotify優先→YouTube）、再生中なら自動でキューに積む
+        if (!nowQuery && !starting) { const r = await startAny(q); return r.ok ? null : notFoundMsg(q); }
         queue.push(q);
         return `➕ キューに追加(${queue.length}): ${q}\n` + renderQueue();
       }
@@ -421,26 +470,19 @@ async function handleCommand(text, author = '?') {
         return `⬇ ${i + 1}→${i + 2} へ移動\n` + renderQueue();
       }
       case 'skip':
-        await agora.stopMusic(page); nowQuery = null;
+        if (nowIsSpotify) await spotify.pause().catch(() => {});
+        await agora.stopMusic(page); nowQuery = null; nowIsSpotify = false;
         return queue.length ? '⏭ スキップ' : '⏭ スキップ（キュー空）';
       case 'stop':
-        queue = []; await agora.stopMusic(page); nowQuery = null;
+        queue = []; if (nowIsSpotify) await spotify.pause().catch(() => {});
+        await agora.stopMusic(page); nowQuery = null; nowIsSpotify = false;
         return '⏹ 停止（キューも消去）';
       case 'clear': queue = []; return '🧹 キュー消去';
-      case 'pause': await agora.pauseMusic(page); return '⏸ 一時停止';
-      case 'resume': await agora.resumeMusic(page); return '▶ 再開';
+      case 'pause': if (nowIsSpotify) await spotify.pause().catch(() => {}); else await agora.pauseMusic(page); return '⏸ 一時停止';
+      case 'resume': if (nowIsSpotify) await spotify.resume().catch(() => {}); else await agora.resumeMusic(page); return '▶ 再開';
       case 'vol': { const r = await agora.setMusicVolume(page, q); if (r?.ok) lastVol = r.vol; return r?.ok ? `🔊 音量 ${r.vol}` : '音量は 0〜100（例: /v 15）'; }
       case 'volup': { const v = Math.min(100, lastVol + 10); const r = await agora.setMusicVolume(page, v); if (r?.ok) lastVol = r.vol; return `🔊 音量 ${r?.vol ?? v}`; }
       case 'voldown': { const v = Math.max(0, lastVol - 10); const r = await agora.setMusicVolume(page, v); if (r?.ok) lastVol = r.vol; return `🔉 音量 ${r?.vol ?? v}`; }
-      case 'sp': {
-        if (!q) return 'Spotifyで流す曲名を入れて（例: /sp 相対性理論）';
-        await sendYayChat(page, `🎧 Spotify検索: ${q}`).catch(() => {});
-        const r = await startSpotify(q);
-        if (r.ok) return `🎧 Spotify再生中: ${q}（BlackHole経由で通話へ）`;
-        // DRM/経路NG → YouTube へ自動フォールバック
-        const y = await startTrack(q);
-        return y.ok ? `⚠ Spotify不可(${r.reason})→YouTubeで流した` : `❌ Spotify/YouTube どちらも失敗: ${q}（${r.reason}）`;
-      }
       case 'np': return nowQuery ? `🎵 再生中: ${nowQuery}${queue.length ? ` / 次(${queue.length}): ${queue.slice(0, 3).join(' / ')}` : ''}` : (queue.length ? `📜 キュー(${queue.length}): ${queue.slice(0, 5).join(' / ')}` : '何も流してない');
       case 'loop': { const r = await agora.setLoop(page); return r?.loop ? '🔁 一曲ループON（今の曲を繰り返す）' : '➡ 一曲ループOFF'; }
       case 'live': await agora.playLive(page, q || null); nowQuery = 'live'; return `▶ システム音声配信中${q ? '（' + q + '）' : ''}`;
@@ -467,14 +509,27 @@ async function handleCommand(text, author = '?') {
       case 'leave': await stopCallRecording(); await agora.leave(page); nowQuery = null; queue = []; return '👋 通話から抜けた（録音はmp3化して保存）';
       case 'mode': {
         const want = q.toLowerCase();
-        if (!want || want === '?') return personaKey ? `🎭 現在: ${personaKey}（自発おしゃべりON）` : '🎭 現在: 通常（自発おしゃべりOFF）';
+        if (!want || want === '?') return `🎭 人格: ${personaKey || '通常'} / 💬 自発おしゃべり: ${idleChatOn ? 'ON' : 'OFF'}`;
         if (['off', 'normal', 'plain', 'なし', '通常', 'オフ'].includes(want)) return setPersona('');
         const key = PERSONA_ALIAS[want] || (PERSONAS[want] ? want : null);
         if (!key) return `そのモードは無い（使えるの: ${Object.keys(PERSONAS).join(', ')} / off）`;
         return setPersona(key);
       }
-      case 'zunda':  // トグル
+      case 'zunda':  // 語尾トグル（自発おしゃべりとは独立）
         return setPersona(personaKey === 'zundamon' ? '' : 'zundamon');
+      case 'idle': {  // 自発おしゃべり ON/OFF（人格と独立）
+        const want = q.toLowerCase();
+        if (want === '?' ) return `💬 自発おしゃべり: ${idleChatOn ? 'ON' : 'OFF'}`;
+        const on = ['on', 'start', '開始', 'オン', '1'].includes(want);
+        const off = ['off', 'stop', 'なし', 'オフ', '0', '止め', '停止'].includes(want);
+        return setIdleChat(on ? true : off ? false : !idleChatOn);
+      }
+      case 'ttsvol': {  // 読み上げ音量 0-100
+        if (!q) return `🔈 読み上げ音量: ${lastTtsVol}（変更は /vv 0-100）`;
+        const r = await agora.setTtsVolume(page, q);
+        if (r?.ok) lastTtsVol = r.vol;
+        return r?.ok ? `🔈 読み上げ音量 ${r.vol}` : '音量は 0〜100（例: /vv 30）';
+      }
       case 'ears': {  // 通話音声の聞き取りトグル
         const want = q.toLowerCase();
         const turnOff = ['off', 'stop', 'なし', 'オフ', '0'].includes(want);
@@ -547,14 +602,16 @@ async function main() {
   ownerRtm = st0.owner || process.env.YAY_OWNER || null;
   console.log('[bot] owner:', ownerRtm || '未登録（/iam ' + OWNER_SECRET + ' で登録）');
   console.log('[bot] 稼働開始', stateExisted ? '(seen継承)' : '(初回)');
-  console.log('[bot] 人格:', personaKey || '通常', personaSys ? `/ 自発おしゃべり ${IDLE_MIN_MS / 1000}〜${IDLE_MAX_MS / 1000}s` : '/ 自発OFF', '（チャットで /zunda 切替）');
+  console.log('[bot] 人格:', personaKey || '通常', '/ 自発おしゃべり:', idleChatOn ? `ON(${IDLE_MIN_MS / 1000}〜${IDLE_MAX_MS / 1000}s)` : 'OFF', '（/zunda 語尾・/idle 自発）');
 
   // 自発おしゃべり用の状態
   const recentLines = [];       // ローリング会話履歴（古→新）
   const pushLine = (s) => { recentLines.push(s); if (recentLines.length > 14) recentLines.shift(); };
-  // 人格ONで起動した場合は直後に一発目を出す（以降は中スパン）。OFFなら通常待機。
-  lastActivityAt = personaSys ? Date.now() - IDLE_QUIET_MS - 1 : Date.now();
+  // 自発おしゃべりONで起動した場合は直後に一発目を出す（以降は中スパン）。OFFなら通常待機。
+  lastActivityAt = idleChatOn ? Date.now() - IDLE_QUIET_MS - 1 : Date.now();
   nextIdleAt = Date.now();
+  // 読み上げ音量を初期反映（env/既定）。publish バス未生成でも S.ttsVol に保持される。
+  try { await agora.setTtsVolume(page, lastTtsVol); } catch {}
 
   // テスト再生: YAY_TEST_PLAY="曲名" で起動時に1曲だけ流す（RTC publish 経路の実機確認用）。
   if (process.env.YAY_TEST_PLAY && joined.rtc?.ok) {
@@ -592,15 +649,27 @@ async function main() {
   }
 
   for (;;) {
-    // キュー自動送り: 再生が止まっててキューがあれば次を流す
+    // キュー自動送り: 再生が止まっててキューがあれば次を流す（Spotify/YouTube 両対応）
     if (!starting) {
       try {
-        const st = await agora.status(page);
-        if (!st?.nowPlaying) {
+        let ended;
+        if (nowIsSpotify) {
+          // Spotify(live BlackHole)は ended イベントが無いので Web Player の再生状態で判定。
+          //   誤検知(瞬間停止/トラック切替)を避けるため連続3回 stopped で「終了」とみなす。
+          const ps = await spotify.playbackState().catch(() => null);
+          if (ps && ps.ok && !ps.playing) spEndedPolls++; else spEndedPolls = 0;
+          ended = spEndedPolls >= 3;
+        } else {
+          const st = await agora.status(page);
+          ended = !st?.nowPlaying;
+          spEndedPolls = 0;
+        }
+        if (ended) {
           if (queue.length) {
-            const r = await startTrack(queue.shift());   // タイトル通知は startTrack 内で実施済み
+            spEndedPolls = 0;
+            const r = await startAny(queue.shift());   // タイトル通知は startAny→startTrack/startSpotify 内で実施済み
             console.log('  ▶ next:', r);
-          } else if (nowQuery && nowQuery !== 'live') { nowQuery = null; }
+          } else if (nowQuery && nowQuery !== 'live') { nowQuery = null; nowIsSpotify = false; spEndedPolls = 0; }
         }
       } catch {}
     }
@@ -619,15 +688,17 @@ async function main() {
         if (canReply()) {
           const context = recentLines.slice(-10).join('\n');
           try {
-            const reply = (await emoccReply(context, { system: personaSys })).replace(/^[!\/]\S*\s*/, '').trim();
+            const out = await emoccReply(context, { system: personaSys });
+            if (out.action) { console.log('  🎬 ACTION(声):', out.action); const ar = await handleCommand(out.action, ownerRtm || 'voice'); if (ar) await sendYayChat(page, ar).catch(() => {}); }
+            const reply = (out.reply || '').replace(/^[!\/]\S*\s*/, '').trim();
             if (reply) { await sendYayChat(page, reply); markReplied(); pushLine(`自分: ${reply}`); console.log('  → 声返信:', reply); await sayOut(reply); }
           } catch (e) { console.error('voice reply err', e.message); }
         }
       }
     }
 
-    // 自発おしゃべり（人格指定時のみ）: 場が静かなら中スパンで自分から一言
-    if (personaSys && IDLE_MAX_MS > 0 && Date.now() >= nextIdleAt
+    // 自発おしゃべり（/idle ON時のみ・人格とは独立）: 場が静かなら中スパンで自分から一言
+    if (idleChatOn && IDLE_MAX_MS > 0 && Date.now() >= nextIdleAt
         && (Date.now() - lastActivityAt) > IDLE_QUIET_MS && canReply()) {
       try {
         const ctx = recentLines.slice(-10).join('\n');
@@ -672,11 +743,17 @@ async function main() {
         const context = recentLines.slice(-10).join('\n');
         // 話者ガード: この返信が応じる発言が全てオーナー本人の時だけツール全開。
         //   他人が混じる/オーナー未登録なら会話のみ（ファイル/Bash 不可）。
-        const tools = !!ownerRtm && conv.every((m) => m.author === ownerRtm);
+        // 高速化(2026-06-06): 通常会話は tools=false の軽量パス（CLAUDE.md 読込無し＝最速）。
+        //   ファイル/コード/開発依頼が明確な時だけ tools 全開に昇格（cwd=Downloads で重い）。
+        const ownerOnly = !!ownerRtm && conv.every((m) => m.author === ownerRtm);
+        const tools = ownerOnly && conv.some((m) => wantsTools(m.text));
         try {
-          let reply = (await emoccReply(context, { system: personaSys, tools })).replace(/^[!\/]\S*\s*/, '').trim();
+          const out = await emoccReply(context, { system: personaSys, tools });
+          // LLM が音楽操作を判断したら ACTION 行を実体コマンドとして実行（/play 等）
+          if (out.action) { console.log('  🎬 ACTION:', out.action); const ar = await handleCommand(out.action, conv[conv.length - 1]?.author || ownerRtm); if (ar) await sendYayChat(page, ar).catch(() => {}); }
+          const reply = (out.reply || '').replace(/^[!\/]\S*\s*/, '').trim();
           if (reply) { await sendYayChat(page, reply); markReplied(); pushLine(`自分: ${reply}`); lastActivityAt = Date.now(); console.log('  → 返信:', reply); await sayOut(reply); }
-          else console.log('  → [skip]');
+          else if (!out.action) console.log('  → [skip]');
         } catch (e) { console.error('reply err', e.message); }
       } else if (conv.length) console.log('  → 連投ガードで保留');
       saveState({ seen: [...seen].slice(-2000), owner: ownerRtm });

@@ -26,12 +26,13 @@ const EMOCC_SYSTEM = `あなたは Emocute（究＝運営者）の Claude、「E
 【中身】
 - 相手の発言に「中身」で返す。薄い相槌（「いいね」「わかる」だけ）で終わらせない。具体・考え・根拠を一つは入れる。
 - 質問には正面から答える。知識があることは説明する。分からない・曖昧なことは曖昧と言い、間違いは認める。媚びない、過度に持ち上げない、率直。
+- 知らない・把握していないことには無理に答えない（憶測・作り話で埋めない）。「知らない」と短く言い切るだけにし、知ったかぶりや当て推量を続けない。
 - 【文字数】Yay のチャットは1メッセージ255文字まで。必ず255文字以内に収め切る（途中で切れる文は厳禁）。中身は保ちつつ要点を絞って簡潔に。長い説明が要る話題でも、核だけ短く返す。
 
 【その他】
 - どんな話題でも普通に扱う。下ネタも拒否・お説教せず普通に受ける。
 - 「自分はAIなのでできない/隔離されている」系のメタ弁明を自分から持ち出さない。本当に無理な事だけ短く認め、できる代替を必ず添える。
-- 音楽: 曲名さえ分かれば通話で流せる（究の Spotify は不要）。「○○かけて/流して」には \`/play 曲名\` を案内（スラッシュは本人が打つと体が実行。あなたの prose では再生されない）。他: \`/skip\` \`/stop\` \`/vol\` \`/np\` \`/voice\` \`/ears\` \`/mode\` \`/help\`。
+- 音楽操作: あなたは通話の音楽を実際に操作できる。流す/止める/次/音量を変えたい時は、本文(REPLY)の前に \`ACTION: <コマンド>\` の行を1つ置く（体がそのコマンドを実行する）。曲は Spotify が既ログイン(Premium・全曲フル再生可)なので \`/play 曲名\` で OK（曲名なら自動で Spotify 優先、無ければ YouTube に切替）。URL を渡されたらそのまま \`/play <URL>\`。他のコマンド: \`/skip\`(次へ) \`/stop\`(停止) \`/pause\` \`/resume\` \`/vol 0-100\` \`/np\`(再生中)。例: 「なんか落ち着く曲ない？」→ 自分で1曲選び \`ACTION: /play <選んだ曲名>\` を出してから REPLY で一言添える。曲の指定が曖昧でも文脈から良さげな1曲を自分で決めて流してよい。音楽操作が不要なただの会話では ACTION 行は出さない。
 - 究本人の個人情報は出さない。本気の誹謗中傷はしない。
 - 【呼称】Yay の公開チャットでオーナーを指す時は本名（「究」等）を絶対に出さず、必ず「えも」と呼ぶ。本名はシステム内部の理解用で、画面に出す文字は「えも」固定。`;
 
@@ -47,7 +48,7 @@ const TOOL_BLOCK = `【今はオーナー（究）本人と話している＝ツ
 
 // オーナー以外/未認証の相手に返す時に付与（ツール無し＝会話のみ）。
 const NOTOOL_NOTE = `【今はツール無しの会話のみ（認証されたオーナーではない相手）】
-ファイル操作・Bash 等のツールは使わない。普通に会話で返すだけ。「アクセスできない」と長々弁明せず自然に流す。音楽は \`/play 曲名\` の案内のみ可。`;
+ファイル操作・Bash 等のツールは使わない。普通に会話で返すだけ。「アクセスできない」と長々弁明せず自然に流す。音楽操作（再生/停止/次/音量）は可能で、上の「音楽操作」と同じく \`ACTION: /play 曲名\` 等を本文前に出せば実行される。`;
 
 // なりきり人格セット。YAY_PERSONA=<key> で bot が選ぶ。
 export const PERSONAS = {
@@ -102,27 +103,35 @@ function runClaude(prompt, timeoutMs, tools = false) {
     const env = { ...process.env };
     delete env.CLAUDECODE;
     delete env.CLAUDE_CODE_ENTRYPOINT;
-    // tools=true: 究のリポ起点で全ツール（破壊系は deny）。false: 中立cwd・ツール無しの隔離会話。
+    // Opus 4.8 を明示（究指示: Opus 維持のまま高速化）。
+    //  tools=true: 究のリポ起点で全ツール（破壊系は deny、tool ループ上限で暴走/遅延を抑制）。
+    //  tools=false: 中立cwd・ツール無しの隔離会話＝CLAUDE.md 読み込みも無く最速。
+    const MODEL = process.env.YAY_CLAUDE_MODEL || 'claude-opus-4-8';
     const args = tools
-      ? ['-p', prompt, '--dangerously-skip-permissions', '--disallowedTools', DENY_TOOLS]
-      : ['-p', prompt];
+      ? ['-p', prompt, '--model', MODEL, '--dangerously-skip-permissions', '--disallowedTools', DENY_TOOLS, '--max-turns', '8']
+      // 会話パスは MCP 不要 → --strict-mcp-config で全 MCP ロードを無効化（無駄な起動コスト/負荷を削る）。
+      : ['-p', prompt, '--model', MODEL, '--strict-mcp-config'];
     const child = execFile(
       'claude',
       args,
       { env, cwd: tools ? WORKDIR : tmpdir(), maxBuffer: 8 << 20, timeout: timeoutMs },
       (err, stdout) => {
         if (err) return reject(err);
-        let out = (stdout || '').trim();
+        const full = (stdout || '').trim();
+        // ACTION: 行（音楽コマンド等）を先に拾う。REPLY より前に出る想定。
+        const am = full.match(/^\s*ACTION:\s*([^\n]+)$/im);
+        const action = am ? am[1].trim() : null;
+        let out = full;
         // REPLY: 以降を採用（思考が前にあっても本文だけ取れる）
         const m = out.match(/REPLY:\s*([\s\S]*)$/i);
         if (m) out = m[1].trim();
         else {
-          // フォールバック: 最後の非空行（思考は前段に出やすい）
-          const lines = out.split('\n').map((l) => l.trim()).filter(Boolean);
+          // フォールバック: 最後の非空行（思考は前段に出やすい）。ACTION 行は除外。
+          const lines = out.split('\n').map((l) => l.trim()).filter((l) => l && !/^ACTION:/i.test(l));
           out = lines.length ? lines[lines.length - 1] : '';
         }
         out = out.replace(/^[!\/]\S*\s*/, '').trim(); // 先頭コマンドエコー除去
-        resolve(out);
+        resolve({ reply: out, action });
       },
     );
     child.stdin?.end();
@@ -131,11 +140,13 @@ function runClaude(prompt, timeoutMs, tools = false) {
 }
 
 // 直近会話への返信。tools=true（オーナー本人）の時だけファイル/Bash 全開。
+//   返り値: { reply: 投稿本文, action: 実行すべきスラッシュコマンド or null }。
 export function emoccReply(contextText, { timeoutMs = 180000, system = EMOCC_SYSTEM, tools = false } = {}) {
   const sys = `${system || EMOCC_SYSTEM}\n\n${tools ? TOOL_BLOCK : NOTOOL_NOTE}`;
   const prompt =
     `${sys}\n\n--- 直近の会話（古い→新しい）---\n${contextText}\n\n` +
     `上の会話に返す。思考・理由・前置き・メタ説明は一切書かない。\n` +
+    `音楽を操作する場合のみ、本文の前に「ACTION: /play 曲名」等のコマンド行を1つ置く（不要なら書かない）。\n` +
     `出力は最後に必ず「REPLY: 」の行を1つ置き、それに続けて投稿する本文だけを書くこと（${tools ? 'ツール作業はその前に済ませる' : '1行'}）。\n` +
     `例: REPLY: おう、待ってるわ`;
   return runClaude(prompt, timeoutMs, tools);
@@ -148,5 +159,5 @@ export function idleChatter(contextText, { timeoutMs = 180000, system = EMOCC_SY
     `${sys}\n\n--- 直近の会話（古い→新しい・無いこともある）---\n${contextText || '(まだ会話なし)'}\n\n` +
     `今は通話が静かで、自分から場をつなぐために軽く一言つぶやく場面。会話の流れがあれば自然に広げ、無ければ新しい雑談の話題・小ネタ・質問を一つ振る。返信ではなく自発的なひとりごと/話しかけ。直前の自分の発言の繰り返しは避ける。\n` +
     `思考・理由・前置き・メタ説明は一切書かない。出力は必ず1行で「REPLY: 」に続けて本文だけを書くこと。`;
-  return runClaude(prompt, timeoutMs, false);
+  return runClaude(prompt, timeoutMs, false).then((r) => r.reply);
 }

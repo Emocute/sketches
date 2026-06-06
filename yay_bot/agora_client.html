@@ -75,6 +75,7 @@
   //   musicGain（曲）と ttsGain（読み上げ）を両方そこへ合流。TTS中は musicGain をダッキング。
   //   → 音楽を止めずに読み上げが乗る。音量は musicGain.gain で制御（Agora setVolume は使わない）。
   S.musicVol = (typeof S.musicVol === 'number') ? S.musicVol : 15;
+  S.ttsVol = (typeof S.ttsVol === 'number') ? S.ttsVol : 30;   // 読み上げ(ずんだもん声)音量。既定控えめ
   S.duck = (typeof S.duck === 'number') ? S.duck : 0.25;   // TTS中の音楽残し率
   const volToGain = (v) => Math.max(0, Math.min(100, Number(v) || 0)) / 100;
 
@@ -83,7 +84,7 @@
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const dest = ctx.createMediaStreamDestination();
     const musicGain = ctx.createGain(); musicGain.gain.value = volToGain(S.musicVol);
-    const ttsGain = ctx.createGain(); ttsGain.gain.value = 1.0;
+    const ttsGain = ctx.createGain(); ttsGain.gain.value = volToGain(S.ttsVol);
     musicGain.connect(dest); ttsGain.connect(dest);
     const [mst] = dest.stream.getAudioTracks();
     const track = AgoraRTC.createCustomAudioTrack({ mediaStreamTrack: mst });
@@ -108,6 +109,15 @@
     S.musicVol = n;
     if (S.pub && !S.ducking) S.pub.musicGain.gain.value = volToGain(n);
     L('vol', n);
+    return { ok: true, vol: n };
+  }
+  // 読み上げ(ずんだもん声)の音量 0〜100。ttsGain を直接動かす（音楽とは独立）。
+  function setTtsVolume(v) {
+    let n = Number(v); if (!isFinite(n)) return { ok: false, error: 'NaN' };
+    n = Math.max(0, Math.min(100, Math.round(n)));
+    S.ttsVol = n;
+    if (S.pub) S.pub.ttsGain.gain.value = volToGain(n);
+    L('ttsvol', n);
     return { ok: true, vol: n };
   }
 
@@ -407,7 +417,7 @@
       catch (e) { out.rtm = { ok: false, error: err('joinRtm', e) }; }
       return out;
     },
-    playUrl, playLive, playTTS, listAudioInputs, setMusicVolume, setLoop, stopMusic, pauseMusic, resumeMusic, sendChat,
+    playUrl, playLive, playTTS, listAudioInputs, setMusicVolume, setTtsVolume, setLoop, stopMusic, pauseMusic, resumeMusic, sendChat,
     startListen, stopListen, drainUtterances, listenStatus: () => ({ on: S.listen.on, sources: S.listen.sources.size, queued: S.utterances.length, srcRate: S.listen.srcRate }),
     startRecord, stopRecord, drainRecChunks, recStatus,
     // Node が polling で吸う
