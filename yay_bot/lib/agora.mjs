@@ -16,6 +16,8 @@ const HTML = fileURLToPath(new URL('../agora_client.html', import.meta.url));
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 const MIME = { '.mp3': 'audio/mpeg', '.m4a': 'audio/mp4', '.aac': 'audio/aac', '.ogg': 'audio/ogg', '.opus': 'audio/ogg', '.wav': 'audio/wav', '.flac': 'audio/flac' };
+// クライアントを http で配信する都合上、HTML が相対参照する静的アセット(SDK 等)の MIME も要る。
+const STATIC_MIME = { '.js': 'text/javascript', '.mjs': 'text/javascript', '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.json': 'application/json', '.map': 'application/json', '.wasm': 'application/wasm' };
 
 // ローカル音源を 127.0.0.1 で配信。
 //   /audio?p=<絶対パス>  … ローカルファイルを Range 対応で返す
@@ -26,6 +28,28 @@ export function startFileServer(port = 0) {
     const server = http.createServer(async (req, res) => {
       try {
         const u = new URL(req.url, 'http://127.0.0.1');
+        // --- クライアント HTML 自体を同一 loopback オリジンから配信 ---
+        //   ★重要(2026-06-07): file:// で開くと page origin=null(非セキュア)＝Chromium の
+        //   Private Network Access で 127.0.0.1(loopback) からの音源 fetch が全ブロックされ、
+        //   音楽も TTS も無音になる。ページを http://127.0.0.1 から開けば音源と同一アドレス空間
+        //   ＝PNA/CORS とも回避され音が通る（headless 実測で確認）。
+        if (u.pathname === '/' || u.pathname === '/client') {
+          if (!existsSync(HTML)) { res.writeHead(404); return res.end('no client'); }
+          res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+          return createReadStream(HTML).pipe(res);
+        }
+        // --- 静的アセット配信（HTML が相対参照する SDK 等。/node_modules/... 他） ---
+        //   client を http で開くと ./node_modules/... が http://127.0.0.1/node_modules/... になる。
+        //   ROOT 配下に限定して配信（traversal ガード）。/audio・/stream・/client は上で処理済。
+        if (u.pathname !== '/audio' && u.pathname !== '/stream' && req.method === 'GET') {
+          const rel = decodeURIComponent(u.pathname).replace(/^\/+/, '');
+          const abs = pathResolve(ROOT, rel);
+          if ((abs === ROOT || abs.startsWith(ROOT + '/')) && existsSync(abs) && statSync(abs).isFile()) {
+            const t = STATIC_MIME[extname(abs).toLowerCase()] || MIME[extname(abs).toLowerCase()] || 'application/octet-stream';
+            res.writeHead(200, { 'Content-Type': t, 'Cache-Control': 'no-store', 'Content-Length': statSync(abs).size });
+            return createReadStream(abs).pipe(res);
+          }
+        }
         // --- 遠隔URLストリーム中継（real-time、全DLしない） ---
         if (u.pathname === '/stream') {
           const remote = u.searchParams.get('u');
@@ -73,7 +97,10 @@ export function startFileServer(port = 0) {
 export function fileUrl(base, absPath) { return `${base}/audio?p=${encodeURIComponent(pathResolve(absPath))}`; }
 export function streamUrl(base, remoteUrl) { return `${base}/stream?u=${encodeURIComponent(remoteUrl)}`; }
 
-export async function launchAgora({ headless = true } = {}) {
+// pageUrl を渡すと そのURL(http://127.0.0.1:<port>/client)からクライアントを開く。
+//   ★必ず http loopback から開くこと（file:// だと PNA で音源 fetch がブロックされ無音になる）。
+//   未指定時のみ file:// にフォールバック（後方互換。ただし音は出ない）。
+export async function launchAgora({ headless = true, pageUrl = null } = {}) {
   const browser = await chromium.launch({
     headless,
     args: [
@@ -86,7 +113,7 @@ export async function launchAgora({ headless = true } = {}) {
   const page = await ctx.newPage();
   page.on('console', (m) => { if (/\[yay\]/.test(m.text())) console.log('  (page)', m.text()); });
   page.on('pageerror', (e) => console.error('  (page error)', e.message));
-  await page.goto('file://' + HTML, { waitUntil: 'load' });
+  await page.goto(pageUrl || ('file://' + HTML), { waitUntil: 'load' });
   await page.waitForFunction(() => !!window.YayAgora, { timeout: 15000 });
   return { browser, ctx, page };
 }

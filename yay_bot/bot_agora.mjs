@@ -687,7 +687,8 @@ async function main() {
   fileBase = `http://127.0.0.1:${fs.port}`;
   console.log('[bot] file server', fileBase);
 
-  const a = await agora.launchAgora({ headless: !process.env.HEADFUL });
+  // ★クライアントHTMLは file:// でなく loopback HTTP から開く（PNA 回避＝音が通る。2026-06-07）
+  const a = await agora.launchAgora({ headless: !process.env.HEADFUL, pageUrl: `${fileBase}/client` });
   page = a.page;
   // RTC/RTM とも Agora アカウント = conference_call_user_uuid（文字列）。
   //   トークンの crc_uid が uuid の CRC32 に一致（2026-06-03 実走で確認）。
@@ -743,6 +744,17 @@ async function main() {
     console.log('[bot] ▶ AUTO_LIVE:', m);
     const r = await handleCommand('/lv ' + m);
     console.log('[bot] AUTO_LIVE 結果:', r);
+  }
+
+  // TTS 経路の self-test: YAY_TTS_SELFTEST=1 で join 直後に1回だけ喋る（音が通話に出るか実機確認用）。
+  if (process.env.YAY_TTS_SELFTEST && joined.rtc?.ok) {
+    await tts.voicevoxAlive();
+    console.log('[bot] 🔎 TTS self-test 実行（' + tts.engineName() + '）');
+    try {
+      const r = await tts.speak('ずんだもんなのだ。声のテスト成功なのだ。', { voice: 'zundamon' });
+      if (r.ok && r.file) { const pr = await agora.playTTS(page, agora.fileUrl(fileBase, r.file)); console.log('[bot] self-test playTTS:', JSON.stringify(pr)); }
+      else console.error('[bot] self-test TTS 生成失敗', r);
+    } catch (e) { console.error('[bot] self-test ERR', e.message); }
   }
 
   // 自動聞き取り: YAY_LISTEN=1 で join 直後に通話音声の文字起こし→返信を有効化。
