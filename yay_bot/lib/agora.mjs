@@ -43,8 +43,9 @@ export function startFileServer(port = 0) {
         //   ROOT 配下に限定して配信（traversal ガード）。/audio・/stream・/client は上で処理済。
         if (u.pathname !== '/audio' && u.pathname !== '/stream' && req.method === 'GET') {
           const rel = decodeURIComponent(u.pathname).replace(/^\/+/, '');
-          const abs = pathResolve(ROOT, rel);
-          if ((abs === ROOT || abs.startsWith(ROOT + '/')) && existsSync(abs) && statSync(abs).isFile()) {
+          const rootN = ROOT.replace(/\/+$/, '');   // 末尾スラッシュを正規化（付いてると下の guard が常に false になる）
+          const abs = pathResolve(rootN, rel);
+          if ((abs === rootN || abs.startsWith(rootN + '/')) && existsSync(abs) && statSync(abs).isFile()) {
             const t = STATIC_MIME[extname(abs).toLowerCase()] || MIME[extname(abs).toLowerCase()] || 'application/octet-stream';
             res.writeHead(200, { 'Content-Type': t, 'Cache-Control': 'no-store', 'Content-Length': statSync(abs).size });
             return createReadStream(abs).pipe(res);
