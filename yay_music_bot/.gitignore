@@ -1,0 +1,14 @@
+# 重量物（独立PJのため自前コピー、git管理外）
+.venv/
+node_modules/
+# 認証・アカウント（トークンパス含む＝秘匿）
+.yay_token*
+.yay_device*
+.yay_cable_token
+accounts.json
+# 実行時生成物
+state.json
+recordings/
+_tts_tmp/
+*.log
+.DS_Store

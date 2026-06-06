@@ -1,0 +1,23 @@
+{
+  "_comment": "艦隊の各 bot アカウント定義。実体は accounts.json にコピーして使う（accounts.json は .gitignore 推奨＝トークンパス含むため）。各アカに専用の .yay_token_<name> / .yay_device_<name> を relogin で用意する。watchUid に客の Yay user id を入れると、その客の通話を探して入る（空なら自分の通話=テスト用）。",
+  "accounts": [
+    {
+      "name": "acc1",
+      "selfUid": "11320230",
+      "tokenFile": ".yay_token",
+      "deviceFile": ".yay_device",
+      "watchUid": "",
+      "musicVol": 15,
+      "enabled": true
+    },
+    {
+      "name": "acc2",
+      "selfUid": "00000000",
+      "tokenFile": ".yay_token_acc2",
+      "deviceFile": ".yay_device_acc2",
+      "watchUid": "",
+      "musicVol": 15,
+      "enabled": false
+    }
+  ]
+}
