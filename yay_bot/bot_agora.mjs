@@ -8,7 +8,7 @@
 //
 // 起動: node bot_agora.mjs            （現在参加中の通話を自動発見）
 //      YAY_CALL_ID=<id> node bot_agora.mjs （call_id 明示）
-import { readFileSync, writeFileSync, existsSync, appendFileSync, mkdirSync, statSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, appendFileSync, mkdirSync, statSync, readdirSync } from 'node:fs';
 import { execFile, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { CONFIG } from './config.mjs';
@@ -268,7 +268,7 @@ const notFoundMsg = (q) => `❌ 見つかりませんでした: ${q}`;
 
 // ── Spotify 自動操作（Playwright で Spotify Web 検索→再生 → BlackHole → RTC publish）──
 let musicReady = false;          // music ブラウザ(9223) に connectMusic 済みか
-let lastVol = Number(process.env.YAY_MUSIC_VOL || 15);  // 直近音量（相対調整用）
+let lastVol = Number(process.env.YAY_MUSIC_VOL || 2);  // 直近音量（相対調整用）。既定2（2026-06-07 究指示 15→2）
 let lastTtsVol = Number(process.env.YAY_TTS_VOL || 30);  // 直近の読み上げ音量（/vv 表示用）
 
 async function ensureMusicBrowser() {
@@ -390,6 +390,43 @@ function convertToMp3(webmPath, mp3Path) {
     const kb = Math.round(statSync(mp3Path).size / 1024);
     return { ok: true, kb };
   } catch (e) { return { ok: false, reason: e.message }; }
+}
+
+// webm → mp3 非ブロッキング版（起動時スイープ用。execFileSync だと大ファイルで event loop が固まる）。
+//   逐次追記の未finalize webm でも ffmpeg は全音声を回収できる（"File ended prematurely" は無害）。
+function convertToMp3Async(webmPath, mp3Path) {
+  return new Promise((resolve) => {
+    execFile('ffmpeg', ['-y', '-i', webmPath, '-c:a', 'libmp3lame', '-b:a', '128k', mp3Path],
+      { timeout: 600000 }, (err) => {
+        if (!existsSync(mp3Path)) return resolve({ ok: false, reason: err?.message || 'no output' });
+        try { resolve({ ok: true, kb: Math.round(statSync(mp3Path).size / 1024) }); }
+        catch { resolve({ ok: false, reason: 'stat失敗' }); }
+      });
+  });
+}
+
+// 取りこぼし回収（失敗しない仕組みの核）: recordings/ の webm のうち mp3 が無い/空のものを全部 mp3 化。
+//   join のたびに走らせる＝前回クラッシュ/kill で mp3 化されなかった分を確実に救う（冪等）。
+//   録音中の webm は触らない。非ブロッキングで1件ずつ（CPU/負荷を抑える）。
+async function recoverOrphanRecordings() {
+  try {
+    mkdirSync(REC_DIR, { recursive: true });
+    const webms = readdirSync(REC_DIR).filter((f) => f.endsWith('.webm'));
+    const orphans = webms.filter((f) => {
+      const webm = `${REC_DIR}/${f}`;
+      const mp3 = `${REC_DIR}/${f.replace(/\.webm$/, '.mp3')}`;
+      if (recState?.active && recState.webmPath === webm) return false;   // 録音中のは対象外
+      try { if (statSync(webm).size < 1024) return false; } catch { return false; }  // 空webmは無視
+      return !existsSync(mp3) || (() => { try { return statSync(mp3).size < 1024; } catch { return true; } })();
+    });
+    if (!orphans.length) { console.log('[rec] ✓ mp3化漏れなし（孤児webm 0件）'); return; }
+    console.log(`[rec] 🔧 取りこぼし回収: 孤児webm ${orphans.length}件を mp3 化（前回クラッシュ/kill分）`);
+    for (const f of orphans) {
+      const r = await convertToMp3Async(`${REC_DIR}/${f}`, `${REC_DIR}/${f.replace(/\.webm$/, '.mp3')}`);
+      console.log(r.ok ? `[rec]   ✓ ${f} → mp3 (${r.kb}KB)` : `[rec]   ✗ ${f}: ${r.reason}`);
+    }
+    console.log('[rec] 回収完了');
+  } catch (e) { console.error('[rec] orphan sweep err', e.message); }
 }
 
 // 録音停止＋mp3化（/leave・bot停止・/rec stop で呼ぶ）。
@@ -670,6 +707,10 @@ async function handleCommand(text, author = '?') {
 }
 
 async function main() {
+  // 取りこぼし回収（失敗しない仕組みの核）: 通話に入る前＝起動の最初に必ず走らせる。
+  //   前回クラッシュ/kill で mp3 化されなかった webm を救う。通話が無くても回収される（冪等・背景）。
+  recoverOrphanRecordings();   // await しない＝待ち受けと並行で変換
+
   // 通話待ち受け: Emo が通話に入る（active で拾える）まで polling し、見つけたら自動 join。
   //   get_active_call_post(SELF_UID) を叩くので polling は控えめ（既定15秒）に。
   const WAIT_MS = Number(process.env.YAY_WAIT_MS || 15000);
@@ -706,8 +747,8 @@ async function main() {
   const SELF_RTM = String(creds.conference_call_user_uuid || SELF_UID);
   console.log('[bot] self RTM id =', SELF_RTM);
 
-  // 初期音量（既定15、YAY_MUSIC_VOL で上書き可）
-  if (process.env.YAY_MUSIC_VOL) { const r = await agora.setMusicVolume(page, process.env.YAY_MUSIC_VOL); console.log('[bot] 初期音量', r?.vol); }
+  // 初期音量（既定2＝lastVol、YAY_MUSIC_VOL で上書き可）。毎回明示適用して決定論的にする。
+  { const r = await agora.setMusicVolume(page, lastVol); console.log('[bot] 初期音量', r?.vol); }
 
   // join 直後の inbox を一掃（参加前の残/エコーに反応しない）
   try { await agora.drainInbox(page); } catch {}
@@ -896,7 +937,9 @@ async function main() {
 
 process.on('unhandledRejection', (e) => console.error('unhandledRejection:', e?.message || e));
 // 停止シグナルで録音を mp3 化してから落ちる（webm は逐次追記済なので最悪でも素材は残る）。
-for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, async () => { try { await stopCallRecording(); } catch {} process.exit(0); });
+// SIGHUP も捕捉（tmux kill-session / 端末切断）。停止時 mp3 化はベストエフォート、
+//   取りこぼしても次回起動の recoverOrphanRecordings() が必ず救う（二重の安全網）。
+for (const sig of ['SIGINT', 'SIGTERM', 'SIGHUP']) process.on(sig, async () => { try { await stopCallRecording(); } catch {} process.exit(0); });
 (async () => {
   for (;;) {
     try { await main(); }
