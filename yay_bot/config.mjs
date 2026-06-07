@@ -11,6 +11,9 @@ export const CONFIG = {
   //   watchYayId のアカウントを見張り、そのアカウントが通話(枠)に入ったら bot も自動参加する。
   //   仕組み: get_active_call_post(watchYayId) で枠を発見 → get_conference_call で bot 自身の
   //   agora creds(uuid/token) が出る（実証済）→ Agora 直結。枠が終わったら離脱して次の枠を待つ。
+  // 読み上げの声モード（既定=normal＝元気な普通のずんだもん固定）。/voicemode で切替。
+  //   normal=ノーマル固定 / auto=状況で normal/power/sad 自動 / power=パワフル固定 / sad=悲しい固定
+  voiceMode: 'normal',
   ownerYayId: '9714060',   // 究=えも。常時オーナー（YAY_OWNER_YAYID / state で上書き可）
   watchYayId: '9714060',   // 監視対象=えも。YAY_WATCH_UID で上書き可。SELF にすると自分の通話を待つ旧挙動
   watchCheckMs: 20000,     // 監視通話の継続確認の間隔

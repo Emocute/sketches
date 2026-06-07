@@ -146,6 +146,7 @@ const CMD = {
   idle:   ['idle', 'jihatsu', 'chatter', '自発', 'おしゃべり', '独り言'],  // 自発おしゃべり ON/OFF（人格と独立）
   ttsvol: ['vv', 'koevol', '声量', '声音量'],   // 読み上げ(ずんだもん声)の音量 0-100
   duck:   ['duck', 'ダッキング', '音楽残し'],    // TTS中の音楽残し率 0-100（大=音楽を下げない）
+  voicemode: ['voicemode', 'vm', '声モード', 'こえモード', '声色'],   // 声モード normal/auto/power/sad
   ears:   ['ears', 'listen', '耳', '聞く', 'kiku'],
   voice:  ['voice', 'yomi', 'tts', '読み', '読み上げ', '喋る', 'koe'],
   status: ['status', 'st', '状態', 'state'],
@@ -169,7 +170,7 @@ const onoff = (b) => (b ? '🟢ON' : '⚪OFF');
 // いまの状態ブロック（/st と /h の冒頭で共用）
 function statusBlock() {
   return [
-    `🗣 読み上げ: ${onoff(speaking)}（ずんだもん声・声色自動 / 音量${lastTtsVol} / 音楽残し${lastDuck}%）`,
+    `🗣 読み上げ: ${onoff(speaking)}（声モード:${voiceMode} / 音量${lastTtsVol} / 音楽残し${lastDuck}%）`,
     `👂 聞き取り: ${onoff(listening)}`,
     `🎭 ずんだもん語尾: ${onoff(personaKey === 'zundamon')}`,
     `💬 自発おしゃべり: ${onoff(idleChatOn)}`,
@@ -186,6 +187,7 @@ function renderHelpFull() {
     '/voice（読）= 読み上げ。返信を自動でずんだもん声で喋る',
     '/vv 0-100 = 読み上げ(ずんだもん声)の音量（既定30）',
     '/duck 0-100 = 声の時の音楽残し率（既定70。大=音楽を下げない）',
+    '/voicemode <normal/auto/power/sad> = 声モード（既定normal=元気な普通のずんだもん）',
     '/ears（聞）= 聞き取り。通話の音声を文字起こし→自動返信',
     '/mode <モード> = 人格切替（zundamon/off 等）',
     '  ・/zunda = ずんだもん語尾 on/off（声・語尾のみ）',
@@ -224,16 +226,24 @@ function renderHelpShort() {
 function renderHelp() {
   return renderHelpFull();
 }
-// ずんだもんの声色を文章の感情で選ぶ（究指示 2026-06-07: 状況で判断して変える）。
-//   ずんだもん以外の声は使わない（2026-06-06）ので zundamon の normal/power/sad 3 種から選択。
-//   sad（謝罪・気遣い・落ち込み）を先に判定 → power（高揚・応援・興奮）→ 既定 normal。
+// 声モード（究指示 2026-06-07）: 既定は normal＝元気な普通のずんだもん固定。/voicemode で切替。
+//   normal=ノーマル固定 / auto=状況で自動 / power=パワフル固定 / sad=悲しい固定。
+let voiceMode = String(process.env.YAY_VOICE_MODE || CONFIG.voiceMode || 'normal').toLowerCase();
+
+// auto モード時に文章の感情でずんだもん声色を選ぶ（sad→power→normal の順で判定）。
 function pickZundaVoice(text) {
   const t = String(text || '');
   if (/(ごめん|すまん|申し訳|残念|悲し|つら|辛|寂し|さみし|しんど|大丈夫\?|無理しない|心配|可哀|かわいそう|……|。。。)/.test(t)) return 'zundamon_sad';
   if (/(やった|すごい|最高|いくぞ|いこう|がんば|ファイト|うれし|嬉し|わーい|やっほ|テンション|ずんだパワー|！！|!!|🎉)/.test(t)) return 'zundamon_power';
-  // 「！」が複数 or 末尾が「！」連発なら元気側に寄せる
   if ((t.match(/[!！]/g) || []).length >= 2) return 'zundamon_power';
   return 'zundamon';
+}
+// 実際に使う声色をモードで決める。normal が既定（元気な普通のずんだもん固定）。
+function chooseVoice(text) {
+  if (voiceMode === 'power') return 'zundamon_power';
+  if (voiceMode === 'sad') return 'zundamon_sad';
+  if (voiceMode === 'auto') return pickZundaVoice(text);
+  return 'zundamon';   // normal（既定）
 }
 
 // 返信を喋る（speaking時のみ）。TTS で WAV 生成 → Agora RTC に publish。
@@ -241,8 +251,8 @@ function pickZundaVoice(text) {
 async function sayOut(text) {
   if (!speaking) return;
   try {
-    const voiceKey = pickZundaVoice(text);   // ずんだもんの声色を状況で選ぶ
-    console.log('[sayOut] voiceKey=', voiceKey, 'persona=', personaKey);
+    const voiceKey = chooseVoice(text);   // 声モードに従って声色を決める（既定=元気な普通）
+    console.log('[sayOut] voiceKey=', voiceKey, 'mode=', voiceMode);
     const r = await tts.speak(text, { voice: voiceKey });
     console.log('[sayOut] tts.speak result:', { ok: r.ok, engine: r.engine, file: r.file?.slice(-30) });
     if (!r.ok || !r.file) { console.error('[sayOut] ERR: no file', r); return; }
@@ -531,7 +541,7 @@ function inQuietHours() {
 async function sayJingle(text) {
   if (JC().voice === false || inQuietHours()) return;
   try {
-    const r = await tts.speak(text, { voice: pickZundaVoice(text) });
+    const r = await tts.speak(text, { voice: chooseVoice(text) });
     if (!r.ok || !r.file) return;
     await agora.playTTS(page, agora.fileUrl(fileBase, r.file)).catch((e) => console.error('[jingle] playTTS', e.message));
   } catch (e) { console.error('[jingle] say', e.message); }
@@ -725,6 +735,19 @@ async function handleCommand(text, author = '?', userId = null) {
         const r = await agora.setTtsVolume(page, q);
         if (r?.ok) lastTtsVol = r.vol;
         return r?.ok ? `🔈 読み上げ音量 ${r.vol}` : '音量は 0〜100（例: /vv 30）';
+      }
+      case 'voicemode': {  // 声モード切替（normal=元気な普通 / auto=状況自動 / power / sad）
+        const w = q.toLowerCase();
+        const map = { normal: 'normal', 'ノーマル': 'normal', '普通': 'normal', '元気': 'normal', '基本': 'normal',
+          auto: 'auto', '自動': 'auto', 'おまかせ': 'auto',
+          power: 'power', 'パワー': 'power', 'パワフル': 'power', 'テンション': 'power',
+          sad: 'sad', '悲しい': 'sad', 'かなしい': 'sad', 'しょんぼり': 'sad' };
+        if (!w || w === '?') return `🎙 声モード: ${voiceMode}（normal=元気な普通のずんだもん / auto=状況で自動 / power=パワフル / sad=悲しい）。変更: /voicemode auto 等`;
+        const m = map[w];
+        if (!m) return '声モードは normal / auto / power / sad（例: /voicemode normal）';
+        voiceMode = m;
+        const desc = { normal: '元気な普通のずんだもん固定', auto: '状況で normal/power/sad を自動選択', power: 'パワフル固定', sad: '悲しい固定' }[m];
+        return `🎙 声モード=${voiceMode}（${desc}）`;
       }
       case 'duck': {  // TTS中の音楽残し率 0-100（大きいほど音楽を下げない）
         if (!q) return `🎚 ダッキング(声の時の音楽残し): ${lastDuck}%（変更は /duck 0-100。大=音楽そのまま）`;
