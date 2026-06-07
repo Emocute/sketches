@@ -394,19 +394,24 @@ async def job_proactive(client, lim, cfg, state, persona):
         log(f"proactive fetch failed: {type(e).__name__} {e}")
         return
     posts = getattr(res, "posts", None) or []
-    n_like = n_reply = 0
+    n_like = n_reply = n_follow = 0
     for p in posts:
         pid, uid, nick, text = _post_fields(p)
         if not pid or not uid or uid == cfg["self_uid"] or uid in cfg.get("skip_users", []):
             continue
         if await do_like(client, lim, cfg, state, pid):
             n_like += 1
+        # いいねした良い投稿の主を、たまに選別フォロー（do_follow が質フィルタ＋上限を持つ）。
+        # 乱フォローしない＝follow_ratio と follow バケットの時間上限で抑える。
+        if random.random() < pc.get("follow_ratio", 0.0):
+            if await do_follow(client, lim, cfg, state, uid, nick):
+                n_follow += 1
         if text and random.random() < pc.get("reply_ratio", 0.0):
             if await do_reply(client, lim, cfg, state, "preply",
                               pc["max_replies_per_hour"], pid, uid, nick, text, persona):
                 n_reply += 1
-    if n_like or n_reply:
-        log(f"proactive: liked={n_like} replied={n_reply}")
+    if n_like or n_reply or n_follow:
+        log(f"proactive: liked={n_like} followed={n_follow} replied={n_reply}")
 
 
 # ───────────────────────── メイン ─────────────────────────

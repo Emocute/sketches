@@ -49,11 +49,12 @@
     "max_replies_per_hour": 6,
     "max_likes_per_hour": 40,
     "source": "tag",
-    "tags": ["雑談", "暇", "質問", "相談", "ひとりごと", "AI"],
+    "tags": ["雑談", "暇", "質問", "相談", "ひとりごと", "AI", "MBTI", "心理学", "豆知識"],
     "experiment_num": 1,
     "variant_num": 1,
-    "reply_ratio": 0.0,
-    "_reply_ratio_note": "初動はコールドリプ停止(BAN回避)。bio設定＋メンション返信が回り土台ができたら 0.35 に戻す",
+    "reply_ratio": 0.2,
+    "follow_ratio": 0.4,
+    "_balance_note": "嫌われない範囲で能動的に。いいねした良い投稿の主を控えめにフォロー(選別=サークル/bot除外、follow上限/時で抑制)、コールド返信は低め。乱フォロー・連投はしない",
     "max_targets_per_cycle": 8
   },
 
