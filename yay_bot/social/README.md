@@ -29,7 +29,7 @@ API のみで動くので通話 bot を一切落とさず並走できる（`feed
 ./run_social.sh check     # トークン生存＋自分のフォロワー数
 ./run_social.sh once      # 1パスだけ（dry-run 確認 / cron 向き）
 ./run_social.sh loop      # 常駐ループ
-./run_social.sh bio       # bio.txt を反映（要 dry_run=false）
+./run_social.sh bio       # bio.txt を反映（web UI 経由 = scripts/set_bio.mjs）
 ```
 
 ## 安全弁

@@ -192,7 +192,13 @@ grok（`/user/10414701`、何でも答える AI・544 follower）の運用を再
   reply/mention → grok 型ペルソナで `create_post(in_reply_to=, mention_ids=)` 返信。
   おすすめ/タグ TL(`get_posts_by_tag`／新規垢はタグが確実) → `like_posts`＋一部 `create_post` で能動リプ。
 - `social/persona.txt`: grok 型「何でも答える AI」system prompt（返信生成 `claude -p` に渡す）。
-- `social/bio.txt`: 集客 bio（`--set-bio` で `edit_user`、末尾に emocutelab.com 導線）。
+- `social/bio.txt`: 集客 bio（末尾 emocutelab.com 導線）。設定は `scripts/set_bio.mjs`（後述）。
+- `scripts/set_bio.mjs`: bio を **web UI 経由**で設定。`edit_user` API はモバイル署名(`signed_info`)を
+  web 由来トークンで検証できず `Invalid signed info` で不可（`follow_user`/`create_post`/`like` は署名検証
+  無しで web トークンでも通る）。代わりに profile-yay(ログイン済 web)を CDP 接続→`/user/<id>?modalMode=ue`
+  の `textarea[name=biography]` に**ネイティブ setter+input イベントで一括投入**（実キー入力は recaptcha
+  再描画でカーソルが飛び混線する）→「保存」。`POST /v3/users/edit` が `{"result":"success"}` で成立
+  （recaptcha v3 不可視・スコア式なので headless で通る）。真値確認は `get_user` API。
 - `social/config.json`: dry_run・レート上限(follow20/reply15/like40 per h)・throttle・quiet[2,7)・タグ。
 - `social/state.json`: 既読 activity/フォロー済/返信済/いいね済/レート（git 除外＝`state.json` パターン既存）。
 
