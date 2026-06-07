@@ -4,6 +4,32 @@
 
 ---
 
+## 2026-06-08 — 操作コマンド受付トグル /cmds 追加（オーナー専用・state永続）
+
+**Session UUID**: 5f3b8d14-6d97-430b-8d45-9ff935bcaebe
+
+### 背景
+- bot を落とさずに `/play` 等の操作コマンド応答を一括 ON/OFF したい（究要望）。既存トグルは jingle/ears/voice/idle 等の個別のみで、操作コマンド全体のマスタースイッチが無かった。
+
+### 仕様（究判断）
+- 無効化の範囲＝**操作コマンドのみ**（`/play` 等）。会話返信・音楽再生・入退室あいさつは継続。
+- 切替権限＝**オーナーのみ**（`/iam` 登録者）。OFF中でも `/cmds on` だけは常に効く（復帰経路を塞がない）。
+
+### 実装（bot_agora.mjs、7箇所）
+- グローバル `let cmdsEnabled = true;`
+- `CMD.cmds = ['cmds','commands','cmd','コマンド']`
+- `handleCommand` 先頭にゲート: `cmd==='cmds'` ならオーナー判定して on/off/toggle/?（OFF中もここだけ通す）。それ以外は `!cmdsEnabled` で `return null`（＝コマンド黙殺、会話・音楽は別経路で継続）。
+- `persistFlags()`（seen を壊さずマージ書き込み）／state load で `cmdsEnabled = st0.cmdsEnabled !== false`（既定ON・継承）／メインループ saveState に `cmdsEnabled` 追加。
+- `statusBlock()` と `renderHelpFull()` に表示行追加。
+- 構文チェック OK、commit `8dd12f6`（Claude author）+ push。
+
+### 運用メモ
+- 使い方: `/cmds off`｜`/cmds on`｜`/cmds`（トグル）｜`/cmds ?`（状態）。
+- 通話中ホット再起動を2回実施し新コード反映。RTC/RTM クリーン接続を確認。
+- 既知の残課題: チャット送信が稀に `RTM -10025（service not connected）`。ボイス挨拶は正常。RTM 瞬断、未修正。
+
+---
+
 ## 2026-06-04 — キュー一覧/ヘルプが効かない不具合を修正（コマンドを連投ガードから除外）
 
 **Session UUID**: E59B8570-2171-4410-8D0F-216488A3F682
