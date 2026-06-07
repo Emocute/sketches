@@ -61,10 +61,13 @@ def create_post(text: str, in_reply_to=None):
         return False, f"{type(e).__name__}: {e}"
 
 
-def edit_user(nickname: str, biography: str):
-    """プロフィール編集（bio 設定）。/v3/users/edit も x-jwt JSON 経路で signed_info 不要。
-    nickname を一緒に送らないと消える実装なので現値を渡すこと。戻り (ok, info)。"""
+def edit_user(nickname: str, biography: str, profile_icon_filename=None):
+    """プロフィール編集（bio・アイコン設定）。/v3/users/edit は x-jwt JSON 経路で signed_info 不要。
+    nickname を一緒に送らないと消える実装なので現値を渡すこと。アイコンは先に
+    upload_avatar_image で得た filename を profile_icon_filename に渡す。戻り (ok, info)。"""
     payload = {"nickname": nickname, "biography": biography}
+    if profile_icon_filename:
+        payload["profile_icon_filename"] = profile_icon_filename
     req = urllib.request.Request(
         API + "/v3/users/edit",
         data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
