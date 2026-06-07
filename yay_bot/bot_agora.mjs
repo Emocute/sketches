@@ -9,6 +9,7 @@
 // 起動: node bot_agora.mjs            （現在参加中の通話を自動発見）
 //      YAY_CALL_ID=<id> node bot_agora.mjs （call_id 明示）
 import { readFileSync, writeFileSync, existsSync, appendFileSync, mkdirSync, statSync, readdirSync } from 'node:fs';
+import { appendFile } from 'node:fs/promises';
 import { execFile, execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { CONFIG } from './config.mjs';
@@ -436,11 +437,21 @@ async function startCallRecording(callId) {
   } catch (e) { console.error('[rec] start err', e.message); }
 }
 
-async function drainRecToFile() {
+// 録音チャンクのファイル追記。音楽配信と並走するため (1)同期 appendFileSync を使わず
+//   非同期 appendFile（event loop を固めない）、(2)毎周回でなく間引いて CDP の base64 大転送を
+//   減らす（音楽ページへの負荷＝ぶつぶつ要因を抑制）。チャンクはページ側に溜まり停止時に全回収。
+let lastRecDrainAt = 0;
+const REC_DRAIN_MS = Number(process.env.YAY_REC_DRAIN_MS || 6000);
+async function drainRecToFile(force = false) {
   if (!recState?.active) return;
+  if (!force && Date.now() - lastRecDrainAt < REC_DRAIN_MS) return;
+  lastRecDrainAt = Date.now();
   try {
     const chunks = await agora.drainRecChunks(page);
-    for (const b64 of chunks) { try { appendFileSync(recState.webmPath, Buffer.from(b64, 'base64')); } catch (e) { console.error('[rec] append', e.message); } }
+    for (const b64 of chunks) {
+      try { await appendFile(recState.webmPath, Buffer.from(b64, 'base64')); }
+      catch (e) { console.error('[rec] append', e.message); }
+    }
   } catch (e) { console.error('[rec] drain', e.message); }
 }
 
@@ -499,7 +510,10 @@ async function stopCallRecording() {
     for (const b64 of (r?.chunks || [])) { try { appendFileSync(recState.webmPath, Buffer.from(b64, 'base64')); } catch {} }
   } catch (e) { console.error('[rec] stop', e.message); }
   const mins = Math.round((Date.now() - recState.startedAt) / 60000);
-  const conv = convertToMp3(recState.webmPath, recState.mp3Path);
+  // 非ブロッキング ffmpeg（2026-06-08）: 同期 convertToMp3 は長尺 webm で node を数秒固め、
+  //   通話切替/停止の瞬間に音楽がぶつぶつになる。async 化＝event loop を止めない。
+  //   万一プロセス終了で未完了でも、次回起動の recoverOrphanRecordings() が確実に mp3 化する。
+  const conv = await convertToMp3Async(recState.webmPath, recState.mp3Path);
   const out = { ...recState, mins, conv };
   console.log('[rec] ■ 停止→mp3', conv.ok ? `${recState.mp3Path} (${conv.kb}KB)` : 'ffmpeg失敗:' + conv.reason);
   recState = null;
@@ -828,9 +842,9 @@ async function handleCommand(text, author = '?', userId = null) {
         }
         if (/^(save|保存|区切|スナップ|ここまで)/.test(q)) {
           if (!recState?.active) return '録音してない';
-          await drainRecToFile();
+          await drainRecToFile(true);   // 間引きを無視して今ある分を確実に書き出してからスナップ
           const snap = recState.mp3Path.replace(/\.mp3$/, `_snap_${ts2()}.mp3`);
-          const c = convertToMp3(recState.webmPath, snap);
+          const c = await convertToMp3Async(recState.webmPath, snap);   // 非ブロッキング＝音楽を固めない
           return c.ok ? `💾 ここまでをmp3保存(${c.kb}KB): ${snap.split('/').pop()}（録音継続中）` : `mp3変換失敗: ${c.reason}`;
         }
         if (/^(on|start|開始|再開|始め)/.test(q) || (!q && !recState?.active)) {

@@ -55,8 +55,11 @@ export async function transcribe(b64, rate = 16000) {
   const f = `${TMP}/u_${process.pid}_${Math.random().toString(36).slice(2, 9)}.wav`;
   writeFileSync(f, wav);
   try {
+    // スレッド数は控えめ既定(2)。音楽配信と同居するので whisper が CPU を食い過ぎると
+    //   音がぶつぶつになる。速度が要るときは YAY_WHISPER_THREADS で上げる。
+    const THREADS = String(Number(process.env.YAY_WHISPER_THREADS || 2));
     const stdout = await new Promise((res, rej) => execFile(
-      BIN, ['-m', MODEL, '-l', LANG, '-nt', '-t', '4', '-f', f],
+      BIN, ['-m', MODEL, '-l', LANG, '-nt', '-t', THREADS, '-f', f],
       { maxBuffer: 8 << 20, timeout: 30000 },
       (e, so, se) => (e ? rej(new Error((se || e.message || '').slice(0, 300))) : res(so)),
     ));

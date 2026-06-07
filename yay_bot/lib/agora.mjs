@@ -11,6 +11,8 @@ import http from 'node:http';
 import { createReadStream, existsSync, statSync } from 'node:fs';
 import { extname, resolve as pathResolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
 
 const HTML = fileURLToPath(new URL('../agora_client.html', import.meta.url));
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
@@ -69,9 +71,14 @@ export function startFileServer(port = 0) {
           const crange = up.headers.get('content-range'); if (crange) h['Content-Range'] = crange;
           res.writeHead(up.status, h);
           if (!up.body) return res.end();
-          const reader = up.body.getReader();
-          for (;;) { const { done, value } = await reader.read(); if (done) break; res.write(Buffer.from(value)); }
-          return res.end();
+          // 背圧を効かせて中継（重要・2026-06-08）: 旧実装は res.write を戻り値無視で垂れ流し、
+          //   <audio> の消費が遅いと数十MBのトラックが node メモリに溜まり GC で event loop が詰まる
+          //   ＝音楽がぶつぶつ。pipeline で消費ペースに合わせて上流読み取りを止める（メモリ一定）。
+          //   クライアント切断(seek/停止)時は pipeline が上流ストリームを破棄＝fetch も中断される。
+          const src = Readable.fromWeb(up.body);
+          try { await pipeline(src, res); }
+          catch (e) { if (!/premature close|aborted|ERR_STREAM/i.test(e?.message || '')) console.error('[stream] pipe', e?.message); }
+          return;
         }
         // --- ローカルファイル配信 ---
         const p = u.searchParams.get('p');
