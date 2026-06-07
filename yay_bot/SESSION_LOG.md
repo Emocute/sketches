@@ -6,7 +6,7 @@
 
 ## 2026-06-08 — 操作コマンド受付トグル /cmds 追加（オーナー専用・state永続）
 
-**Session UUID**: 5f3b8d14-6d97-430b-8d45-9ff935bcaebe
+**Session UUID**: 00a32cc2-7074-4169-8911-e8fc62cf578f
 
 ### 背景
 - bot を落とさずに `/play` 等の操作コマンド応答を一括 ON/OFF したい（究要望）。既存トグルは jingle/ears/voice/idle 等の個別のみで、操作コマンド全体のマスタースイッチが無かった。
