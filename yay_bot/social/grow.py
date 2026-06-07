@@ -177,6 +177,47 @@ def gen_post(post_persona: str, intent: str, avoid: list, cfg: dict) -> str:
     return body[:255]
 
 
+def gen_poll(post_persona: str, intent: str, avoid: list, cfg: dict):
+    """投票を1つ作る。戻り (question, [choices])。失敗時 (None, None)。"""
+    import tempfile
+    prompt = (
+        f"{post_persona}\n\n---\n"
+        f"今回は『投票（アンケート）』形式の投稿を作る。方針: {intent}\n"
+        f"質問は1行（255文字以内）、選択肢は2〜4個・各20文字以内・押したくなるもの。\n"
+        f"出力は最後に必ず次の形式だけ書く:\n"
+        f"POLL: <質問本文>\n"
+        f"CHOICE: <選択肢1>\n"
+        f"CHOICE: <選択肢2>\n"
+        f"（必要なら CHOICE: をあと1〜2行）"
+    )
+    env = dict(os.environ)
+    env.pop("CLAUDECODE", None)
+    env.pop("CLAUDE_CODE_ENTRYPOINT", None)
+    model = cfg.get("claude_model", "claude-opus-4-8")
+    timeout = cfg.get("reply_timeout_ms", 60000) / 1000.0
+    try:
+        out = subprocess.run(
+            ["claude", "-p", prompt, "--model", model, "--strict-mcp-config"],
+            cwd=tempfile.gettempdir(), env=env,
+            capture_output=True, text=True, timeout=timeout,
+        ).stdout
+    except subprocess.TimeoutExpired:
+        return None, None
+    q = None
+    choices = []
+    for line in out.splitlines():
+        s = line.strip()
+        if s.upper().startswith("POLL:"):
+            q = s[5:].strip()[:255]
+        elif s.upper().startswith("CHOICE:"):
+            c = s.split(":", 1)[1].strip()[:20]
+            if c:
+                choices.append(c)
+    if q and 2 <= len(choices) <= 4:
+        return q, choices
+    return None, None
+
+
 # ───────────────────────── 書き込みアクション（dry_run ゲート） ─────────────────────────
 
 async def passes_quality(client, cfg, uid: int, nick: str) -> bool:
@@ -351,24 +392,37 @@ async def job_post(client, lim, cfg, state, post_persona):
         return
     if recent and (now - max(recent)) < pc.get("min_gap_min", 180) * 60:
         return
-    intent = random.choice(pc.get("intents") or ["軽い問いを1つ投げる"])
-    body = gen_post(post_persona, intent, state.get("post_texts", []), cfg)
+    # たまに投票（高エンゲージ）。それ以外は通常投稿。
+    is_poll = random.random() < pc.get("poll_ratio", 0.0) and pc.get("poll_intents")
+    if is_poll:
+        intent = random.choice(pc["poll_intents"])
+        q, choices = gen_poll(post_persona, intent, state.get("post_texts", []), cfg)
+        if not q:
+            is_poll = False
+        else:
+            body, kind = q, "poll"
+    if not is_poll:
+        intent = random.choice(pc.get("intents") or ["軽い問いを1つ投げる"])
+        body = gen_post(post_persona, intent, state.get("post_texts", []), cfg)
+        choices = None
+        kind = "post"
     if not body:
         log("  [skip] empty post")
         return
     if cfg["dry_run"]:
-        log(f"  [DRY] post: {body[:90]}")
+        log(f"  [DRY] {kind}: {body[:80]}" + (f" {choices}" if choices else ""))
         state["post_log"].append(now)
         state.setdefault("post_texts", []).append(body)
         return
     await lim.throttle()
-    ok, info = await asyncio.to_thread(web_api.create_post, body)
+    ok, info = await asyncio.to_thread(web_api.create_post, body, None, choices)
     if ok:
         lim.record("post")
         state["post_log"].append(now)
         state.setdefault("post_texts", []).append(body)
         state["post_texts"] = state["post_texts"][-30:]
-        log(f"  ✓ posted ({len(recent)+1}/{pc['per_day']} today, id={info}): {body[:60]}")
+        tag = "poll" if choices else "post"
+        log(f"  ✓ {tag} ({len(recent)+1}/{pc['per_day']} today, id={info}): {body[:55]}")
     else:
         log(f"  ! post failed: {info}")
 

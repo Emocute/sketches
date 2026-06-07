@@ -43,9 +43,13 @@ def _headers() -> dict:
     }
 
 
-def create_post(text: str, in_reply_to=None):
-    """投稿/返信を1本作る。戻り値 (ok: bool, post_id or error_str)。"""
-    payload = {"text": text, "post_type": "text", "color": 0, "font_size": 0}
+def create_post(text: str, in_reply_to=None, choices=None):
+    """投稿/返信/投票を1本作る。choices を渡すと投票(survey)。戻り (ok, post_id or error)。"""
+    if choices:
+        payload = {"text": text, "post_type": "survey", "color": 0, "font_size": 0,
+                   "choices": list(choices)}
+    else:
+        payload = {"text": text, "post_type": "text", "color": 0, "font_size": 0}
     if in_reply_to:
         payload["in_reply_to"] = int(in_reply_to)
     req = urllib.request.Request(
