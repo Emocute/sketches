@@ -30,6 +30,13 @@ try {
   await page.goto(`https://yay.space/user/${UID}?modalMode=ue`, { waitUntil: 'domcontentloaded' });
   const ta = page.locator('textarea[name="biography"]');
   await ta.waitFor({ state: 'visible', timeout: 15000 });
+  // ★ モーダルは既存 bio を**遅延ロード**して React state に入れる。それより先に書き込むと
+  //   後から来るロードに上書きされ旧値が保存される。ロード完了(非空)を待ってから上書きする。
+  await page.waitForFunction(() => {
+    const t = document.querySelector('textarea[name="biography"]');
+    return t && t.value && t.value.length > 0;
+  }, { timeout: 5000 }).catch(() => {});  // 元々 bio が空なら timeout で進む
+  await sleep(700);
   const before = await ta.inputValue();
   // ★ React 制御 textarea にネイティブ setter + input イベントで一括投入（実キー入力は
   //   recaptcha 再描画でカーソルが飛び文字が混線する。pressSequentially 不可）。
