@@ -23,8 +23,10 @@
 
   "post": {
     "enabled": true,
-    "per_day": 4,
+    "per_day": 6,
     "min_gap_min": 180,
+    "golden_hours": [19, 24],
+    "golden_min_gap_min": 70,
     "active_hours": [8, 24],
     "avoid_recent": 10,
     "intents": [

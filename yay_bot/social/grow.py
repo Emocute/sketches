@@ -390,7 +390,12 @@ async def job_post(client, lim, cfg, state, post_persona):
     state["post_log"] = recent
     if len(recent) >= pc.get("per_day", 4):
         return
-    if recent and (now - max(recent)) < pc.get("min_gap_min", 180) * 60:
+    # ゴールデンタイム（夜のピーク）は投稿間隔を短くして本数を寄せる。
+    gh = pc.get("golden_hours")
+    in_golden = bool(gh) and gh[0] <= h < gh[1]
+    gap_min = pc.get("golden_min_gap_min", pc.get("min_gap_min", 180)) if in_golden \
+        else pc.get("min_gap_min", 180)
+    if recent and (now - max(recent)) < gap_min * 60:
         return
     # たまに投票（高エンゲージ）。それ以外は通常投稿。
     is_poll = random.random() < pc.get("poll_ratio", 0.0) and pc.get("poll_intents")
