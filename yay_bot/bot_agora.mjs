@@ -44,6 +44,11 @@ const idleSpan = () => IDLE_MIN_MS + Math.floor(Math.random() * Math.max(1, IDLE
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const loadState = () => (existsSync(CONFIG.stateFile) ? JSON.parse(readFileSync(CONFIG.stateFile, 'utf8')) : { seen: [] });
 const saveState = (s) => writeFileSync(CONFIG.stateFile, JSON.stringify(s, null, 2));
+// フラグだけ即時永続（seen を壊さずマージ書き込み。トグル直後の確実な保存用）。
+const persistFlags = () => {
+  try { const s = loadState(); s.ownerYayId = ownerYayId; s.cmdsEnabled = cmdsEnabled; saveState(s); }
+  catch (e) { console.error('persistFlags', e.message); }
+};
 
 // yay_api.py を叩いて creds JSON を得る（最終行が JSON）。
 //   発見uid = YAY_WATCH_UID(究本人のuid) があればそれ、無ければ SELF_UID。
@@ -164,11 +169,13 @@ const CMD = {
   voldown:['voldown', 'vd', '音量下げ'],
   rec:    ['rec', 'record', '録音'],            // 録音 状態/保存/停止/開始
   jingle: ['jingle', 'aisatsu', '挨拶', 'あいさつ', 'いらっしゃい'],  // 入退室あいさつ on/off
+  cmds:   ['cmds', 'commands', 'cmd', 'コマンド'],   // 操作コマンド受付 on/off（オーナーのみ。OFFでも /cmds は効く）
 };
 const ALIAS = {}; for (const [k, vs] of Object.entries(CMD)) for (const v of vs) ALIAS[v] = k;
 // トグル状態
 let listening = false;  // 聞き取り（通話音声→文字起こし→返信）
 let speaking = false;   // 読み上げ（返信のTTS＝ずんだもん声）
+let cmdsEnabled = true; // /コマンド受付（OFFで /play 等の操作コマンドを全無視。会話・音楽再生・ジングルは継続。切替はオーナーのみ /cmds）
 
 const onoff = (b) => (b ? '🟢ON' : '⚪OFF');
 // いまの状態ブロック（/st と /h の冒頭で共用）
@@ -179,6 +186,7 @@ function statusBlock() {
     `🎭 ずんだもん語尾: ${onoff(personaKey === 'zundamon')}`,
     `💬 自発おしゃべり: ${onoff(idleChatOn)}`,
     `🎉 入退室あいさつ: ${onoff(jingleOn)}`,
+    `🎛 コマンド受付: ${onoff(cmdsEnabled)}`,
     nowQuery ? `🎵 再生中: ${nowQuery}` : '🎵 再生: なし',
     `📜 キュー: ${queue.length}曲 / リピート: ${onoff(queueRepeat)}`,
   ].join('\n');
@@ -198,6 +206,7 @@ function renderHelpFull() {
     '  ・/zunda = ずんだもん語尾 on/off（声・語尾のみ）',
     '/idle = 自発おしゃべり on/off（人格と独立。静かな時に自分から一言）',
     '/jingle = 入退室あいさつ on/off（入ってきた人に名前で「いらっしゃい」）',
+    '/cmds = 操作コマンド受付 on/off（オーナー専用。OFFで /play 等を無視・会話と音楽は継続。/cmds off｜on｜?）',
     '― 音楽再生 ―',
     '/p <曲/URL> = 再生開始（曲名は Spotify 優先→無ければ YouTube、URL は自動判別）',
     '/q <曲> = キューに追加（再生中なら末尾へ）。複数曲は「/q 曲A, 曲B, 曲C」or 改行で一括投入',
@@ -672,6 +681,22 @@ async function handleCommand(text, author = '?', userId = null) {
   const cmd = ALIAS[mm[1].toLowerCase()];
   const q = (mm[2] || '').trim();
   if (!cmd) return null;
+  // マスタートグル: 操作コマンド受付の on/off。オーナーのみ。OFF中でもこれだけは常に効く（復帰経路）。
+  if (cmd === 'cmds') {
+    const isOwnerU = !!ownerYayId && userId && String(userId) === String(ownerYayId);
+    if (!isOwnerU) return '🔒 コマンド受付の切替はオーナーだけ（/iam <合言葉> で登録して）';
+    const w = q.toLowerCase();
+    if (w === '?' || w === 'status') return `🎛 コマンド受付: ${cmdsEnabled ? '🟢ON' : '⚪OFF'}`;
+    if (['on', 'start', 'オン', '1', '有効'].includes(w)) cmdsEnabled = true;
+    else if (['off', 'stop', 'オフ', '0', '無効', 'なし'].includes(w)) cmdsEnabled = false;
+    else cmdsEnabled = !cmdsEnabled;
+    persistFlags();
+    return cmdsEnabled
+      ? '🎛 コマンド受付ON（/play 等の操作コマンドが使える）'
+      : '🔇 コマンド受付OFF（/play 等を無視。会話・音楽再生・あいさつは継続。/cmds on で復帰）';
+  }
+  // OFF中は他の全コマンドを無視（会話返信・音楽再生は別経路でそのまま動く）。
+  if (!cmdsEnabled) return null;
   try {
     switch (cmd) {
       case 'help': return renderHelp();
@@ -933,6 +958,7 @@ async function main() {
   const st0 = loadState();
   const seen = new Set(st0.seen);
   ownerYayId = st0.ownerYayId || process.env.YAY_OWNER_YAYID || CONFIG.ownerYayId || null;
+  cmdsEnabled = st0.cmdsEnabled !== false;   // 既定ON。前回 /cmds off のまま落ちても状態を継承
   console.log('[bot] owner(yayId):', ownerYayId || '未登録（/iam ' + OWNER_SECRET + ' で登録）', WATCHING ? `/ 監視=${DISCOVER_UID}（枠に自動入室）` : '/ 自分の通話を待機');
   console.log('[bot] 稼働開始', stateExisted ? '(seen継承)' : '(初回)');
   console.log('[bot] 人格:', personaKey || '通常', '/ 自発おしゃべり:', idleChatOn ? `ON(${IDLE_MIN_MS / 1000}〜${IDLE_MAX_MS / 1000}s)` : 'OFF', '（/zunda 語尾・/idle 自発）');
@@ -1143,7 +1169,7 @@ async function main() {
           else if (!out.action) console.log('  → [skip]');
         } catch (e) { console.error('reply err', e.message); }
       } else if (conv.length) console.log('  → 連投ガードで保留');
-      saveState({ seen: [...seen].slice(-2000), ownerYayId });
+      saveState({ seen: [...seen].slice(-2000), ownerYayId, cmdsEnabled });
     }
     await sleep(CONFIG.pollMs);
   }
