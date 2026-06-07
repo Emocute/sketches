@@ -326,12 +326,16 @@ def _post_fields(p):
 
 async def job_activities(client, lim, cfg, state, persona):
     """通知 feed を1パス処理: follow→フォロバ / reply・mention→返信。未知 type はログ。"""
-    try:
-        res = await client.get_user_activities_v1(important=False, number=40)
-    except Exception as e:
-        log(f"activities fetch failed: {type(e).__name__} {e}")
+    # メンション(type=tagged)・返信は important=True 側に来る。follow/like は important=False。両方取る。
+    acts = []
+    for imp in (True, False):
+        try:
+            r = await client.get_user_activities_v1(important=imp, number=30)
+            acts += getattr(r, "activities", None) or []
+        except Exception as e:
+            log(f"activities fetch failed (important={imp}): {type(e).__name__} {e}")
+    if not acts:
         return
-    acts = getattr(res, "activities", None) or []
     exclude_types = set(cfg["mention_reply"].get("exclude_types", []))
     new_seen = 0
     for a in reversed(acts):  # 古い順に処理
@@ -360,6 +364,17 @@ async def job_activities(client, lim, cfg, state, persona):
             fp = getattr(a, "from_post", None)
             if fp is not None:
                 pid, uid, nick, text = _post_fields(fp)
+                # tagged 等は activity の from_post に user/text が欠けることがある → get_post で補完
+                if pid and (uid is None or not text):
+                    try:
+                        gp = await client.get_post(pid)
+                        pp = getattr(gp, "post", gp)
+                        au = getattr(pp, "user", None)
+                        uid = uid or getattr(au, "id", None)
+                        nick = (getattr(au, "nickname", None) or nick) if au else nick
+                        text = text or (getattr(pp, "text", "") or "").strip()
+                    except Exception:
+                        pass
                 if pid and uid and uid != cfg["self_uid"] and text:
                     await do_reply(client, lim, cfg, state, "mreply",
                                    cfg["mention_reply"]["max_per_hour"], pid, uid, nick, text, persona)
