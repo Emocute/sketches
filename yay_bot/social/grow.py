@@ -291,7 +291,7 @@ async def job_activities(client, lim, cfg, state, persona):
         log(f"activities fetch failed: {type(e).__name__} {e}")
         return
     acts = getattr(res, "activities", None) or []
-    reply_types = set(cfg["mention_reply"]["reply_types"])
+    exclude_types = set(cfg["mention_reply"].get("exclude_types", []))
     new_seen = 0
     for a in reversed(acts):  # 古い順に処理
         aid = getattr(a, "id", None)
@@ -312,21 +312,20 @@ async def job_activities(client, lim, cfg, state, persona):
                 await do_follow(client, lim, cfg, state, getattr(u, "id", None), getattr(u, "nickname", "") or "")
             continue
 
-        # 2) メンション/返信に返す
-        if cfg["mention_reply"]["enabled"] and atype in reply_types:
+        # 2) from_post 付きの通知 = 誰かが自分に絡んできた（メンション/返信/コメント）→ 必ず返す。
+        #    type 名は環境で変わり取りこぼすので白名簿に頼らず「from_post の有無」で判定。
+        #    除外 type（いいね/フォロー/リポスト等）だけスキップ。
+        if cfg["mention_reply"]["enabled"] and atype not in exclude_types:
             fp = getattr(a, "from_post", None)
-            if fp is None:
-                log(f"  [info] {atype}: from_post 無し（要calibrate）")
-                continue
-            pid, uid, nick, text = _post_fields(fp)
-            if pid and uid and uid != cfg["self_uid"]:
-                await do_reply(client, lim, cfg, state, "mreply",
-                               cfg["mention_reply"]["max_per_hour"], pid, uid, nick, text, persona)
-            continue
+            if fp is not None:
+                pid, uid, nick, text = _post_fields(fp)
+                if pid and uid and uid != cfg["self_uid"] and text:
+                    await do_reply(client, lim, cfg, state, "mreply",
+                                   cfg["mention_reply"]["max_per_hour"], pid, uid, nick, text, persona)
+                    continue
 
-        # 3) 未知 type は calibrate 用にログ（from_post があるか含めて）
-        has_fp = getattr(a, "from_post", None) is not None
-        log(f"  [type] '{atype}' (from_post={has_fp}) ← reply_types に足すか判断")
+        # 3) 可視化（どの type が来たか・from_post 有無）
+        log(f"  [type] '{atype}' (from_post={getattr(a,'from_post',None) is not None})")
 
     if new_seen:
         log(f"activities: {new_seen} new processed (followed={len(state['followed'])}, replied={len(state['replied'])})")
@@ -457,12 +456,16 @@ async def run_loop(once: bool):
     next_engage = 0.0
     try:
         while True:
-            await job_activities(client, lim, cfg, state, persona)
-            await job_post(client, lim, cfg, state, post_persona)
-            if time.time() >= next_engage:
-                await job_proactive(client, lim, cfg, state, persona)
-                next_engage = time.time() + cfg["poll"]["engage_min"] * 60
-            save_state(state)
+            try:
+                await job_activities(client, lim, cfg, state, persona)
+                await job_post(client, lim, cfg, state, post_persona)
+                if time.time() >= next_engage:
+                    await job_proactive(client, lim, cfg, state, persona)
+                    next_engage = time.time() + cfg["poll"]["engage_min"] * 60
+                save_state(state)
+            except Exception as e:
+                # 1 周のエラーでデーモンを落とさない（常時待機を維持）
+                log(f"[loop error] {type(e).__name__}: {str(e)[:120]}")
             if once:
                 log("=== --once done ===")
                 break
