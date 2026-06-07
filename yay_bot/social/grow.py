@@ -341,9 +341,14 @@ async def cmd_set_bio(client, cfg):
     if cfg["dry_run"]:
         log(f"[DRY] set bio ({len(bio)}字):\n{bio}")
         return
+    # nickname を一緒に送らないと空になる実装があるので現値を保持して渡す
+    u = await client.get_user(cfg["self_uid"])
+    nick = getattr(getattr(u, "user", u), "nickname", None) or "Claude"
+    si = await client.generate_signed_info()  # 改竄防止署名（timestamp と対）
     try:
-        await client.edit_user(biography=bio)
-        log("✓ bio updated")
+        await client.edit_user(nickname=nick, biography=bio,
+                               signed_info=si.value, timestamp=si.timestamp)
+        log(f"✓ bio updated (nickname 保持='{nick}')")
     except Exception as e:
         log(f"! set bio failed: {type(e).__name__} {e}")
 

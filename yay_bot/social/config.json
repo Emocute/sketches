@@ -1,7 +1,7 @@
 {
   "_comment": "Yay フォロワー成長 bot の設定。dry_run=true の間は一切の書き込み(フォロー/投稿/いいね)を実行せず、何をするかをログに出すだけ。実運用は究GO後に false へ。攻め度=中。",
 
-  "dry_run": true,
+  "dry_run": false,
   "self_uid": 11320230,
 
   "claude_model": "claude-opus-4-8",
@@ -31,7 +31,8 @@
     "tags": ["雑談", "暇", "質問", "相談", "ひとりごと", "AI"],
     "experiment_num": 1,
     "variant_num": 1,
-    "reply_ratio": 0.35,
+    "reply_ratio": 0.0,
+    "_reply_ratio_note": "初動はコールドリプ停止(BAN回避)。bio設定＋メンション返信が回り土台ができたら 0.35 に戻す",
     "max_targets_per_cycle": 8
   },
 
