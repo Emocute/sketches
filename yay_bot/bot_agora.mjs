@@ -140,7 +140,7 @@ const CMD = {
   loop:   ['loop', 'l'],
   live:   ['live', 'lv'],
   dev:    ['devices', 'dev', 'd'],
-  clear:  ['clear', 'cls', 'c'],
+  clear:  ['clear', 'cls', 'c', 'qc', 'クリア', 'キュークリア', '全消', 'キュー消去'],
   ping:   ['ping', 'pi'],
   leave:  ['leave', 'bye'],
   mode:   ['mode', 'm', 'persona'],
