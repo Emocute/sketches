@@ -111,7 +111,9 @@ const sendYayChat = (p, text) => agora.sendChat(p, yayEnvelope(text));
 let page, fileBase, creds, browser, fileServer;
 
 // ===== コマンド体系（汎用・1〜2文字エイリアス対応）=====
+const PLAYLIST_LIMIT = 100;   // YouTube プレイリスト展開の上限曲数（チャット氾濫・過負荷防止）
 let queue = [];        // 未再生キュー（query文字列）
+let queueRepeat = false; // キュー全体リピート（曲が終わるたび末尾へ戻して循環。/l の一曲ループとは別）
 let nowQuery = null;   // 再生中の曲名/ラベル
 let nowIsSpotify = false; // 現在の再生が Spotify(live BlackHole)経路か（skip/stop/自動送りの判定用）
 let spEndedPolls = 0;  // Spotify 再生終了の連続検知カウンタ（自動送りの誤検知防止）
@@ -154,6 +156,8 @@ const CMD = {
   qdel:   ['qd', 'qdel', 'rm', '消'],
   qup:    ['qu', 'qup', 'up', '上'],
   qdn:    ['qj', 'qdn', 'down', '下'],
+  qrepeat:['qr', 'repeat', 'rp', 'リピート', '繰り返し'],   // キュー全体リピート on/off（/l は一曲ループ）
+  qshuffle:['qsh', 'shuffle', 'shuf', 'sh', 'シャッフル', 'ランダム'],  // キューをランダム並べ替え
   iam:    ['iam', 'owner', 'オーナー', '俺'],   // 本人登録（/iam <合言葉>）
   whoami: ['whoami', 'myid', '誰'],             // 自分のRTM IDを表示
   volup:  ['volup', 'vu', '音量上げ'],
@@ -176,6 +180,7 @@ function statusBlock() {
     `💬 自発おしゃべり: ${onoff(idleChatOn)}`,
     `🎉 入退室あいさつ: ${onoff(jingleOn)}`,
     nowQuery ? `🎵 再生中: ${nowQuery}` : '🎵 再生: なし',
+    `📜 キュー: ${queue.length}曲 / リピート: ${onoff(queueRepeat)}`,
   ].join('\n');
 }
 function renderHelpFull() {
@@ -196,6 +201,7 @@ function renderHelpFull() {
     '― 音楽再生 ―',
     '/p <曲/URL> = 再生開始（曲名は Spotify 優先→無ければ YouTube、URL は自動判別）',
     '/q <曲> = キューに追加（再生中なら末尾へ）。複数曲は「/q 曲A, 曲B, 曲C」or 改行で一括投入',
+    `  ・YouTube プレイリストURL を渡すと全曲をキューに展開（最大${PLAYLIST_LIMIT}曲）`,
     '/s（次）= スキップ / /x（停止）= 全停止',
     '/ps = 一時停止 / /r = 再開',
     '/v 0-100 = 音量設定（既定15）',
@@ -205,6 +211,8 @@ function renderHelpFull() {
     '― キュー操作 ―',
     '/q / /qlist = キュー一覧（番号付き）',
     '/qd <N> = N番削除 / /qu <N> = N番を前へ / /qj <N> = N番を後ろへ',
+    '/rp = キューリピート on/off（最後まで流したら頭から繰り返す）',
+    '/sh = キューシャッフル（ランダム並べ替え）',
     '― その他 ―',
     '/d = 音声入力デバイス一覧',
     '/st = 状態確認 / /h = 詳細ヘルプ / /? = 簡易ヘルプ',
@@ -217,9 +225,9 @@ function renderHelpShort() {
     '🎧 EmoCC コマンド（簡易）',
     '/voice /vv <n> /ears /mode <m> /zunda /idle /jingle … 機能 on/off',
     '/p <曲> /s /x /ps /r /v <n> /l /np … 再生制御',
-    '/q（一覧）/q <曲>（追加）/qd <N> /qu <N> /qj <N> /c … キュー',
+    '/q（一覧）/q <曲>（追加）/qd /qu /qj /rp(リピート) /sh(シャッフル) /c … キュー',
     '/lv /d /st /pi /bye … その他',
-    '複数曲=「/q 曲A, 曲B」/ 1メッセージに複数コマンドも可（改行区切り）',
+    '複数曲=「/q 曲A, 曲B」/ YTプレイリストURLは全曲展開 / 1msgに複数コマンド可（改行）',
     '詳細: /h',
   ].join('\n');
 }
@@ -599,12 +607,24 @@ async function drainJingle() {
   console.log(`  ${emoji} jingle:`, line);
 }
 
-// キューを番号付きで表示
+// YouTube プレイリストURL 判定（list= を持つ youtube/youtu.be リンク）
+function isPlaylistUrl(u) {
+  return /^https?:\/\//i.test(u) && /(youtube\.com|youtu\.be)/i.test(u) && /[?&]list=/i.test(u);
+}
+// キュー表示用ラベル（長いURLは短縮、曲名はそのまま）
+function qLabel(s) {
+  if (!/^https?:\/\//i.test(s)) return s;
+  const m = s.match(/[?&]v=([\w-]{6,})/) || s.match(/youtu\.be\/([\w-]{6,})/);
+  return m ? `▶ ${m[1]}` : s.slice(0, 48);
+}
+// キューを番号付きで表示（長大キューは先頭 N 件のみ＝チャット氾濫防止）
 function renderQueue() {
   const head = nowQuery ? `🎵 再生中: ${nowQuery}` : '🎵 再生: なし';
   if (!queue.length) return `${head}\n📜 キューは空`;
-  const lines = queue.map((s, i) => `${i + 1}. ${s}`).join('\n');
-  return `${head}\n📜 キュー(${queue.length})\n${lines}`;
+  const MAX = 15;
+  const lines = queue.slice(0, MAX).map((s, i) => `${i + 1}. ${qLabel(s)}`).join('\n');
+  const more = queue.length > MAX ? `\n…他${queue.length - MAX}曲` : '';
+  return `${head}\n📜 キュー(${queue.length})\n${lines}${more}`;
 }
 // 番号引数（1始まり）→ 0始まりindex（範囲外は -1）
 function qIndex(q) {
@@ -676,7 +696,22 @@ async function handleCommand(text, author = '?', userId = null) {
       case 'play':
       case 'queue': {
         if (!q) return renderQueue();           // 引数なし = 番号付き一覧
-        const songs = splitSongs(q);            // カンマ/改行区切りで複数曲対応
+        let songs = splitSongs(q);              // カンマ/改行区切りで複数曲対応
+        // YouTube プレイリストURL は各動画へ展開（展開失敗時はそのURLを単曲扱い）
+        let plNote = '';
+        if (songs.some(isPlaylistUrl)) {
+          const ex = [];
+          for (const s of songs) {
+            if (!isPlaylistUrl(s)) { ex.push(s); continue; }
+            try {
+              const items = await music.expandPlaylist(s, { limit: PLAYLIST_LIMIT });
+              if (items.length) { ex.push(...items.map((it) => it.url)); plNote += `📃 プレイリスト展開: ${items.length}曲\n`; }
+              else { ex.push(s); plNote += '⚠ プレイリストが空（単曲扱い）\n'; }
+            } catch (e) { console.error('playlist expand', e.message); ex.push(s); plNote += '⚠ プレイリスト展開失敗（単曲扱い）\n'; }
+          }
+          songs = ex;
+        }
+        if (!songs.length) return notFoundMsg(q);
         // 複数曲: 空いてれば先頭を即再生、残りをキュー。再生中なら全部キュー末尾へ。
         if (songs.length > 1) {
           let started = null; const added = [];
@@ -686,13 +721,14 @@ async function handleCommand(text, author = '?', userId = null) {
               if (r.ok) started = s; else { queue.push(s); added.push(s); }
             } else { queue.push(s); added.push(s); }
           }
-          const head = started ? `▶ 再生: ${started}\n` : '';
-          return `${head}➕ ${added.length}曲をキューに追加\n` + renderQueue();
+          const head = started ? `▶ 再生: ${qLabel(started)}\n` : '';
+          return `${plNote}${head}➕ ${added.length}曲をキューに追加\n` + renderQueue();
         }
         // 単曲: /play 一本化（空いてれば即再生、再生中なら積む）
-        if (!nowQuery && !starting) { const r = await startAny(q); return r.ok ? null : notFoundMsg(q); }
-        queue.push(q);
-        return `➕ キューに追加(${queue.length}): ${q}\n` + renderQueue();
+        const one = songs[0];
+        if (!nowQuery && !starting) { const r = await startAny(one); return r.ok ? (plNote || null) : notFoundMsg(one); }
+        queue.push(one);
+        return `${plNote}➕ キューに追加(${queue.length}): ${qLabel(one)}\n` + renderQueue();
       }
       case 'qlist': return renderQueue();
       case 'qdel': {
@@ -712,6 +748,21 @@ async function handleCommand(text, author = '?', userId = null) {
         if (i === queue.length - 1) return 'もう末尾だよ\n' + renderQueue();
         [queue[i + 1], queue[i]] = [queue[i], queue[i + 1]];
         return `⬇ ${i + 1}→${i + 2} へ移動\n` + renderQueue();
+      }
+      case 'qrepeat': {
+        // 引数 on/off で明示、無指定はトグル
+        if (/^(on|オン|1)$/i.test(q)) queueRepeat = true;
+        else if (/^(off|オフ|0)$/i.test(q)) queueRepeat = false;
+        else queueRepeat = !queueRepeat;
+        return queueRepeat ? '🔁 キューリピートON（最後まで流したら頭から繰り返す）' : '➡ キューリピートOFF';
+      }
+      case 'qshuffle': {
+        if (queue.length < 2) return 'シャッフルする曲が足りない（2曲以上必要）\n' + renderQueue();
+        for (let i = queue.length - 1; i > 0; i--) {   // Fisher-Yates
+          const j = Math.floor(Math.random() * (i + 1));
+          [queue[i], queue[j]] = [queue[j], queue[i]];
+        }
+        return `🔀 キューをシャッフル(${queue.length}曲)\n` + renderQueue();
       }
       case 'skip':
         if (nowIsSpotify) await spotify.pause().catch(() => {});
@@ -992,8 +1043,10 @@ async function main() {
         if (ended) {
           if (queue.length) {
             spEndedPolls = 0;
-            const r = await startAny(queue.shift());   // タイトル通知は startAny→startTrack/startSpotify 内で実施済み
-            console.log('  ▶ next:', r);
+            const next = queue.shift();
+            if (queueRepeat) queue.push(next);          // リピートON: 流した曲を末尾へ戻して循環
+            const r = await startAny(next);             // タイトル通知は startAny→startTrack/startSpotify 内で実施済み
+            console.log('  ▶ next:', r, queueRepeat ? '(repeat)' : '');
           } else if (nowQuery && nowQuery !== 'live') { nowQuery = null; nowIsSpotify = false; spEndedPolls = 0; }
         }
       } catch {}

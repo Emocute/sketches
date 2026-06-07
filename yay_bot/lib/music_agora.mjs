@@ -56,6 +56,24 @@ export async function resolveStreamUrl(query, { timeout = 30000 } = {}) {
   return { url, title, query: q };
 }
 
+// YouTube プレイリストURL → 各動画 {url,title} の配列（--flat-playlist で軽量列挙、DLしない）。
+//   先頭 limit 件のみ取得。展開できなければ空配列を返す（呼び出し側で単曲扱いにフォールバック）。
+export async function expandPlaylist(url, { timeout = 60000, limit = 100 } = {}) {
+  let out;
+  try {
+    out = await sh('yt-dlp', ['--flat-playlist', '--no-warnings', '-I', `1:${limit}`,
+      '--print', '%(url)s\t%(title)s', url], { timeout });
+  } catch (e) {
+    throw new Error('playlist 展開失敗: ' + (e.message || '').slice(0, 200));
+  }
+  return (out || '').trim().split('\n').filter(Boolean).map((l) => {
+    const i = l.indexOf('\t');
+    const u = (i < 0 ? l : l.slice(0, i)).trim();
+    const t = (i < 0 ? '' : l.slice(i + 1)).trim();
+    return { url: u, title: t || u };
+  }).filter((x) => /^https?:\/\//.test(x.url));
+}
+
 // /play 入力 → { path } （ローカル絶対パス、旧DL方式。フォールバック用に残置）
 export async function resolve(query) {
   const q = (query || '').trim();
