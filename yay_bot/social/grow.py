@@ -33,6 +33,8 @@ import time
 import yaylib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import web_api  # 投稿/返信は web JSON API(x-jwt)経由。create_post は web トークンで署名非互換のため
 ROOT = os.path.dirname(HERE)  # yay_bot/
 TOKEN_FILE = os.path.join(ROOT, ".yay_token")
 DEVICE_FILE = os.path.join(ROOT, ".yay_device")
@@ -144,13 +146,68 @@ def gen_reply(persona: str, asker: str, text: str, cfg: dict) -> str:
     return body[:255]
 
 
+def gen_post(post_persona: str, intent: str, avoid: list, cfg: dict) -> str:
+    """自発投稿（単独ポスト）を1本作る。出力の 'POST:' 以降だけ採用。"""
+    import tempfile
+    avoid_block = ""
+    if avoid:
+        avoid_block = "直近の自分の投稿（言い回し・話題が被らないように）:\n" + "\n".join(f"- {a[:60]}" for a in avoid[-cfg.get('post', {}).get('avoid_recent', 6):]) + "\n\n"
+    prompt = (
+        f"{post_persona}\n\n---\n"
+        f"{avoid_block}"
+        f"今回の方針: {intent}\n\n"
+        f"上のキャラクターでこの方針の投稿を1本書け。255文字以内。最後に必ず『POST: 』に続けて本文だけ書く。"
+    )
+    env = dict(os.environ)
+    env.pop("CLAUDECODE", None)
+    env.pop("CLAUDE_CODE_ENTRYPOINT", None)
+    model = cfg.get("claude_model", "claude-opus-4-8")
+    timeout = cfg.get("reply_timeout_ms", 60000) / 1000.0
+    try:
+        out = subprocess.run(
+            ["claude", "-p", prompt, "--model", model, "--strict-mcp-config"],
+            cwd=tempfile.gettempdir(), env=env,
+            capture_output=True, text=True, timeout=timeout,
+        ).stdout
+    except subprocess.TimeoutExpired:
+        log("  post gen timeout")
+        return ""
+    low = out.rfind("POST:")
+    body = (out[low + 5:] if low >= 0 else out).strip()
+    return body[:255]
+
+
 # ───────────────────────── 書き込みアクション（dry_run ゲート） ─────────────────────────
+
+async def passes_quality(client, cfg, uid: int, nick: str) -> bool:
+    """フォロバ前の選別。フォロバサークル/実体なし bot を弾く（質の低い相互で数だけ増やさない）。"""
+    q = cfg["followback"].get("quality")
+    if not q:
+        return True
+    try:
+        u = await client.get_user(uid)
+        user = getattr(u, "user", u)
+        posts = getattr(user, "posts_count", None)
+        bio = (getattr(user, "biography", "") or "").lower()
+    except Exception:
+        return True  # 取れなければ従来通り通す（検知失敗で機会損失しない）
+    if posts is not None and posts < q.get("min_posts", 1):
+        log(f"  [skip-q] {nick}({uid}) posts={posts}（実体薄い）")
+        return False
+    for kw in q.get("circle_keywords", []):
+        if kw.lower() in bio:
+            log(f"  [skip-q] {nick}({uid}) bio に循環ワード『{kw}』→ フォロバサークル回避")
+            return False
+    return True
+
 
 async def do_follow(client, lim, cfg, state, uid: int, nick: str):
     if uid in state["followed"] or uid == cfg["self_uid"] or uid in cfg.get("skip_users", []):
         return False
     if not lim.allow("follow", cfg["followback"]["max_per_hour"]):
         log(f"  [skip] follow cap reached (uid={uid})")
+        return False
+    if not await passes_quality(client, cfg, uid, nick):
         return False
     if cfg["dry_run"]:
         log(f"  [DRY] follow {nick}({uid})")
@@ -185,18 +242,14 @@ async def do_reply(client, lim, cfg, state, bucket: str, cap: int, post_id: int,
         state["replied"].append(post_id)
         return True
     await lim.throttle()
-    try:
-        try:
-            await client.create_post(text=full, in_reply_to=post_id, mention_ids=[uid])
-        except TypeError:
-            await client.create_post(text=full, in_reply_to=post_id)
+    ok, info = await asyncio.to_thread(web_api.create_post, full, post_id)
+    if ok:
         lim.record(bucket)
         state["replied"].append(post_id)
-        log(f"  ✓ replied→{nick} post#{post_id}: {full[:60]}")
+        log(f"  ✓ replied→{nick} post#{post_id} (id={info}): {full[:50]}")
         return True
-    except Exception as e:
-        log(f"  ! reply post#{post_id} failed: {type(e).__name__} {e}")
-        return False
+    log(f"  ! reply post#{post_id} failed: {info}")
+    return False
 
 
 async def do_like(client, lim, cfg, state, post_id: int):
@@ -283,6 +336,44 @@ async def job_activities(client, lim, cfg, state, persona):
             state[k] = state[k][-2000:]
 
 
+async def job_post(client, lim, cfg, state, post_persona):
+    """自発投稿。1日 per_day 本まで、最短間隔・活動時間帯を守って単独ポストを流す。"""
+    pc = cfg.get("post")
+    if not pc or not pc.get("enabled"):
+        return
+    h = int(time.strftime("%H"))
+    lo, hi = pc.get("active_hours", [0, 24])
+    if not (lo <= h < hi):
+        return
+    now = time.time()
+    recent = [t for t in state["post_log"] if now - t < 86400]
+    state["post_log"] = recent
+    if len(recent) >= pc.get("per_day", 4):
+        return
+    if recent and (now - max(recent)) < pc.get("min_gap_min", 180) * 60:
+        return
+    intent = random.choice(pc.get("intents") or ["軽い問いを1つ投げる"])
+    body = gen_post(post_persona, intent, state.get("post_texts", []), cfg)
+    if not body:
+        log("  [skip] empty post")
+        return
+    if cfg["dry_run"]:
+        log(f"  [DRY] post: {body[:90]}")
+        state["post_log"].append(now)
+        state.setdefault("post_texts", []).append(body)
+        return
+    await lim.throttle()
+    ok, info = await asyncio.to_thread(web_api.create_post, body)
+    if ok:
+        lim.record("post")
+        state["post_log"].append(now)
+        state.setdefault("post_texts", []).append(body)
+        state["post_texts"] = state["post_texts"][-30:]
+        log(f"  ✓ posted ({len(recent)+1}/{pc['per_day']} today, id={info}): {body[:60]}")
+    else:
+        log(f"  ! post failed: {info}")
+
+
 async def job_proactive(client, lim, cfg, state, persona):
     """おすすめ timeline に絡みに行く（いいね＋一部に返信）。露出→発見→フォロー導線。"""
     pc = cfg["proactive"]
@@ -321,7 +412,8 @@ async def job_proactive(client, lim, cfg, state, persona):
 
 # ───────────────────────── メイン ─────────────────────────
 
-DEFAULT_STATE = {"seen_act": [], "followed": [], "replied": [], "liked": [], "hits": {}, "last_action": 0}
+DEFAULT_STATE = {"seen_act": [], "followed": [], "replied": [], "liked": [],
+                 "post_log": [], "post_texts": [], "hits": {}, "last_action": 0}
 
 
 async def cmd_check(client, cfg):
@@ -341,21 +433,18 @@ async def cmd_set_bio(client, cfg):
     if cfg["dry_run"]:
         log(f"[DRY] set bio ({len(bio)}字):\n{bio}")
         return
-    # nickname を一緒に送らないと空になる実装があるので現値を保持して渡す
+    # nickname を一緒に送らないと空になるので現値を保持。投稿同様 web JSON(x-jwt)経路で。
     u = await client.get_user(cfg["self_uid"])
     nick = getattr(getattr(u, "user", u), "nickname", None) or "Claude"
-    si = await client.generate_signed_info()  # 改竄防止署名（timestamp と対）
-    try:
-        await client.edit_user(nickname=nick, biography=bio,
-                               signed_info=si.value, timestamp=si.timestamp)
-        log(f"✓ bio updated (nickname 保持='{nick}')")
-    except Exception as e:
-        log(f"! set bio failed: {type(e).__name__} {e}")
+    ok, info = await asyncio.to_thread(web_api.edit_user, nick, bio)
+    log(f"{'✓ bio updated' if ok else '! set bio failed'} (nick='{nick}') {info}")
 
 
 async def run_loop(once: bool):
     cfg = load_json(CONFIG_FILE, {})
     persona = open(PERSONA_FILE, encoding="utf-8").read() if os.path.exists(PERSONA_FILE) else ""
+    POST_PERSONA_FILE = os.path.join(HERE, "post_persona.txt")
+    post_persona = open(POST_PERSONA_FILE, encoding="utf-8").read() if os.path.exists(POST_PERSONA_FILE) else persona
     state = load_json(STATE_FILE, dict(DEFAULT_STATE))
     for k, v in DEFAULT_STATE.items():
         state.setdefault(k, v if not isinstance(v, list) else [])
@@ -369,6 +458,7 @@ async def run_loop(once: bool):
     try:
         while True:
             await job_activities(client, lim, cfg, state, persona)
+            await job_post(client, lim, cfg, state, post_persona)
             if time.time() >= next_engage:
                 await job_proactive(client, lim, cfg, state, persona)
                 next_engage = time.time() + cfg["poll"]["engage_min"] * 60

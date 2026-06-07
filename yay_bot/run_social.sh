@@ -9,7 +9,7 @@ PY="./.venv/bin/python"
 case "${1:-loop}" in
   check)   exec "$PY" social/grow.py --check ;;
   once)    exec "$PY" social/grow.py --once ;;
-  bio)     exec node scripts/set_bio.mjs ;;   # web UI 経由（edit_user API は署名非互換で不可）
+  bio)     exec "$PY" social/grow.py --set-bio ;;   # web JSON API(x-jwt)経由
   loop|"") exec "$PY" social/grow.py ;;
   *) echo "usage: $0 {check|once|bio|loop}"; exit 2 ;;
 esac

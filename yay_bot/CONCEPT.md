@@ -192,13 +192,29 @@ grok（`/user/10414701`、何でも答える AI・544 follower）の運用を再
   reply/mention → grok 型ペルソナで `create_post(in_reply_to=, mention_ids=)` 返信。
   おすすめ/タグ TL(`get_posts_by_tag`／新規垢はタグが確実) → `like_posts`＋一部 `create_post` で能動リプ。
 - `social/persona.txt`: grok 型「何でも答える AI」system prompt（返信生成 `claude -p` に渡す）。
-- `social/bio.txt`: 集客 bio（末尾 emocutelab.com 導線）。設定は `scripts/set_bio.mjs`（後述）。
-- `scripts/set_bio.mjs`: bio を **web UI 経由**で設定。`edit_user` API はモバイル署名(`signed_info`)を
-  web 由来トークンで検証できず `Invalid signed info` で不可（`follow_user`/`create_post`/`like` は署名検証
-  無しで web トークンでも通る）。代わりに profile-yay(ログイン済 web)を CDP 接続→`/user/<id>?modalMode=ue`
-  の `textarea[name=biography]` に**ネイティブ setter+input イベントで一括投入**（実キー入力は recaptcha
-  再描画でカーソルが飛び混線する）→「保存」。`POST /v3/users/edit` が `{"result":"success"}` で成立
-  （recaptcha v3 不可視・スコア式なので headless で通る）。真値確認は `get_user` API。
+- `social/bio.txt`: 集客 bio。設定は `grow.py --set-bio`→`web_api.edit_user`（下記）。
+- `social/web_api.py`: **投稿/返信/bio を web JSON API(x-jwt)で直接叩く**（ブラウザ不要・速い）。
+
+### 署名の壁と突破（重要・2026-06-08 確定）
+`create_post`/`edit_user` はモバイル form 経路だと `signed_info` 検証で `Invalid signed info`(-380)。
+web 由来トークン（`.yay_token`=`_yay_web_access_token`）はモバイル署名と非互換。**だが Yay web 版が
+使う JSON 経路は `signed_info`/recaptcha 不要で、代わりに `x-jwt`(HS256・5秒TTL)ヘッダで認証**する。
+実機キャプチャで確定し、Python から直接叩けるようにした:
+- `POST https://api.yay.space/v3/posts/new`（投稿/返信、body に `in_reply_to` で返信）
+- `POST https://api.yay.space/v3/users/edit`（bio。body `{"nickname","biography"}`）
+- headers: `Authorization: Bearer <token>` / `X-Jwt: <generate_x_jwt(api_version_key)>` /
+  `X-App-Version: 4.26`（x-jwt 鍵=yaylib の `api_version_key` と対なので 4.26 に合わせる）/
+  `Agent: YayWeb 4.26` / `Content-Type: application/json`
+- x-jwt は yaylib の `yaylib.signing.generate_x_jwt` で生成（毎回・TTL5秒）。
+- **署名チェック無しで web トークンのまま通る系**（yaylib そのまま使用）: `follow_user`/`like_posts`/
+  `delete_posts`(mobile mass_destroy)。grow.py は follow/like=yaylib、post/reply/bio=web_api に分担。
+- これで**ブラウザも新規ログインも不要**（BAN リスク増やさず API 一本）。旧 `scripts/set_bio.mjs` 等の
+  web UI 自動操作は不要になり撤去。
+
+### TODO（あとで・究要望 2026-06-08）
+モバイル版ログインも用意した方が良い（モバイル API の方ができる事が多い＝単体 delete・他機能）。
+ただし Emo Claude は X(@emocutesounds) OAuth アカウントで Yay 用 email/password が無く、`login_with_email`
+不可。X OAuth のモバイルトークン取得経路が要調査（新デバイス＝BAN 注意、@emocutesounds 敏感）。
 - `social/config.json`: dry_run・レート上限(follow20/reply15/like40 per h)・throttle・quiet[2,7)・タグ。
 - `social/state.json`: 既読 activity/フォロー済/返信済/いいね済/レート（git 除外＝`state.json` パターン既存）。
 

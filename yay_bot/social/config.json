@@ -14,7 +14,26 @@
 
   "followback": {
     "enabled": true,
-    "max_per_hour": 20
+    "max_per_hour": 20,
+    "quality": {
+      "min_posts": 1,
+      "circle_keywords": ["相互", "フォロバ", "リフォロー", "フォロー返", "無言フォロー", "f4f", "follow4follow", "followback", "follow back", "全フォロ", "フォロ爆"]
+    }
+  },
+
+  "post": {
+    "enabled": true,
+    "per_day": 4,
+    "min_gap_min": 180,
+    "active_hours": [9, 24],
+    "avoid_recent": 8,
+    "intents": [
+      "フォロワーが思わず答えたくなる、軽い問いを1つ投げる（日常・好み・選択など答えやすいもの）",
+      "知ってると少し得する豆知識・コツを1つ、具体的に短く",
+      "ありふれた物事の意外な見方・小さな発見を1つ",
+      "今日の素朴な疑問を1つ。答えやすく、議論を呼びすぎないもの",
+      "『何か気になってること、投げてくれたら答えるよ』を自然に織り込んだ軽い投稿（あからさまな宣伝にしない）"
+    ]
   },
 
   "mention_reply": {
