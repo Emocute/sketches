@@ -195,7 +195,7 @@ function renderHelpFull() {
     '/jingle = 入退室あいさつ on/off（入ってきた人に名前で「いらっしゃい」）',
     '― 音楽再生 ―',
     '/p <曲/URL> = 再生開始（曲名は Spotify 優先→無ければ YouTube、URL は自動判別）',
-    '/q <曲> = キューに追加（再生中なら直後に再生）',
+    '/q <曲> = キューに追加（再生中なら末尾へ）。複数曲は「/q 曲A, 曲B, 曲C」or 改行で一括投入',
     '/s（次）= スキップ / /x（停止）= 全停止',
     '/ps = 一時停止 / /r = 再開',
     '/v 0-100 = 音量設定（既定15）',
@@ -219,6 +219,7 @@ function renderHelpShort() {
     '/p <曲> /s /x /ps /r /v <n> /l /np … 再生制御',
     '/q（一覧）/q <曲>（追加）/qd <N> /qu <N> /qj <N> /c … キュー',
     '/lv /d /st /pi /bye … その他',
+    '複数曲=「/q 曲A, 曲B」/ 1メッセージに複数コマンドも可（改行区切り）',
     '詳細: /h',
   ].join('\n');
 }
@@ -611,6 +612,38 @@ function qIndex(q) {
   return (Number.isInteger(n) && n >= 1 && n <= queue.length) ? n - 1 : -1;
 }
 
+// 1引数を複数曲に分割（カンマ/読点/全角カンマ/改行区切り）。"AC/DC" を割らないため "/" は区切りにしない。
+function splitSongs(s) {
+  return String(s).split(/\s*[,、，\n]+\s*/).map((x) => x.trim()).filter(Boolean);
+}
+
+// 1メッセージ → 複数コマンド行に分割。先頭が ! or / の行＝新コマンド。
+// コマンドでない行は直前のコマンドへ ", " で追記（曲名を縦に並べて複数投入できる）。
+// 先頭から非コマンド行のみ＝コマンドメッセージではない（空配列＝会話扱い）。
+function splitCommandLines(text) {
+  const lines = String(text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const cmds = [];
+  for (const l of lines) {
+    if (/^[!\/]/.test(l)) cmds.push(l);
+    else if (cmds.length) cmds[cmds.length - 1] += ', ' + l;
+  }
+  return cmds;
+}
+
+// 複数コマンドを順に実行し、応答を連結して返す。
+//   null  = コマンドメッセージでなかった（会話/NL パスへ）
+//   ''    = コマンドは実行したが表示応答なし（/p 成功等）
+async function runCommands(text, author, userId) {
+  const cmds = splitCommandLines(text);
+  if (!cmds.length) return null;
+  const outs = [];
+  for (const c of cmds) {
+    const r = await handleCommand(c, author, userId);
+    if (r) outs.push(r);
+  }
+  return outs.length ? outs.join('\n―\n') : '';
+}
+
 // テキスト → コマンド応答（コマンドでなければ null）
 //   author=publisher uuid（通話内一意）、userId=Yay user id（安定。owner 判定に使う）。
 async function handleCommand(text, author = '?', userId = null) {
@@ -643,7 +676,20 @@ async function handleCommand(text, author = '?', userId = null) {
       case 'play':
       case 'queue': {
         if (!q) return renderQueue();           // 引数なし = 番号付き一覧
-        // /play 一本化: 空いてれば即再生（曲名=Spotify優先→YouTube）、再生中なら自動でキューに積む
+        const songs = splitSongs(q);            // カンマ/改行区切りで複数曲対応
+        // 複数曲: 空いてれば先頭を即再生、残りをキュー。再生中なら全部キュー末尾へ。
+        if (songs.length > 1) {
+          let started = null; const added = [];
+          for (const s of songs) {
+            if (!nowQuery && !starting && !started) {
+              const r = await startAny(s);
+              if (r.ok) started = s; else { queue.push(s); added.push(s); }
+            } else { queue.push(s); added.push(s); }
+          }
+          const head = started ? `▶ 再生: ${started}\n` : '';
+          return `${head}➕ ${added.length}曲をキューに追加\n` + renderQueue();
+        }
+        // 単曲: /play 一本化（空いてれば即再生、再生中なら積む）
         if (!nowQuery && !starting) { const r = await startAny(q); return r.ok ? null : notFoundMsg(q); }
         queue.push(q);
         return `➕ キューに追加(${queue.length}): ${q}\n` + renderQueue();
@@ -1016,7 +1062,7 @@ async function main() {
       const isOwner = (m) => !!ownerYayId && String(m.userId || '') === String(ownerYayId);
       const nlHandled = new Set();
       for (const m of fresh) {
-        let mr = await handleCommand(m.text, m.author, m.userId);
+        let mr = await runCommands(m.text, m.author, m.userId);
         // オーナー本人の自然言語は音楽コマンドに翻訳して実行（「○○流して」「止めて」「Spotifyで○○」等）
         if (mr === null && isOwner(m) && !/^[!\/]/.test(m.text)) {
           const nl = nlToCommand(m.text);
