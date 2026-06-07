@@ -4,6 +4,36 @@
 
 ---
 
+## 2026-06-08 — コマンド最優先化＋本名マスク＋音楽ぶつぶつ解消（3件）
+
+**Session UUID**: 713a6222-fd66-4309-b4aa-9a7796fbd7c9
+
+### 背景（究の3要望）
+1. `/ears`（聞き取り）を入れるとチャット/コマンドが効かなくなる → コマンドが何より最優先で常時応答してほしい。
+2. bot が究の本名を読み上げ/表示するのをやめたい（恒久）。
+3. bot が流す音楽がぶつぶつする（再起動後）→ ならないように。
+
+### 1. コマンド・チャット最優先化（bot_agora.mjs、commit 77f98b6）
+- 原因: メインループが聞き取り whisper（最大30s）＋返信 LLM を `await` で順次処理 → ループ下部のチャット/コマンド処理に到達できず操作が止まる。
+- 修正: `bgBusy` 単一実行ガード＋`runBg()` を追加し、**聞き取り whisper・会話返信 LLM・自発おしゃべり LLM** を非同期 background 化。メインループは毎tick「チャット受信→コマンド同期処理」を必ず実行＝コマンド最優先。重い処理は同時1本。
+- 仕様メモ: 背景処理中に来た**会話**は次tickへ送られる（文脈には積まれる）。コマンドは常時即応。
+
+### 2. 本名の恒久マスク（config.mjs + bot_agora.mjs、commit f006f9c）
+- 原因: Yay の `nickname` が本名で、入退室あいさつ（チャット＋ずんだもん声）・会話文脈ヘッダ・声の話者名・presentNames の全経路に出ていた。
+- 修正: `config.nameAlias = { '9714060': 'えも' }` を追加し、表示名解決を単一の `aliasNick()` に集約。究（Yay id 9714060）は常に「えも」表示＝本名は LLM 文脈にも TTS にも一切渡らない。別名変更は config 1箇所。
+
+### 3. 音楽ぶつぶつ＝バッファ枯渇の解消（lib/agora.mjs・bot_agora.mjs・lib/listen.mjs、commit 71bdcf6）
+- 構成: 音楽は headless Chrome 内 `<audio>` プログレッシブ再生を node プロキシ（`/stream`→googlevideo）で給餌し、リアルタイムで Agora に publish。node の event loop が詰まると即バッファ枯渇＝ぶつぶつ。
+- **主因**: `/stream` プロキシが背圧無視で `res.write` 垂れ流し → 数十MBのトラックが node メモリに溜まり GC で event loop が詰まる。→ `stream.pipeline` 化（消費ペースで上流読取を止め、メモリ一定・切断で上流中断）。
+- 併せて: 録音追記を同期 `appendFileSync`→非同期 `appendFile` ／ 録音 drain を毎周回→6s間引き（`YAY_REC_DRAIN_MS`）／ 停止・スナップの mp3 変換を同期`execFileSync`→非同期（通話切替時の数秒フリーズ除去）／ whisper スレッド 4→2 既定（`YAY_WHISPER_THREADS`）。
+
+### 運用
+- 通話中ホット再起動を計3回（`./run_agora.sh`）。毎回 RTC/RTM クリーン接続・自動枠参加・録音開始を確認。
+- 全コミット `Emocute/sketches` main、Claude author、push 済（77f98b6 → f006f9c → 71bdcf6）。
+- 未検証: 音楽ぶつぶつの実聴改善は究の確認待ち。残るようなら音量帯・特定曲を切り分け。
+
+---
+
 ## 2026-06-08 — 操作コマンド受付トグル /cmds 追加（オーナー専用・state永続）
 
 **Session UUID**: 00a32cc2-7074-4169-8911-e8fc62cf578f
