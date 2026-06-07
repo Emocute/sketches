@@ -1,0 +1,46 @@
+{
+  "_comment": "Yay フォロワー成長 bot の設定。dry_run=true の間は一切の書き込み(フォロー/投稿/いいね)を実行せず、何をするかをログに出すだけ。実運用は究GO後に false へ。攻め度=中。",
+
+  "dry_run": true,
+  "self_uid": 11320230,
+
+  "claude_model": "claude-opus-4-8",
+  "reply_timeout_ms": 60000,
+
+  "poll": {
+    "activity_sec": 90,
+    "engage_min": 25
+  },
+
+  "followback": {
+    "enabled": true,
+    "max_per_hour": 20
+  },
+
+  "mention_reply": {
+    "enabled": true,
+    "max_per_hour": 15,
+    "reply_types": ["reply", "post_reply", "mention", "comment", "comment_reply", "thread_reply", "reply_to_comment"]
+  },
+
+  "proactive": {
+    "enabled": true,
+    "max_replies_per_hour": 6,
+    "max_likes_per_hour": 40,
+    "source": "tag",
+    "tags": ["雑談", "暇", "質問", "相談", "ひとりごと", "AI"],
+    "experiment_num": 1,
+    "variant_num": 1,
+    "reply_ratio": 0.35,
+    "max_targets_per_cycle": 8
+  },
+
+  "throttle": {
+    "min_action_gap_sec": 12,
+    "jitter_sec": 10
+  },
+
+  "quiet_hours": [2, 7],
+
+  "skip_users": []
+}
