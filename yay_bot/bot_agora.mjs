@@ -515,7 +515,11 @@ let jingleOn = JC().enabled !== false;
 const roster = new Map();   // Yay userId(str) → { nick, lastSeen, present }
 // publisher(uuid・通話ごとに変わる) → Yay userId（chat の id 接頭辞から学習）。声の話者名解決にも使う。
 const uuidToYayId = new Map();
-const yayIdToNick = (id) => (id != null ? roster.get(String(id))?.nick : null) || null;
+// 本名秘匿（究指示・恒久）: config.nameAlias で指定された Yay id は本名でなく別名を返す。
+//   ここは表示名解決の単一チョークポイント（speakerName/speakerNameByUuid/presentNames が通る）。
+const NAME_ALIAS = CONFIG.nameAlias || {};
+const aliasNick = (id, raw) => (id != null && NAME_ALIAS[String(id)]) || raw || null;
+const yayIdToNick = (id) => aliasNick(id, id != null ? roster.get(String(id))?.nick : null);
 // チャット発言者の表示名: Yay id→nick を最優先、無ければ uuid 学習経由、最後は短縮 uuid。
 function speakerName(m) {
   const yid = m.userId || uuidToYayId.get(m.author) || null;
@@ -591,7 +595,7 @@ async function pollMembersAndDiff() {
     if (!id || id === selfId) continue;     // 自分(Emo)は除外
     seenNow.add(id);
     const prev = roster.get(id);
-    const nick = u.nickname || prev?.nick || null;
+    const nick = aliasNick(id, u.nickname || prev?.nick || null);   // 本名秘匿: あいさつ/声も別名で
     if (!prev || !prev.present) {
       if (memberSeeded) {
         const gap = prev ? (now - (prev.lastSeen || 0)) : Infinity;

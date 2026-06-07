@@ -50,6 +50,14 @@ export const CONFIG = {
     maxQueue: 8,          // 溜まり過ぎ防止（超えたら古いものから捨てる）
   },
 
+  // ── 本名秘匿（究指示・恒久）──
+  //   Yay の nickname がアカウントの本名でも、ここで指定した別名で表示・読み上げする。
+  //   適用範囲: 入退室あいさつ(チャット＋ずんだもん声)・会話文脈のヘッダ・声の話者名 すべて。
+  //   key = Yay user id（文字列） / value = 代わりに使う表示名。
+  nameAlias: {
+    '9714060': 'えも',   // 究＝えも。本名を一切読まない／出さない（恒久）
+  },
+
   // 状態ファイル
   stateFile: new URL('./state.json', import.meta.url).pathname,
 
