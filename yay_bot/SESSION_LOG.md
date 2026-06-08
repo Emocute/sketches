@@ -27,9 +27,13 @@
 - **主因**: `/stream` プロキシが背圧無視で `res.write` 垂れ流し → 数十MBのトラックが node メモリに溜まり GC で event loop が詰まる。→ `stream.pipeline` 化（消費ペースで上流読取を止め、メモリ一定・切断で上流中断）。
 - 併せて: 録音追記を同期 `appendFileSync`→非同期 `appendFile` ／ 録音 drain を毎周回→6s間引き（`YAY_REC_DRAIN_MS`）／ 停止・スナップの mp3 変換を同期`execFileSync`→非同期（通話切替時の数秒フリーズ除去）／ whisper スレッド 4→2 既定（`YAY_WHISPER_THREADS`）。
 
+### 4. 入退室あいさつの深夜配慮を無効化（config.mjs、commit 613c95e）
+- 症状: 「入った人に声で読み上げなくなった」。原因はバグでなく config `quietHours: [1, 7]`（1〜7時は声オフ・チャットのみ）。実時刻 01:56 で帯内に入り声だけ抑制されていた（あいさつ自体はチャットに出ていた）。
+- 修正: 究指示で `quietHours: null`＝24時間声あり。夜静かにしたい時は `[1,7]` 等に戻すだけ。
+
 ### 運用
-- 通話中ホット再起動を計3回（`./run_agora.sh`）。毎回 RTC/RTM クリーン接続・自動枠参加・録音開始を確認。
-- 全コミット `Emocute/sketches` main、Claude author、push 済（77f98b6 → f006f9c → 71bdcf6）。
+- 通話中ホット再起動を複数回（`./run_agora.sh`）。毎回 RTC/RTM クリーン接続・自動枠参加・録音開始を確認。途中 RTM未参加で枠を見失う事象あり→再起動で復帰。最後は「通話待ち受け」状態で終了（究が枠に入れば自動参加）。
+- 全コミット `Emocute/sketches` main、Claude author、push 済（77f98b6 → f006f9c → 71bdcf6 → 613c95e）。
 - 未検証: 音楽ぶつぶつの実聴改善は究の確認待ち。残るようなら音量帯・特定曲を切り分け。
 
 ---
