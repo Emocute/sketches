@@ -116,39 +116,86 @@ def in_quiet_hours(cfg: dict) -> bool:
     return lo <= h < hi if lo <= hi else (h >= lo or h < hi)
 
 
-# ───────────────────────── 返信生成（claude -p / 中立 cwd） ─────────────────────────
+# ───────────────────────── 返信生成（ローカルLLM or claude -p / 中立 cwd） ─────────────────────────
 
-def gen_reply(persona: str, asker: str, text: str, cfg: dict) -> str:
-    """grok 型ペルソナで返信本文を作る。出力の 'REPLY:' 以降だけ採用。"""
-    import tempfile
-    prompt = (
-        f"{persona}\n\n"
-        f"---\n"
-        f"{asker} さんからの投稿/メンション:\n「{text}」\n\n"
-        f"これに上のキャラクターで返信せよ。255文字以内。最後に必ず『REPLY: 』に続けて本文だけ書く。"
+def _gen_ollama(prompt: str, cfg: dict) -> str:
+    """Ollama ローカルLLM に prompt を投げて生成テキストを返す。失敗時は "" を返す
+    （呼び出し側がフォールバック判定に使う）。標準ライブラリのみ（依存追加なし）。"""
+    import urllib.request
+    lc = cfg.get("local_llm", {})
+    base = lc.get("base_url", "http://localhost:11434").rstrip("/")
+    model = lc.get("model", "qwen2.5:7b")
+    timeout = cfg.get("reply_timeout_ms", 60000) / 1000.0
+    payload = json.dumps({"model": model, "prompt": prompt, "stream": False}).encode("utf-8")
+    req = urllib.request.Request(
+        base + "/api/generate", data=payload,
+        headers={"Content-Type": "application/json"},
     )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            data = json.loads(r.read().decode("utf-8"))
+        return (data.get("response") or "").strip()
+    except Exception as e:
+        log(f"  [local-llm fail→claude] {type(e).__name__}: {str(e)[:80]}")
+        return ""
+
+
+def _gen_claude(prompt: str, cfg: dict) -> str:
+    """claude -p（中立 cwd・ツール無し）で生成。タイムアウト時は ""。"""
+    import tempfile
     env = dict(os.environ)
     env.pop("CLAUDECODE", None)
     env.pop("CLAUDE_CODE_ENTRYPOINT", None)
     model = cfg.get("claude_model", "claude-opus-4-8")
     timeout = cfg.get("reply_timeout_ms", 60000) / 1000.0
     try:
-        out = subprocess.run(
+        return subprocess.run(
             ["claude", "-p", prompt, "--model", model, "--strict-mcp-config"],
             cwd=tempfile.gettempdir(), env=env,
             capture_output=True, text=True, timeout=timeout,
         ).stdout
     except subprocess.TimeoutExpired:
-        log("  reply gen timeout")
+        log("  claude gen timeout")
         return ""
-    low = out.rfind("REPLY:")
-    body = (out[low + 6:] if low >= 0 else out).strip()
-    return body[:255]
+
+
+def _generate(prompt: str, cfg: dict) -> str:
+    """生成の入口。local_llm.enabled なら Ollama を試し、空が返れば claude -p に自動フォールバック。"""
+    if cfg.get("local_llm", {}).get("enabled"):
+        out = _gen_ollama(prompt, cfg)
+        if out:
+            return out
+        # Ollama 未起動/失敗 → claude にフォールバック（無音で落とさない）
+    return _gen_claude(prompt, cfg)
+
+
+def _after_marker(out: str, marker: str) -> str:
+    """最初のマーカー以降の本文を取り出す。ローカルLLM は末尾にマーカーを再掲する癖が
+    あるので、2個目のマーカーが出たらそこで切る（claude 出力でも同じ結果になる）。"""
+    i = out.find(marker)
+    if i < 0:
+        return out.strip()
+    rest = out[i + len(marker):]
+    j = rest.find(marker)
+    if j >= 0:
+        rest = rest[:j]
+    return rest.strip()
+
+
+def gen_reply(persona: str, asker: str, text: str, cfg: dict) -> str:
+    """grok 型ペルソナで返信本文を作る。出力の 'REPLY:' 以降だけ採用。"""
+    prompt = (
+        f"{persona}\n\n"
+        f"---\n"
+        f"{asker} さんからの投稿/メンション:\n「{text}」\n\n"
+        f"これに上のキャラクターで返信せよ。255文字以内。最後に必ず『REPLY: 』に続けて本文だけ書く。"
+    )
+    out = _generate(prompt, cfg)
+    return _after_marker(out, "REPLY:")[:255]
 
 
 def gen_post(post_persona: str, intent: str, avoid: list, cfg: dict) -> str:
     """自発投稿（単独ポスト）を1本作る。出力の 'POST:' 以降だけ採用。"""
-    import tempfile
     avoid_block = ""
     if avoid:
         avoid_block = "直近の自分の投稿（言い回し・話題が被らないように）:\n" + "\n".join(f"- {a[:60]}" for a in avoid[-cfg.get('post', {}).get('avoid_recent', 6):]) + "\n\n"
@@ -158,28 +205,12 @@ def gen_post(post_persona: str, intent: str, avoid: list, cfg: dict) -> str:
         f"今回の方針: {intent}\n\n"
         f"上のキャラクターでこの方針の投稿を1本書け。255文字以内。最後に必ず『POST: 』に続けて本文だけ書く。"
     )
-    env = dict(os.environ)
-    env.pop("CLAUDECODE", None)
-    env.pop("CLAUDE_CODE_ENTRYPOINT", None)
-    model = cfg.get("claude_model", "claude-opus-4-8")
-    timeout = cfg.get("reply_timeout_ms", 60000) / 1000.0
-    try:
-        out = subprocess.run(
-            ["claude", "-p", prompt, "--model", model, "--strict-mcp-config"],
-            cwd=tempfile.gettempdir(), env=env,
-            capture_output=True, text=True, timeout=timeout,
-        ).stdout
-    except subprocess.TimeoutExpired:
-        log("  post gen timeout")
-        return ""
-    low = out.rfind("POST:")
-    body = (out[low + 5:] if low >= 0 else out).strip()
-    return body[:255]
+    out = _generate(prompt, cfg)
+    return _after_marker(out, "POST:")[:255]
 
 
 def gen_poll(post_persona: str, intent: str, avoid: list, cfg: dict):
     """投票を1つ作る。戻り (question, [choices])。失敗時 (None, None)。"""
-    import tempfile
     prompt = (
         f"{post_persona}\n\n---\n"
         f"今回は『投票（アンケート）』形式の投稿を作る。方針: {intent}\n"
@@ -190,18 +221,8 @@ def gen_poll(post_persona: str, intent: str, avoid: list, cfg: dict):
         f"CHOICE: <選択肢2>\n"
         f"（必要なら CHOICE: をあと1〜2行）"
     )
-    env = dict(os.environ)
-    env.pop("CLAUDECODE", None)
-    env.pop("CLAUDE_CODE_ENTRYPOINT", None)
-    model = cfg.get("claude_model", "claude-opus-4-8")
-    timeout = cfg.get("reply_timeout_ms", 60000) / 1000.0
-    try:
-        out = subprocess.run(
-            ["claude", "-p", prompt, "--model", model, "--strict-mcp-config"],
-            cwd=tempfile.gettempdir(), env=env,
-            capture_output=True, text=True, timeout=timeout,
-        ).stdout
-    except subprocess.TimeoutExpired:
+    out = _generate(prompt, cfg)
+    if not out:
         return None, None
     q = None
     choices = []

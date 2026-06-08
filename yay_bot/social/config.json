@@ -3,6 +3,12 @@
   "dry_run": false,
   "self_uid": 11320230,
   "claude_model": "claude-opus-4-8",
+  "_local_llm_comment": "返信/投稿生成を Ollama ローカルLLM に回す(API代ゼロ・短文判定向き)。enabled=false で claude -p に戻る。Ollama 未起動/失敗時は自動で claude -p にフォールバック。",
+  "local_llm": {
+    "enabled": true,
+    "base_url": "http://localhost:11434",
+    "model": "qwen2.5:7b"
+  },
   "reply_timeout_ms": 60000,
   "poll": {
     "activity_sec": 15,
