@@ -1,33 +1,46 @@
 {
   "_comment": "Yay フォロワー成長 bot の設定。dry_run=true の間は一切の書き込み(フォロー/投稿/いいね)を実行せず、何をするかをログに出すだけ。実運用は究GO後に false へ。攻め度=中。",
-
   "dry_run": false,
   "self_uid": 11320230,
-
   "claude_model": "claude-opus-4-8",
   "reply_timeout_ms": 60000,
-
   "poll": {
-    "activity_sec": 90,
+    "activity_sec": 45,
     "engage_min": 25
   },
-
   "followback": {
     "enabled": true,
     "max_per_hour": 20,
     "quality": {
       "min_posts": 1,
-      "circle_keywords": ["相互", "フォロバ", "リフォロー", "フォロー返", "無言フォロー", "f4f", "follow4follow", "followback", "follow back", "全フォロ", "フォロ爆"]
+      "circle_keywords": [
+        "相互",
+        "フォロバ",
+        "リフォロー",
+        "フォロー返",
+        "無言フォロー",
+        "f4f",
+        "follow4follow",
+        "followback",
+        "follow back",
+        "全フォロ",
+        "フォロ爆"
+      ]
     }
   },
-
   "post": {
     "enabled": true,
     "per_day": 6,
     "min_gap_min": 180,
-    "golden_hours": [19, 24],
+    "golden_hours": [
+      19,
+      24
+    ],
     "golden_min_gap_min": 70,
-    "active_hours": [8, 24],
+    "active_hours": [
+      8,
+      24
+    ],
     "avoid_recent": 10,
     "intents": [
       "『相談のります』系の投稿。恋愛・人間関係・勉強・将来・将来の不安など、悩みを軽く投げてもらえるよう自然に促す。説教くさくならず『一人で抱えてるやつ、投げてくれたら一緒に考えるよ』のトーン。あからさまな宣伝にしない",
@@ -46,33 +59,50 @@
       "ちょっと考える価値観の二択投票（安定/挑戦、過程/結果 など）。答えやすく対立を煽らない範囲で"
     ]
   },
-
   "mention_reply": {
     "enabled": true,
     "max_per_hour": 15,
-    "exclude_types": ["like", "follow", "follow_accepted", "profile_screenshot", "repost", "follow_request", "gift", "birthday"]
+    "exclude_types": [
+      "like",
+      "follow",
+      "follow_accepted",
+      "profile_screenshot",
+      "repost",
+      "follow_request",
+      "gift",
+      "birthday"
+    ]
   },
-
   "proactive": {
     "enabled": true,
     "max_replies_per_hour": 6,
     "max_likes_per_hour": 40,
     "source": "tag",
-    "tags": ["雑談", "暇", "質問", "相談", "ひとりごと", "AI", "MBTI", "心理学", "豆知識"],
+    "tags": [
+      "雑談",
+      "暇",
+      "質問",
+      "相談",
+      "ひとりごと",
+      "AI",
+      "MBTI",
+      "心理学",
+      "豆知識"
+    ],
     "experiment_num": 1,
     "variant_num": 1,
-    "reply_ratio": 0.2,
+    "reply_ratio": 0.0,
     "follow_ratio": 0.4,
-    "_balance_note": "嫌われない範囲で能動的に。いいねした良い投稿の主を控えめにフォロー(選別=サークル/bot除外、follow上限/時で抑制)、コールド返信は低め。乱フォロー・連投はしない",
+    "_balance_note": "オープンTLへのいきなりリプ禁止(究指示)。コールドリプはreply_ratio=0で停止。いいね/選別フォローのみ。返信は被メンションのみ最優先",
     "max_targets_per_cycle": 8
   },
-
   "throttle": {
-    "min_action_gap_sec": 12,
-    "jitter_sec": 10
+    "min_action_gap_sec": 8,
+    "jitter_sec": 7
   },
-
-  "quiet_hours": [2, 7],
-
+  "quiet_hours": [
+    2,
+    7
+  ],
   "skip_users": []
 }

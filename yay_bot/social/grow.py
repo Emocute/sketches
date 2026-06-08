@@ -376,6 +376,7 @@ async def job_activities(client, lim, cfg, state, persona):
                     except Exception:
                         pass
                 if pid and uid and uid != cfg["self_uid"] and text:
+                    log(f"  📨 MENTION from {nick}: {text[:45]}")  # 最優先・可視化
                     await do_reply(client, lim, cfg, state, "mreply",
                                    cfg["mention_reply"]["max_per_hour"], pid, uid, nick, text, persona)
                     continue
@@ -389,6 +390,28 @@ async def job_activities(client, lim, cfg, state, persona):
     for k in ("seen_act", "followed", "replied", "liked"):
         if len(state[k]) > 4000:
             state[k] = state[k][-2000:]
+
+
+async def job_followback_reconcile(client, lim, cfg, state):
+    """フォロワー名簿とフォロー中名簿を突き合わせ、未フォロバを確実に返す（通知漏れ対策）。
+    通知(follow activity)はスクロールアウト/取りこぼしがあるので、これが堅い backstop。"""
+    if not cfg["followback"].get("enabled"):
+        return
+    try:
+        fr = await client.get_user_followers(cfg["self_uid"])
+        followers = getattr(fr, "users", None) or []
+        fl = await client.get_user_followings(cfg["self_uid"])
+        following_ids = set(getattr(u, "id", None) for u in (getattr(fl, "users", None) or []))
+    except Exception as e:
+        log(f"followback reconcile fetch failed: {type(e).__name__} {e}")
+        return
+    pend = [u for u in followers
+            if getattr(u, "id", None) and getattr(u, "id", None) not in following_ids
+            and getattr(u, "id", None) != cfg["self_uid"]]
+    if pend:
+        log(f"  ↩ 未フォロバ {len(pend)}人 → 返す")
+    for u in pend:
+        await do_follow(client, lim, cfg, state, getattr(u, "id", None), getattr(u, "nickname", "") or "")
 
 
 async def job_post(client, lim, cfg, state, post_persona):
@@ -531,30 +554,63 @@ async def run_loop(once: bool):
     mode = "DRY-RUN（書き込みなし）" if cfg.get("dry_run", True) else "LIVE（実発射）"
     log(f"=== grow.py start [{mode}] 攻め度=中 ===")
 
-    client = build_client()
-    next_engage = 0.0
-    try:
+    # ── メンション＋フォロバ＝最優先の高速ループ。重い proactive とは分離して、
+    #    proactive の throttle 待ち中でもメンションが即処理されるようにする。
+    #    各ループは専用クライアントを毎周作り直す（長時間でフィードが詰まるのを防ぐ）。
+    async def fast_loop():  # 被メンション返信＋フォロバ＋投稿
+        client = None
         while True:
             try:
-                await job_activities(client, lim, cfg, state, persona)
-                await job_post(client, lim, cfg, state, post_persona)
-                if time.time() >= next_engage:
-                    await job_proactive(client, lim, cfg, state, persona)
-                    next_engage = time.time() + cfg["poll"]["engage_min"] * 60
+                c = load_json(CONFIG_FILE, {})
+                lim.cfg = c
+                if client is not None:
+                    try: await client.close()
+                    except Exception: pass
+                client = build_client()
+                await job_activities(client, lim, c, state, persona)
+                await job_followback_reconcile(client, lim, c, state)
+                await job_post(client, lim, c, state, post_persona)
                 save_state(state)
             except Exception as e:
-                # 1 周のエラーでデーモンを落とさない（常時待機を維持）
-                log(f"[loop error] {type(e).__name__}: {str(e)[:120]}")
+                log(f"[fast loop error] {type(e).__name__}: {str(e)[:120]}")
             if once:
-                log("=== --once done ===")
                 break
-            await asyncio.sleep(cfg["poll"]["activity_sec"])
+            await asyncio.sleep(load_json(CONFIG_FILE, {}).get("poll", {}).get("activity_sec", 45))
+        if client is not None:
+            try: await client.close()
+            except Exception: pass
+
+    async def engage_loop():  # おすすめ/タグ巡回でいいね＋選別フォロー（重い・低頻度）
+        client = None
+        c0 = load_json(CONFIG_FILE, {})
+        await asyncio.sleep(min(90, c0.get("poll", {}).get("engage_min", 25) * 60))  # 起動直後は走らせない
+        while True:
+            try:
+                c = load_json(CONFIG_FILE, {})
+                if client is not None:
+                    try: await client.close()
+                    except Exception: pass
+                client = build_client()
+                await job_proactive(client, lim, c, state, persona)
+                save_state(state)
+            except Exception as e:
+                log(f"[engage loop error] {type(e).__name__}: {str(e)[:120]}")
+            if once:
+                break
+            await asyncio.sleep(load_json(CONFIG_FILE, {}).get("poll", {}).get("engage_min", 25) * 60)
+        if client is not None:
+            try: await client.close()
+            except Exception: pass
+
+    try:
+        if once:
+            await fast_loop()
+            await engage_loop()
+            log("=== --once done ===")
+        else:
+            await asyncio.gather(fast_loop(), engage_loop())
     finally:
         save_state(state)
-        try:
-            await client.close()
-        except Exception:
-            pass
 
 
 async def main():
