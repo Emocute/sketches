@@ -5,8 +5,9 @@
   "claude_model": "claude-opus-4-8",
   "reply_timeout_ms": 60000,
   "poll": {
-    "activity_sec": 45,
-    "engage_min": 25
+    "activity_sec": 15,
+    "engage_min": 25,
+    "reconcile_sec": 60
   },
   "followback": {
     "enabled": true,

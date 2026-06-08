@@ -557,8 +557,9 @@ async def run_loop(once: bool):
     # ── メンション＋フォロバ＝最優先の高速ループ。重い proactive とは分離して、
     #    proactive の throttle 待ち中でもメンションが即処理されるようにする。
     #    各ループは専用クライアントを毎周作り直す（長時間でフィードが詰まるのを防ぐ）。
-    async def fast_loop():  # 被メンション返信＋フォロバ＋投稿
+    async def fast_loop():  # 被メンション返信＝最優先（毎周・プッシュ並み）。照合/投稿は間引き
         client = None
+        last_slow = 0.0
         while True:
             try:
                 c = load_json(CONFIG_FILE, {})
@@ -567,15 +568,19 @@ async def run_loop(once: bool):
                     try: await client.close()
                     except Exception: pass
                 client = build_client()
+                # メンションは毎周・最優先（速さの肝）
                 await job_activities(client, lim, c, state, persona)
-                await job_followback_reconcile(client, lim, c, state)
-                await job_post(client, lim, c, state, post_persona)
+                # フォロバ照合と投稿はやや重いので reconcile_sec おきに間引く
+                if time.time() - last_slow >= c.get("poll", {}).get("reconcile_sec", 60):
+                    await job_followback_reconcile(client, lim, c, state)
+                    await job_post(client, lim, c, state, post_persona)
+                    last_slow = time.time()
                 save_state(state)
             except Exception as e:
                 log(f"[fast loop error] {type(e).__name__}: {str(e)[:120]}")
             if once:
                 break
-            await asyncio.sleep(load_json(CONFIG_FILE, {}).get("poll", {}).get("activity_sec", 45))
+            await asyncio.sleep(load_json(CONFIG_FILE, {}).get("poll", {}).get("activity_sec", 15))
         if client is not None:
             try: await client.close()
             except Exception: pass
