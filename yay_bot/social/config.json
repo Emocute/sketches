@@ -5,7 +5,7 @@
   "claude_model": "claude-opus-4-8",
   "_local_llm_comment": "返信/投稿生成を Ollama ローカルLLM に回す(API代ゼロ・短文判定向き)。enabled=false で claude -p に戻る。Ollama 未起動/失敗時は自動で claude -p にフォールバック。",
   "local_llm": {
-    "enabled": true,
+    "enabled": false,
     "base_url": "http://localhost:11434",
     "model": "qwen2.5:7b"
   },

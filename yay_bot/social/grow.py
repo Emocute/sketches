@@ -182,16 +182,23 @@ def _after_marker(out: str, marker: str) -> str:
     return rest.strip()
 
 
-def gen_reply(persona: str, asker: str, text: str, cfg: dict) -> str:
-    """grok 型ペルソナで返信本文を作る。出力の 'REPLY:' 以降だけ採用。"""
+def gen_reply(persona: str, asker: str, text: str, cfg: dict, extra: str = "") -> str:
+    """grok 型ペルソナで返信本文を作る。出力の 'REPLY:' 以降だけ採用。
+    extra: 相手の投稿一覧など、返信の根拠にする追加文脈（『振り返って/診断して』系で渡す）。"""
     prompt = (
         f"{persona}\n\n"
         f"---\n"
-        f"{asker} さんからの投稿/メンション:\n「{text}」\n\n"
-        f"これに上のキャラクターで返信せよ。255文字以内。最後に必ず『REPLY: 』に続けて本文だけ書く。"
+        f"{asker} さんからの投稿/メンション:\n「{text}」\n"
+        f"{extra}\n"
+        f"これに上のキャラクターで返信せよ。255文字以内。"
+        f"返信は本文だけ。相手の名前や『@〜』は付けない（スレッドで分かるので不要）。"
+        f"最後に必ず『REPLY: 』に続けて本文だけ書く。"
     )
     out = _generate(prompt, cfg)
-    return _after_marker(out, "REPLY:")[:255]
+    body = _after_marker(out, "REPLY:")[:255]
+    # 保険: 生成が先頭に @名前 を付けても落とす
+    import re as _re
+    return _re.sub(r"^@\S+\s*", "", body).strip()
 
 
 def gen_post(post_persona: str, intent: str, avoid: list, cfg: dict) -> str:
@@ -266,10 +273,12 @@ async def passes_quality(client, cfg, uid: int, nick: str) -> bool:
 async def do_follow(client, lim, cfg, state, uid: int, nick: str):
     if uid in state["followed"] or uid == cfg["self_uid"] or uid in cfg.get("skip_users", []):
         return False
-    if not lim.allow("follow", cfg["followback"]["max_per_hour"]):
-        log(f"  [skip] follow cap reached (uid={uid})")
+    if uid in state.get("fb_skip", []):  # 品質で弾いた相手は再試行しない（照合の無限ループ防止）
         return False
+    if not lim.allow("follow", cfg["followback"]["max_per_hour"]):
+        return False  # cap は一時的（次の時間で再試行）。skip には入れない
     if not await passes_quality(client, cfg, uid, nick):
+        state.setdefault("fb_skip", []).append(uid)  # 恒久スキップ＝以後照合で拾わない
         return False
     if cfg["dry_run"]:
         log(f"  [DRY] follow {nick}({uid})")
@@ -293,12 +302,26 @@ async def do_reply(client, lim, cfg, state, bucket: str, cap: int, post_id: int,
     if not lim.allow(bucket, cap):
         log(f"  [skip] {bucket} cap reached (post={post_id})")
         return False
-    body = gen_reply(persona, nick, text, cfg)
+    # 「振り返って / 診断して / 分析して」系は相手の投稿を読んで根拠つきで返す
+    extra = ""
+    import re as _re
+    if _re.search(r"振り返|感想|診断|分析|見て|読んで|どう思|占って", text):
+        try:
+            tl = await client.get_user_timeline(uid, number=20)
+            posts = [(getattr(x, "text", "") or "").replace("\n", " ").strip()
+                     for x in (getattr(tl, "posts", None) or [])]
+            posts = [p for p in posts if p and "@Emo" not in p][:14]
+            if posts:
+                extra = ("\n【" + nick + "さんの最近の投稿（これを根拠に。当て推量で褒めない）】\n"
+                         + "\n".join("・" + p[:60] for p in posts))
+        except Exception:
+            pass
+    body = gen_reply(persona, nick, text, cfg, extra)
     if not body:
         log(f"  [skip] empty reply (post={post_id})")
         return False
-    mention = f"@{nick} " if nick else ""
-    full = (mention + body)[:255]
+    # in_reply_to で相手は分かるので「@名前」は付けない（余計・くどい）。
+    full = body[:255]
     if cfg["dry_run"]:
         log(f"  [DRY] reply→{nick}({uid}) post#{post_id}: {full[:80]}")
         state["replied"].append(post_id)
@@ -358,58 +381,52 @@ async def job_activities(client, lim, cfg, state, persona):
     if not acts:
         return
     exclude_types = set(cfg["mention_reply"].get("exclude_types", []))
-    new_seen = 0
     for a in reversed(acts):  # 古い順に処理
-        aid = getattr(a, "id", None)
         atype = getattr(a, "type", None)
         if isinstance(atype, dict):
             atype = atype.get("type") or atype.get("name") or str(atype)
+        fp = getattr(a, "from_post", None)
+
+        # ── メンション/返信（from_post あり・除外typeでない）= 最優先。
+        #    「返信済み集合」で判定し、成功するまで毎周リトライ（既読skipで放置しない＝二度と取りこぼさない）。
+        if cfg["mention_reply"]["enabled"] and fp is not None and atype not in exclude_types:
+            pid, uid, nick, text = _post_fields(fp)
+            if pid and pid in state["replied"]:
+                continue  # もう返した
+            # tagged 等は activity の from_post に user/text が欠ける → get_post で補完
+            if pid and (uid is None or not text):
+                try:
+                    gp = await client.get_post(pid)
+                    pp = getattr(gp, "post", gp)
+                    au = getattr(pp, "user", None)
+                    uid = uid or getattr(au, "id", None)
+                    nick = (getattr(au, "nickname", None) or nick) if au else nick
+                    text = text or (getattr(pp, "text", "") or "").strip()
+                except Exception:
+                    pass
+            if pid and uid and uid != cfg["self_uid"] and text:
+                log(f"  📨 MENTION from {nick}: {text[:45]}")
+                await do_reply(client, lim, cfg, state, "mreply",
+                               cfg["mention_reply"]["max_per_hour"], pid, uid, nick, text, persona)
+            elif pid:
+                state["replied"].append(pid)  # 送信者/本文が取れず返しようがない→無限ループ回避
+            continue
+
+        # ── 非メンション通知（follow / like 等）= seen_act で一度だけ処理
+        aid = getattr(a, "id", None)
         key = f"a{aid}" if aid is not None else f"t{atype}:{getattr(a,'created_at_millis',0)}"
         if key in state["seen_act"]:
             continue
         state["seen_act"].append(key)
-        new_seen += 1
-
-        # 1) フォロバ
         if cfg["followback"]["enabled"] and atype == "follow":
             for u in (getattr(a, "followers", None) or ([getattr(a, "user", None)] if getattr(a, "user", None) else [])):
                 if u is None:
                     continue
                 await do_follow(client, lim, cfg, state, getattr(u, "id", None), getattr(u, "nickname", "") or "")
-            continue
 
-        # 2) from_post 付きの通知 = 誰かが自分に絡んできた（メンション/返信/コメント）→ 必ず返す。
-        #    type 名は環境で変わり取りこぼすので白名簿に頼らず「from_post の有無」で判定。
-        #    除外 type（いいね/フォロー/リポスト等）だけスキップ。
-        if cfg["mention_reply"]["enabled"] and atype not in exclude_types:
-            fp = getattr(a, "from_post", None)
-            if fp is not None:
-                pid, uid, nick, text = _post_fields(fp)
-                # tagged 等は activity の from_post に user/text が欠けることがある → get_post で補完
-                if pid and (uid is None or not text):
-                    try:
-                        gp = await client.get_post(pid)
-                        pp = getattr(gp, "post", gp)
-                        au = getattr(pp, "user", None)
-                        uid = uid or getattr(au, "id", None)
-                        nick = (getattr(au, "nickname", None) or nick) if au else nick
-                        text = text or (getattr(pp, "text", "") or "").strip()
-                    except Exception:
-                        pass
-                if pid and uid and uid != cfg["self_uid"] and text:
-                    log(f"  📨 MENTION from {nick}: {text[:45]}")  # 最優先・可視化
-                    await do_reply(client, lim, cfg, state, "mreply",
-                                   cfg["mention_reply"]["max_per_hour"], pid, uid, nick, text, persona)
-                    continue
-
-        # 3) 可視化（どの type が来たか・from_post 有無）
-        log(f"  [type] '{atype}' (from_post={getattr(a,'from_post',None) is not None})")
-
-    if new_seen:
-        log(f"activities: {new_seen} new processed (followed={len(state['followed'])}, replied={len(state['replied'])})")
     # seen 配列の肥大を抑える
-    for k in ("seen_act", "followed", "replied", "liked"):
-        if len(state[k]) > 4000:
+    for k in ("seen_act", "followed", "replied", "liked", "fb_skip"):
+        if len(state.get(k, [])) > 4000:
             state[k] = state[k][-2000:]
 
 
@@ -426,13 +443,17 @@ async def job_followback_reconcile(client, lim, cfg, state):
     except Exception as e:
         log(f"followback reconcile fetch failed: {type(e).__name__} {e}")
         return
+    skip = set(state.get("fb_skip", [])) | set(state.get("followed", []))
     pend = [u for u in followers
             if getattr(u, "id", None) and getattr(u, "id", None) not in following_ids
+            and getattr(u, "id", None) not in skip
             and getattr(u, "id", None) != cfg["self_uid"]]
-    if pend:
-        log(f"  ↩ 未フォロバ {len(pend)}人 → 返す")
+    done = 0
     for u in pend:
-        await do_follow(client, lim, cfg, state, getattr(u, "id", None), getattr(u, "nickname", "") or "")
+        if await do_follow(client, lim, cfg, state, getattr(u, "id", None), getattr(u, "nickname", "") or ""):
+            done += 1
+    if done:
+        log(f"  ↩ フォロバ {done}人")
 
 
 async def job_post(client, lim, cfg, state, post_persona):
@@ -535,7 +556,7 @@ async def job_proactive(client, lim, cfg, state, persona):
 # ───────────────────────── メイン ─────────────────────────
 
 DEFAULT_STATE = {"seen_act": [], "followed": [], "replied": [], "liked": [],
-                 "post_log": [], "post_texts": [], "hits": {}, "last_action": 0}
+                 "fb_skip": [], "post_log": [], "post_texts": [], "hits": {}, "last_action": 0}
 
 
 async def cmd_check(client, cfg):
