@@ -456,6 +456,37 @@ async def job_followback_reconcile(client, lim, cfg, state):
         log(f"  ↩ フォロバ {done}人")
 
 
+async def job_circle_grow(client, lim, cfg, state):
+    """フォロバサークルの中の人を相互フォローしてフォロワーを増やす。
+    サークル＝『全員フォロー返す』前提の集まりなので、こちらから follow→相手が follow back。"""
+    cc = cfg.get("circles")
+    if not cc or not cc.get("enabled"):
+        return
+    gids = cc.get("group_ids") or []
+    if not gids:
+        return
+    gid = gids[int(time.time() // 60) % len(gids)]  # サークルを順番に回す
+    try:
+        r = await client.get_group_members(gid, number=cc.get("member_fetch", 50))
+        members = getattr(r, "group_users", None) or getattr(r, "users", None) or []
+    except Exception as e:
+        log(f"circle members fetch failed (g{gid}): {type(e).__name__} {e}")
+        return
+    random.shuffle(members)
+    done = 0
+    for m in members:
+        if done >= cc.get("follow_per_cycle", 6):
+            break
+        u = getattr(m, "user", m)
+        uid = getattr(u, "id", None)
+        nick = getattr(u, "nickname", "") or ""
+        if uid and uid not in state["followed"]:
+            if await do_follow(client, lim, cfg, state, uid, nick):
+                done += 1
+    if done:
+        log(f"  🔵 circle follow {done}人 (g{gid})")
+
+
 async def job_post(client, lim, cfg, state, post_persona):
     """自発投稿。1日 per_day 本まで、最短間隔・活動時間帯を守って単独ポストを流す。"""
     pc = cfg.get("post")
@@ -615,6 +646,7 @@ async def run_loop(once: bool):
                 # フォロバ照合と投稿はやや重いので reconcile_sec おきに間引く
                 if time.time() - last_slow >= c.get("poll", {}).get("reconcile_sec", 60):
                     await job_followback_reconcile(client, lim, c, state)
+                    await job_circle_grow(client, lim, c, state)  # サークルの中の人を相互フォロー
                     await job_post(client, lim, c, state, post_persona)
                     last_slow = time.time()
                 save_state(state)

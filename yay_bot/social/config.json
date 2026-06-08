@@ -17,22 +17,10 @@
   },
   "followback": {
     "enabled": true,
-    "max_per_hour": 20,
+    "max_per_hour": 40,
     "quality": {
-      "min_posts": 1,
-      "circle_keywords": [
-        "相互",
-        "フォロバ",
-        "リフォロー",
-        "フォロー返",
-        "無言フォロー",
-        "f4f",
-        "follow4follow",
-        "followback",
-        "follow back",
-        "全フォロ",
-        "フォロ爆"
-      ]
+      "min_posts": 0,
+      "circle_keywords": []
     }
   },
   "post": {
@@ -111,5 +99,15 @@
     2,
     7
   ],
-  "skip_users": []
+  "skip_users": [],
+  "circles": {
+    "enabled": true,
+    "group_ids": [
+      145288,
+      368106,
+      226881
+    ],
+    "follow_per_cycle": 6,
+    "member_fetch": 50
+  }
 }
