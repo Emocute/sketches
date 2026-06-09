@@ -57,8 +57,8 @@ const persistFlags = () => {
 const DISCOVER_UID = String(process.env.YAY_WATCH_UID || CONFIG.watchYayId || SELF_UID);
 // 監視運用か（究=えものアカウントを見張って枠に自動入室）。SELF と違う＝別アカ監視モード。
 const WATCHING = String(DISCOVER_UID) !== String(SELF_UID);
-function fetchCreds() {
-  const args = process.env.YAY_CALL_ID ? ['creds', String(process.env.YAY_CALL_ID)] : ['active', DISCOVER_UID];
+// yay_api.py を1回叩く下請け。
+function runApi(args) {
   return new Promise((resolve, reject) => {
     execFile(PY, [API, ...args], { timeout: 30000 }, (err, stdout, stderr) => {
       const lines = (stdout || '').trim().split('\n').filter(Boolean);
@@ -68,6 +68,26 @@ function fetchCreds() {
       resolve(json);
     });
   });
+}
+
+// 発見は二段（恒久対策 2026-06-09）:
+//   ① watchYayId（究）の枠を探す＝究がホストした通話に自動入室
+//   ② ①が空なら SELF_UID（EmoCC）自身の active を探す
+//   理由: get_active_call_post(究) は「究がホストした枠」しか返さず、究が入っただけの通話は拾えない。
+//        EmoCC が枠に呼ばれていれば EmoCC 自身の active で拾えるので必ず保険にする。
+//   YAY_CALL_ID 明示時はそれだけを使う（手動ピン留め）。
+function fetchCreds() {
+  if (process.env.YAY_CALL_ID) return runApi(['creds', String(process.env.YAY_CALL_ID)]);
+  const uids = [...new Set([DISCOVER_UID, SELF_UID].map(String))];
+  return (async () => {
+    let last = null;
+    for (const uid of uids) {
+      const json = await runApi(['active', uid]).catch((e) => ({ ok: false, error: e.message }));
+      if (json && json.ok) return json;
+      last = json;
+    }
+    return last || { ok: false, error: '参加中の通話が無い' };
+  })();
 }
 
 // 連投ガード
