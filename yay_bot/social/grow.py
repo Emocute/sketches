@@ -289,6 +289,7 @@ async def do_follow(client, lim, cfg, state, uid: int, nick: str):
         await client.follow_user(uid)
         lim.record("follow")
         state["followed"].append(uid)
+        state.setdefault("followed_at", {})[str(uid)] = time.time()  # 間引き判定用
         log(f"  ✓ followed {nick}({uid})")
         return True
     except Exception as e:
@@ -456,6 +457,55 @@ async def job_followback_reconcile(client, lim, cfg, state):
         log(f"  ↩ フォロバ {done}人")
 
 
+async def job_unfollow_nonfollowers(client, lim, cfg, state):
+    """フォロー返してくれない／外してきた相手を間引く。相互待ちの猶予あり（初回検出から
+    grace_hours 経っても相互でない人だけ外す＝フレッシュなフォローを誤爆しない）。"""
+    uc = cfg.get("unfollow")
+    if not uc or not uc.get("enabled"):
+        return
+    try:
+        fr = await client.get_user_followers(cfg["self_uid"])
+        follower_ids = set(getattr(u, "id", None) for u in (getattr(fr, "users", None) or []))
+        fl = await client.get_user_followings(cfg["self_uid"])
+        followings = getattr(fl, "users", None) or []
+    except Exception as e:
+        log(f"unfollow fetch failed: {type(e).__name__} {e}")
+        return
+    now = time.time()
+    seen = state.setdefault("unfollow_seen", {})  # uid -> 初回非相互検出時刻
+    grace = uc.get("grace_hours", 24) * 3600
+    done = 0
+    for u in followings:
+        if done >= uc.get("max_per_cycle", 5):
+            break
+        uid = getattr(u, "id", None)
+        if not uid or uid == cfg["self_uid"]:
+            continue
+        if uid in follower_ids:
+            seen.pop(str(uid), None)  # 相互になった→記録消す
+            continue
+        ts = seen.get(str(uid))
+        if ts is None:
+            seen[str(uid)] = now  # 初回検出＝猶予開始
+            continue
+        if now - ts < grace:
+            continue  # まだ猶予中
+        if not lim.allow("unfollow", uc.get("max_per_hour", 30)):
+            break
+        await lim.throttle()
+        try:
+            await client.unfollow_user(uid)
+            lim.record("unfollow")
+            if uid in state["followed"]:
+                state["followed"].remove(uid)
+            seen.pop(str(uid), None)
+            done += 1
+        except Exception as e:
+            log(f"  ! unfollow {uid} failed: {type(e).__name__} {e}")
+    if done:
+        log(f"  ✂ 片想い解除 {done}人")
+
+
 async def job_circle_grow(client, lim, cfg, state):
     """フォロバサークルの中の人を相互フォローしてフォロワーを増やす。
     サークル＝『全員フォロー返す』前提の集まりなので、こちらから follow→相手が follow back。"""
@@ -587,7 +637,8 @@ async def job_proactive(client, lim, cfg, state, persona):
 # ───────────────────────── メイン ─────────────────────────
 
 DEFAULT_STATE = {"seen_act": [], "followed": [], "replied": [], "liked": [],
-                 "fb_skip": [], "post_log": [], "post_texts": [], "hits": {}, "last_action": 0}
+                 "fb_skip": [], "followed_at": {}, "unfollow_seen": {},
+                 "post_log": [], "post_texts": [], "hits": {}, "last_action": 0}
 
 
 async def cmd_check(client, cfg):
@@ -633,6 +684,7 @@ async def run_loop(once: bool):
     async def fast_loop():  # 被メンション返信＝最優先（毎周・プッシュ並み）。照合/投稿は間引き
         client = None
         last_slow = 0.0
+        last_unfollow = 0.0
         while True:
             try:
                 c = load_json(CONFIG_FILE, {})
@@ -649,6 +701,9 @@ async def run_loop(once: bool):
                     await job_circle_grow(client, lim, c, state)  # サークルの中の人を相互フォロー
                     await job_post(client, lim, c, state, post_persona)
                     last_slow = time.time()
+                if time.time() - last_unfollow >= c.get("poll", {}).get("unfollow_sec", 900):
+                    await job_unfollow_nonfollowers(client, lim, c, state)  # 片想い間引き（15分おき）
+                    last_unfollow = time.time()
                 save_state(state)
             except Exception as e:
                 log(f"[fast loop error] {type(e).__name__}: {str(e)[:120]}")

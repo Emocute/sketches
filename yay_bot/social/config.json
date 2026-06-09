@@ -2,7 +2,7 @@
   "_comment": "Yay フォロワー成長 bot の設定。dry_run=true の間は一切の書き込み(フォロー/投稿/いいね)を実行せず、何をするかをログに出すだけ。実運用は究GO後に false へ。攻め度=中。",
   "dry_run": false,
   "self_uid": 11320230,
-  "claude_model": "claude-opus-4-8",
+  "claude_model": "claude-haiku-4-5-20251001",
   "_local_llm_comment": "返信/投稿生成を Ollama ローカルLLM に回す(API代ゼロ・短文判定向き)。enabled=false で claude -p に戻る。Ollama 未起動/失敗時は自動で claude -p にフォールバック。",
   "local_llm": {
     "enabled": false,
@@ -13,7 +13,8 @@
   "poll": {
     "activity_sec": 15,
     "engage_min": 25,
-    "reconcile_sec": 60
+    "reconcile_sec": 60,
+    "unfollow_sec": 900
   },
   "followback": {
     "enabled": true,
@@ -109,5 +110,11 @@
     ],
     "follow_per_cycle": 6,
     "member_fetch": 50
+  },
+  "unfollow": {
+    "enabled": true,
+    "grace_hours": 24,
+    "max_per_hour": 30,
+    "max_per_cycle": 5
   }
 }
