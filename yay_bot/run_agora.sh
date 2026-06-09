@@ -16,10 +16,10 @@ echo "✓ token ok"
 echo "▶ VOICEVOX エンジン確認（ずんだもん声の TTS バックエンド）"
 zsh scripts/voicevox_engine.sh start 2>&1 | tail -1 || echo "⚠ VOICEVOX 起動失敗（say にフォールバックする）"
 
-echo "▶ bot 起動（tmux: yay_bot）"
+echo "▶ bot 起動（tmux: yay_bot、supervise.sh で落ちても自動復帰）"
 tmux kill-session -t yay_bot 2>/dev/null
 sleep 1
-tmux new-session -d -s yay_bot "node bot_agora.mjs 2>&1 | tee /tmp/yay_bot.log"
+tmux new-session -d -s yay_bot "zsh supervise.sh"
 sleep 4
 echo "── 状態 ──"
 tmux has-session -t yay_bot 2>/dev/null && echo "bot: tmux yay_bot 稼働中" || echo "bot: 起動失敗"

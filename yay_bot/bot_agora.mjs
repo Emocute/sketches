@@ -1213,6 +1213,9 @@ async function main() {
 }
 
 process.on('unhandledRejection', (e) => console.error('unhandledRejection:', e?.message || e));
+// 最後の砦: タイマー/イベント内の同期例外で node ごと即死するのを防ぐ（落として supervise.sh 任せにせず、
+//   まず本体を生かす）。main() 自身の try/catch 再ループと合わせて二重に死なせない。
+process.on('uncaughtException', (e) => console.error('[bot] uncaughtException(継続):', e?.stack || e?.message || e));
 // 停止シグナルで録音を mp3 化してから落ちる（webm は逐次追記済なので最悪でも素材は残る）。
 // SIGHUP も捕捉（tmux kill-session / 端末切断）。停止時 mp3 化はベストエフォート、
 //   取りこぼしても次回起動の recoverOrphanRecordings() が必ず救う（二重の安全網）。
