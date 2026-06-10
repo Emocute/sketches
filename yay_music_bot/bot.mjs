@@ -81,6 +81,17 @@ const PLAYLIST_LIMIT = 100;   // YouTube プレイリスト展開の上限曲数
 function splitSongs(s) {
   return String(s).split(/\s*[,、，\n]+\s*/).map((x) => x.trim()).filter(Boolean);
 }
+// 1メッセージ → 複数コマンド行に分割。先頭が ! or / の行＝新コマンド。
+// コマンドでない行は直前のコマンドへ ", " で追記（曲名を縦に並べて複数投入できる）。
+function splitCommandLines(text) {
+  const lines = String(text).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const cmds = [];
+  for (const l of lines) {
+    if (/^[!\/]/.test(l)) cmds.push(l);
+    else if (cmds.length) cmds[cmds.length - 1] += ', ' + l;
+  }
+  return cmds;
+}
 // YouTube プレイリストURL 判定（list= を持つ youtube/youtu.be リンク）。
 function isPlaylistUrl(u) {
   return /^https?:\/\//i.test(u) && /(youtube\.com|youtu\.be)/i.test(u) && /[?&]list=/i.test(u);
@@ -416,6 +427,18 @@ async function handleCommand(text) {
   } catch (e) { return `エラー: ${e.message}`; }
 }
 
+// 1メッセージ内の複数コマンド行を順に実行し、応答を「―」区切りでまとめて返す（コマンドでなければ null）。
+async function runCommands(text) {
+  const cmds = splitCommandLines(text);
+  if (!cmds.length) return null;
+  const outs = [];
+  for (const c of cmds) {
+    const r = await handleCommand(c);
+    if (r) outs.push(r);
+  }
+  return outs.length ? outs.join('\n―\n') : '';
+}
+
 async function main() {
   const WAIT_MS = Number(process.env.YAY_WAIT_MS || 15000);
   console.log('[music] 通話待ち受け開始（通話に入ったら自動参加）…');
@@ -495,7 +518,8 @@ async function main() {
       const ts = new Date().toLocaleTimeString('ja-JP');
       for (const m of fresh) {
         console.log(`[${ts}] ${m.author}: ${m.text}`);
-        let mr = await handleCommand(m.text);
+        // 1メッセージに複数コマンド行（改行区切り）があれば順に実行し、応答をまとめる。
+        let mr = await runCommands(m.text);
         // 自然言語の音楽指示（通話の全員）。コマンド以外でだけ試す。
         if (mr === null && !/^[!\/]/.test(m.text)) {
           const nl = nlToCommand(m.text);
