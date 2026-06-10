@@ -12,3 +12,4 @@ recordings/
 _tts_tmp/
 *.log
 .DS_Store
+.yay_watch

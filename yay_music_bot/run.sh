@@ -4,6 +4,11 @@
 # 注意: yay_bot（個人用フル機能bot）と同一アカウントで同時起動すると SAME_UID で蹴り合う。片方だけ動かすこと。
 cd "$(dirname "$0")"
 
+# 追跡対象 uid（この人が居る通話を自動で探して入る）。env 優先、無ければ .yay_watch（git管理外）から読む。
+# 未設定なら bot 自身(SELF_UID)の通話を探す従来動作にフォールバック。
+if [ -z "$YAY_WATCH_UID" ] && [ -f .yay_watch ]; then export YAY_WATCH_UID="$(tr -d '[:space:]' < .yay_watch)"; fi
+[ -n "$YAY_WATCH_UID" ] && echo "▶ 追跡対象 uid=$YAY_WATCH_UID の通話を自動追従"
+
 echo "▶ トークン疎通確認"
 if ! .venv/bin/python yay_api.py check >/tmp/yay_music_check.json 2>&1; then
   echo "✗ トークン無効。 relogin.sh でトークンを更新してください。"
