@@ -1,6 +1,7 @@
 // yay_music_bot — 純音楽BOT（Yay 通話 / YouTube → Agora RTC publish）。
-// yay_bot（究の個人用フル機能bot）から分離した独立PJ。会話/人格/聴取/録音/開発ツールは持たない。
+// yay_bot（究の個人用フル機能bot）から分離した独立PJ。会話/人格/聴取/開発ツールは持たない。
 // 唯一の声機能＝入退室の読み上げ（名前を短く言うだけ・LLM不使用＝コンテキスト消費ゼロ）。
+// 録音は持つ（究指示 2026-06-11 で yay_bot から復帰移植。常時録音→mp3保存、/rec で操作）。
 //
 // 流れ:
 //   1) yay_api.py で通話creds(agora_channel/agora_token/rtm_token/uid)を取得（待ち受け→自動join）
@@ -10,7 +11,8 @@
 //
 // 起動: node bot.mjs            （現在参加中の通話を自動発見）
 //      YAY_CALL_ID=<id> node bot.mjs （call_id 明示）
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, readdirSync, appendFileSync } from 'node:fs';
+import { appendFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { CONFIG } from './config.mjs';
@@ -101,6 +103,99 @@ function qLabel(s) {
   if (!/^https?:\/\//i.test(s)) return s;
   const m = s.match(/[?&]v=([\w-]{6,})/) || s.match(/youtu\.be\/([\w-]{6,})/);
   return m ? `▶ ${m[1]}` : s.slice(0, 48);
+}
+
+// ===== 録音（通話まるごと → webm 逐次追記 → 停止/離脱で mp3 128kbps 変換）=====
+// yay_bot から移植（究指示 2026-06-11「録音機能戻して」）。join 直後に自動開始、毎ループで
+// チャンクをファイルへ追記。ページ層（agora_client.html の startRecord 等）は最初から同梱済で
+// bot.mjs の配線だけ欠けていた。保存先 recordings/ は git 管理外。
+const REC_DIR = fileURLToPath(new URL('./recordings', import.meta.url));
+let recState = null;   // { webmPath, mp3Path, startedAt, active }
+
+const ts2 = () => { const d = new Date(); const p = (n) => String(n).padStart(2, '0'); return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`; };
+
+async function startCallRecording(callId) {
+  if (recState?.active) return;
+  try {
+    mkdirSync(REC_DIR, { recursive: true });
+    const base = `yay_${callId || 'call'}_${ts2()}`;
+    const webmPath = `${REC_DIR}/${base}.webm`;
+    const r = await agora.startRecord(page);
+    if (!r?.ok) { console.error('[rec] 開始失敗', r?.reason); return; }
+    recState = { webmPath, mp3Path: `${REC_DIR}/${base}.mp3`, startedAt: Date.now(), active: true };
+    console.log('[rec] ● 録音開始', webmPath);
+  } catch (e) { console.error('[rec] start err', e.message); }
+}
+
+// 録音チャンクのファイル追記。音楽配信と並走するため (1)同期 appendFileSync を使わず
+//   非同期 appendFile（event loop を固めない）、(2)毎周回でなく間引いて CDP の base64 大転送を
+//   減らす（音楽ページへの負荷＝ぶつぶつ要因を抑制）。チャンクはページ側に溜まり停止時に全回収。
+let lastRecDrainAt = 0;
+const REC_DRAIN_MS = Number(process.env.YAY_REC_DRAIN_MS || 6000);
+async function drainRecToFile(force = false) {
+  if (!recState?.active) return;
+  if (!force && Date.now() - lastRecDrainAt < REC_DRAIN_MS) return;
+  lastRecDrainAt = Date.now();
+  try {
+    const chunks = await agora.drainRecChunks(page);
+    for (const b64 of chunks) {
+      try { await appendFile(recState.webmPath, Buffer.from(b64, 'base64')); }
+      catch (e) { console.error('[rec] append', e.message); }
+    }
+  } catch (e) { console.error('[rec] drain', e.message); }
+}
+
+// webm → mp3 非ブロッキング（execFileSync だと大ファイルで event loop が固まり音楽がぶつぶつになる）。
+//   逐次追記の未finalize webm でも ffmpeg は全音声を回収できる（"File ended prematurely" は無害）。
+function convertToMp3Async(webmPath, mp3Path) {
+  return new Promise((resolve) => {
+    execFile('ffmpeg', ['-y', '-i', webmPath, '-c:a', 'libmp3lame', '-b:a', '128k', mp3Path],
+      { timeout: 600000 }, (err) => {
+        if (!existsSync(mp3Path)) return resolve({ ok: false, reason: err?.message || 'no output' });
+        try { resolve({ ok: true, kb: Math.round(statSync(mp3Path).size / 1024) }); }
+        catch { resolve({ ok: false, reason: 'stat失敗' }); }
+      });
+  });
+}
+
+// 取りこぼし回収（失敗しない仕組みの核）: recordings/ の webm のうち mp3 が無い/空のものを全部 mp3 化。
+//   起動のたびに走らせる＝前回クラッシュ/kill で mp3 化されなかった分を確実に救う（冪等）。
+//   録音中の webm は触らない。非ブロッキングで1件ずつ（CPU/負荷を抑える）。
+async function recoverOrphanRecordings() {
+  try {
+    mkdirSync(REC_DIR, { recursive: true });
+    const webms = readdirSync(REC_DIR).filter((f) => f.endsWith('.webm'));
+    const orphans = webms.filter((f) => {
+      const webm = `${REC_DIR}/${f}`;
+      const mp3 = `${REC_DIR}/${f.replace(/\.webm$/, '.mp3')}`;
+      if (recState?.active && recState.webmPath === webm) return false;   // 録音中のは対象外
+      try { if (statSync(webm).size < 1024) return false; } catch { return false; }  // 空webmは無視
+      return !existsSync(mp3) || (() => { try { return statSync(mp3).size < 1024; } catch { return true; } })();
+    });
+    if (!orphans.length) { console.log('[rec] ✓ mp3化漏れなし（孤児webm 0件）'); return; }
+    console.log(`[rec] 🔧 取りこぼし回収: 孤児webm ${orphans.length}件を mp3 化（前回クラッシュ/kill分）`);
+    for (const f of orphans) {
+      const r = await convertToMp3Async(`${REC_DIR}/${f}`, `${REC_DIR}/${f.replace(/\.webm$/, '.mp3')}`);
+      console.log(r.ok ? `[rec]   ✓ ${f} → mp3 (${r.kb}KB)` : `[rec]   ✗ ${f}: ${r.reason}`);
+    }
+    console.log('[rec] 回収完了');
+  } catch (e) { console.error('[rec] orphan sweep err', e.message); }
+}
+
+// 録音停止＋mp3化（/bye・bot停止・/rec stop で呼ぶ）。
+async function stopCallRecording() {
+  if (!recState?.active) return null;
+  recState.active = false;
+  try {
+    const r = await agora.stopRecord(page);
+    for (const b64 of (r?.chunks || [])) { try { appendFileSync(recState.webmPath, Buffer.from(b64, 'base64')); } catch {} }
+  } catch (e) { console.error('[rec] stop', e.message); }
+  const mins = Math.round((Date.now() - recState.startedAt) / 60000);
+  const conv = await convertToMp3Async(recState.webmPath, recState.mp3Path);
+  const out = { ...recState, mins, conv };
+  console.log('[rec] ■ 停止→mp3', conv.ok ? `${recState.mp3Path} (${conv.kb}KB)` : 'ffmpeg失敗:' + conv.reason);
+  recState = null;
+  return out;
 }
 
 // ===== 入退室の読み上げ（jingle）=====
@@ -250,6 +345,7 @@ const CMD = {
   ttsvol: ['ttsvol', 'vv', '声量', '読み上げ音量'],   // 読み上げ(あいさつ)の音量 0-100
   ping:   ['ping', 'pi'],
   greet:  ['greet', 'あいさつ', '入退室'],   // 入退室の読み上げ ON/OFF
+  rec:    ['rec', 'record', '録音'],         // 録音 状態/保存/停止/開始
   leave:  ['leave', 'bye'],
 };
 const ALIAS = {}; for (const [k, vs] of Object.entries(CMD)) for (const v of vs) ALIAS[v] = k;
@@ -271,6 +367,7 @@ function renderHelp(arg) {
     '🔂 /l 一曲ループ  🔁 /qr キュー全体  🔀 /qsh シャッフル',
     '🔼 /qu N 前へ  🔽 /qj N 後ろへ  🗑️ /qd N 削除  🧹 /c 全消去',
     '🗣️ /ttsvol 0-100 読み上げ音量  👋 /greet 入退室読み上げ',
+    '🔴 /rec 録音状態  💾 /rec save 区切り保存  ⏹ /rec stop 停止',
     '📡 /lv 音声配信  🎛️ /d 入力一覧  🔉 /vu /vd 音量±10',
     '➕ 複数曲「曲A,曲B」  📋 YT再生リストURLは全曲展開  🚪 /bye 退出',
   ].join('\n');
@@ -301,6 +398,9 @@ const notFoundMsg = (q) => `❌ 見つかりませんでした: ${q}`;
 function nlToCommand(text) {
   const t = String(text).trim();
   let m;
+  if (/録音.*(止め|停止|終わ|やめ|オフ)/.test(t)) return '/rec stop';
+  if (/(ここまで|今まで).*(保存|録音)|録音.*保存/.test(t)) return '/rec save';
+  if (/録音(して|開始|始め|オン|を?しといて)?$/.test(t) || /録音.*(して|開始|始め|オン)/.test(t)) return '/rec on';
   if (/(一時停止|ポーズ|ちょっと止め)/.test(t)) return '/pause';
   if (/(再開|続きから|戻して再生)/.test(t)) return '/resume';
   if (/(止めて|停めて|ストップ|止めろ|停止|音楽.*消)/.test(t)) return '/stop';
@@ -439,7 +539,26 @@ async function handleCommand(text) {
         jingleOn = !jingleOn; if (!jingleOn) jingleQueue = [];
         return jingleOn ? '🎉 入退室あいさつON' : '🤫 入退室あいさつOFF';
       }
-      case 'leave': await agora.leave(page); nowQuery = null; queue = []; return '👋 通話から抜けた';
+      case 'rec': {
+        if (/^(stop|off|止め|終わ|停止|オフ)/.test(q)) {
+          const r = await stopCallRecording();
+          return r ? (r.conv.ok ? `■ 録音停止→mp3保存(${r.mins}分/${r.conv.kb}KB): ${r.mp3Path.split('/').pop()}` : `■ 停止したがmp3変換失敗: ${r.conv.reason}`) : '録音してない';
+        }
+        if (/^(save|保存|区切|スナップ|ここまで)/.test(q)) {
+          if (!recState?.active) return '録音してない';
+          await drainRecToFile(true);   // 間引きを無視して今ある分を確実に書き出してからスナップ
+          const snap = recState.mp3Path.replace(/\.mp3$/, `_snap_${ts2()}.mp3`);
+          const c = await convertToMp3Async(recState.webmPath, snap);   // 非ブロッキング＝音楽を固めない
+          return c.ok ? `💾 ここまでをmp3保存(${c.kb}KB): ${snap.split('/').pop()}（録音継続中）` : `mp3変換失敗: ${c.reason}`;
+        }
+        if (/^(on|start|開始|再開|始め)/.test(q) || (!q && !recState?.active)) {
+          await startCallRecording(process.env.YAY_CALL_ID || creds?.conference_id || 'call');
+          return recState?.active ? '● 録音開始' : '録音開始に失敗';
+        }
+        const st = await agora.recStatus(page);
+        return recState?.active ? `🔴 録音中（${Math.round((Date.now() - recState.startedAt) / 60000)}分 / 音源${st?.sources ?? '?'}）: ${recState.webmPath.split('/').pop()}` : '⚪ 録音停止中（/rec on で開始）';
+      }
+      case 'leave': await stopCallRecording(); await agora.leave(page); nowQuery = null; queue = []; return '👋 通話から抜けた（録音はmp3化して保存）';
       default: return null;
     }
   } catch (e) { return `エラー: ${e.message}`; }
@@ -459,6 +578,7 @@ async function runCommands(text) {
 
 async function main() {
   const WAIT_MS = Number(process.env.YAY_WAIT_MS || 15000);
+  recoverOrphanRecordings();   // await しない＝待ち受けと並行で前回分を mp3 化
   console.log('[music] 通話待ち受け開始（通話に入ったら自動参加）…');
   for (;;) {
     creds = await fetchCreds().catch((e) => ({ ok: false, error: e.message }));
@@ -494,6 +614,8 @@ async function main() {
 
   const st0 = loadState();
   const seen = new Set(st0.seen);
+  // 常時録音（究指示「常に録音して記録」、yay_bot と同じ既定。YAY_NO_REC=1 で無効化可）
+  if (!process.env.YAY_NO_REC && joined.rtc?.ok) await startCallRecording(process.env.YAY_CALL_ID || creds?.conference_id);
   console.log('[music] 稼働開始（純音楽BOT・YouTube）。/h でヘルプ');
 
   // 起動時テスト再生（任意）
@@ -525,6 +647,9 @@ async function main() {
     // 入退室の読み上げ（名簿差分→挨拶。throttle は関数内）＋ Yay参加見張り
     try { await pollMembersAndDiff(); } catch (e) { console.error('greet poll', e.message); }
     try { await drainJingle(); } catch (e) { console.error('greet drain', e.message); }
+
+    // 録音チャンクをファイルへ追記（常時・間引きは関数内）
+    try { await drainRecToFile(); } catch (e) { console.error('rec drain', e.message); }
 
     let raw = [];
     try { raw = await agora.drainInbox(page); } catch (e) { console.error('drain err', e.message); }
