@@ -153,9 +153,22 @@ async function sayJingle(text) {
     await agora.playTTS(page, agora.fileUrl(fileBase, r.file)).catch((e) => console.error('[greet] playTTS', e.message));
   } catch (e) { console.error('[greet] say', e.message); }
 }
+// Yay側参加の見張り: Yay はしばらくすると bot の参加を名簿から落とすことがある。
+// その間アプリ上で bot が見えず chat も表示されない（Agora の RTC/RTM は生きてるので
+// こちらからは受信できてしまい気づけない）。名簿に自分が居なければ参加し直す。
+let lastRejoinAt = 0;
+function yayRejoin(callId) {
+  return new Promise((resolve) => {
+    execFile(PY, [API, 'join', String(callId)], { timeout: 20000 }, (err, stdout) => {
+      const lines = (stdout || '').trim().split('\n').filter(Boolean);
+      for (let i = lines.length - 1; i >= 0; i--) { try { return resolve(JSON.parse(lines[i])); } catch {} }
+      resolve({ ok: false });
+    });
+  });
+}
 // 名簿ポーリング＋差分（throttle はここで持つ。loop から毎周回呼んでよい）。
+// あいさつOFFでも回す（Yay参加見張りはあいさつと独立に必要）。
 async function pollMembersAndDiff() {
-  if (!jingleOn) return;
   const callId = process.env.YAY_CALL_ID || creds?.conference_id;
   if (!callId) return;
   const now = Date.now();
@@ -164,6 +177,11 @@ async function pollMembersAndDiff() {
   let res; try { res = await fetchMembers(callId); } catch { return; }
   if (!res?.ok || !Array.isArray(res.users)) return;
   const selfId = String(SELF_UID);
+  if (!res.users.some((u) => String(u.id ?? '') === selfId) && now - lastRejoinAt > 60000) {
+    lastRejoinAt = now;
+    const r = await yayRejoin(callId);
+    console.log(r?.ok ? '[music] ↻ Yay参加が名簿から落ちてたので参加し直した' : '[music] ⚠ Yay再参加失敗（次の周回で再試行）');
+  }
   const seenNow = new Set();
   for (const u of res.users) {
     const id = String(u.id ?? '');
@@ -172,7 +190,7 @@ async function pollMembersAndDiff() {
     const prev = roster.get(id);
     const nick = u.nickname || prev?.nick || null;
     if (!prev || !prev.present) {
-      if (memberSeeded) {
+      if (memberSeeded && jingleOn) {
         const gap = prev ? (now - (prev.lastSeen || 0)) : Infinity;
         const flap = prev && gap < 5000;                          // 5秒以内の瞬断=回線フラップ→無音
         const returning = !!prev && gap < (JC().rejoinGraceMs || 90000);
@@ -184,7 +202,7 @@ async function pollMembersAndDiff() {
   for (const [id, info] of roster) {
     if (info.present && !seenNow.has(id)) {
       info.present = false; info.lastSeen = now;
-      if (memberSeeded) jingleQueue.push({ kind: 'leave', nick: info.nick, returning: false });
+      if (memberSeeded && jingleOn) jingleQueue.push({ kind: 'leave', nick: info.nick, returning: false });
     }
   }
   const cap = JC().maxQueue || 8;
@@ -504,7 +522,7 @@ async function main() {
       } catch {}
     }
 
-    // 入退室の読み上げ（名簿差分→挨拶。throttle は関数内）
+    // 入退室の読み上げ（名簿差分→挨拶。throttle は関数内）＋ Yay参加見張り
     try { await pollMembersAndDiff(); } catch (e) { console.error('greet poll', e.message); }
     try { await drainJingle(); } catch (e) { console.error('greet drain', e.message); }
 
