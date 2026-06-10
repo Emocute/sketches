@@ -1,5 +1,6 @@
 // yay_music_bot — 純音楽BOT（Yay 通話 / YouTube → Agora RTC publish）。
-// yay_bot（究の個人用フル機能bot）から分離した独立PJ。会話/人格/TTS/聴取/録音/開発ツールは持たない。
+// yay_bot（究の個人用フル機能bot）から分離した独立PJ。会話/人格/聴取/録音/開発ツールは持たない。
+// 唯一の声機能＝入退室の読み上げ（名前を短く言うだけ・LLM不使用＝コンテキスト消費ゼロ）。
 //
 // 流れ:
 //   1) yay_api.py で通話creds(agora_channel/agora_token/rtm_token/uid)を取得（待ち受け→自動join）
@@ -15,6 +16,7 @@ import { fileURLToPath } from 'node:url';
 import { CONFIG } from './config.mjs';
 import * as agora from './lib/agora.mjs';
 import * as music from './lib/music_agora.mjs';
+import * as tts from './lib/tts.mjs';   // 入退室の読み上げのみ（会話には使わない＝LLM不使用）
 
 const PY = fileURLToPath(new URL('./.venv/bin/python', import.meta.url));
 const API = fileURLToPath(new URL('./yay_api.py', import.meta.url));
@@ -72,6 +74,109 @@ let nowQuery = null;   // 再生中の曲名/ラベル
 let starting = false;  // 多重起動ガード
 let lastVol = Number(process.env.YAY_MUSIC_VOL || 15);
 
+// ===== 入退室の読み上げ（jingle）=====
+// 名簿(yay_api.py members)を周期取得し、前回との差分で join/leave を検出して名前で短く挨拶。
+// 声は既存 playTTS（音楽は止めず ttsGain に乗せ、TTS中は音楽を自動ダッキング）。LLMは一切使わない。
+const JC = () => CONFIG.jingle || {};
+let jingleOn = JC().enabled !== false;
+const roster = new Map();      // Yay userId(str) → { nick, lastSeen, present }
+let memberSeeded = false;      // 初回は無言シード（既存メンバーに連打しない）
+let lastMemberPollAt = 0;
+let lastJingleAt = 0;
+let jingleQueue = [];          // {kind:'join'|'leave', nick, returning}
+
+// 名簿取得（python 1回 spawn、最終行 JSON）。
+function fetchMembers(callId) {
+  return new Promise((resolve) => {
+    execFile(PY, [API, 'members', String(callId)], { timeout: 20000 }, (err, stdout) => {
+      const lines = (stdout || '').trim().split('\n').filter(Boolean);
+      for (let i = lines.length - 1; i >= 0; i--) { try { return resolve(JSON.parse(lines[i])); } catch {} }
+      resolve({ ok: false });
+    });
+  });
+}
+function greetWord() {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 11) return 'おはよ';
+  if (h >= 11 && h < 18) return 'やっほー';
+  return 'こんばんは';
+}
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+function jingleLine({ kind, nick, returning }) {
+  const who = nick || '誰か';
+  if (kind === 'leave') return pick([`${who} またね`, `${who} ばいばい`, `${who} おつかれ`, `${who}、また来てね`]);
+  if (returning) return pick([`${who} おかえり`, `${who} 戻ってきた`, `おっ ${who} おかえり`]);
+  const g = greetWord();
+  return pick([`${who} ${g}！いらっしゃい`, `${g} ${who}！来てくれた`, `${who} いらっしゃい`, `お、${who} 来た！${g}`]);
+}
+function inQuietHours() {
+  const qh = JC().quietHours;
+  if (!Array.isArray(qh) || qh.length !== 2) return false;
+  const h = new Date().getHours(); const [a, b] = qh;
+  return a <= b ? (h >= a && h < b) : (h >= a || h < b);   // 跨ぎ(例: 23-7)も対応
+}
+// あいさつを声で（音楽を止めず ttsGain に乗せ自動ダッキング）。quietHours/voice=false なら無声。
+async function sayJingle(text) {
+  if (JC().voice === false || inQuietHours()) return;
+  try {
+    const r = await tts.speak(text, { voice: JC().voiceKey || null });
+    if (!r.ok || !r.file) return;
+    await agora.playTTS(page, agora.fileUrl(fileBase, r.file)).catch((e) => console.error('[greet] playTTS', e.message));
+  } catch (e) { console.error('[greet] say', e.message); }
+}
+// 名簿ポーリング＋差分（throttle はここで持つ。loop から毎周回呼んでよい）。
+async function pollMembersAndDiff() {
+  if (!jingleOn) return;
+  const callId = process.env.YAY_CALL_ID || creds?.conference_id;
+  if (!callId) return;
+  const now = Date.now();
+  if (now - lastMemberPollAt < (JC().pollMs || 12000)) return;
+  lastMemberPollAt = now;
+  let res; try { res = await fetchMembers(callId); } catch { return; }
+  if (!res?.ok || !Array.isArray(res.users)) return;
+  const selfId = String(SELF_UID);
+  const seenNow = new Set();
+  for (const u of res.users) {
+    const id = String(u.id ?? '');
+    if (!id || id === selfId) continue;     // 自分(Emo Music)は除外
+    seenNow.add(id);
+    const prev = roster.get(id);
+    const nick = u.nickname || prev?.nick || null;
+    if (!prev || !prev.present) {
+      if (memberSeeded) {
+        const gap = prev ? (now - (prev.lastSeen || 0)) : Infinity;
+        const flap = prev && gap < 5000;                          // 5秒以内の瞬断=回線フラップ→無音
+        const returning = !!prev && gap < (JC().rejoinGraceMs || 90000);
+        if (!flap) jingleQueue.push({ kind: 'join', nick, returning });
+      }
+    }
+    roster.set(id, { nick, lastSeen: now, present: true });
+  }
+  for (const [id, info] of roster) {
+    if (info.present && !seenNow.has(id)) {
+      info.present = false; info.lastSeen = now;
+      if (memberSeeded) jingleQueue.push({ kind: 'leave', nick: info.nick, returning: false });
+    }
+  }
+  const cap = JC().maxQueue || 8;
+  if (jingleQueue.length > cap) jingleQueue = jingleQueue.slice(-cap);
+  memberSeeded = true;
+}
+// キュー消化（rate limit。1周回1件）。
+async function drainJingle() {
+  if (!jingleOn || !jingleQueue.length) return;
+  const now = Date.now();
+  if (now - lastJingleAt < (JC().minGapMs || 8000)) return;
+  const j = jingleQueue.shift();
+  lastJingleAt = now;
+  const line = jingleLine(j);
+  const emoji = j.kind === 'leave' ? '👋' : '🎉';
+  try { await sendYayChat(page, `${emoji} ${line}`); } catch (e) { console.error('[greet] chat', e.message); }
+  await sayJingle(line);
+  console.log(`  ${emoji} greet:`, line);
+}
+function presentCount() { return [...roster.values()].filter((r) => r.present).length; }
+
 // canonical → [aliases]（`/` でも `!` でも発火）。音楽コマンドのみ。
 const CMD = {
   help:   ['help', 'h', '?'],
@@ -94,6 +199,7 @@ const CMD = {
   qup:    ['qu', 'qup', 'up', '上'],
   qdn:    ['qj', 'qdn', 'down', '下'],
   ping:   ['ping', 'pi'],
+  greet:  ['greet', 'あいさつ', '入退室'],   // 入退室の読み上げ ON/OFF
   leave:  ['leave', 'bye'],
 };
 const ALIAS = {}; for (const [k, vs] of Object.entries(CMD)) for (const v of vs) ALIAS[v] = k;
@@ -108,6 +214,7 @@ function renderHelp() {
     '/v 0-100 = 音量（既定15）/ /vu /vd = ±10',
     '/np = 再生中 / /qd <N> 削除 /qu <N> 前へ /qj <N> 後ろへ /c 消去',
     '/lv [入力] = システム音声配信 / /d = 入力一覧 / /bye = 退出',
+    '/greet [on/off] = 入退室の読み上げ（既定ON・名前で短く挨拶）',
     '※「○○かけて」など自然言語でも再生できる',
   ].join('\n');
 }
@@ -212,6 +319,14 @@ async function handleCommand(text) {
       case 'loop': { const r = await agora.setLoop(page); return r?.loop ? '🔁 一曲ループON' : '➡ 一曲ループOFF'; }
       case 'live': await agora.playLive(page, q || null); nowQuery = 'live'; return `▶ システム音声配信中${q ? '（' + q + '）' : ''}`;
       case 'dev': { const ds = await agora.listAudioInputs(page); return '🎤 入力: ' + (ds.map((d) => d.label).filter(Boolean).join(' / ') || 'なし'); }
+      case 'greet': {
+        const a = q.toLowerCase();
+        if (a === '' || a === '?' || a === 'status') return `🎉 入退室あいさつ: ${jingleOn ? 'ON' : 'OFF'}（声${JC().voice === false ? 'OFF' : 'ON'} / 在室${presentCount()}人）`;
+        if (['off', 'stop', 'オフ', '0', 'なし'].includes(a)) { jingleOn = false; jingleQueue = []; return '🤫 入退室あいさつOFF'; }
+        if (['on', 'オン', '1'].includes(a)) { jingleOn = true; return '🎉 入退室あいさつON'; }
+        jingleOn = !jingleOn; if (!jingleOn) jingleQueue = [];
+        return jingleOn ? '🎉 入退室あいさつON' : '🤫 入退室あいさつOFF';
+      }
       case 'leave': await agora.leave(page); nowQuery = null; queue = []; return '👋 通話から抜けた';
       default: return null;
     }
@@ -277,6 +392,10 @@ async function main() {
         }
       } catch {}
     }
+
+    // 入退室の読み上げ（名簿差分→挨拶。throttle は関数内）
+    try { await pollMembersAndDiff(); } catch (e) { console.error('greet poll', e.message); }
+    try { await drainJingle(); } catch (e) { console.error('greet drain', e.message); }
 
     let raw = [];
     try { raw = await agora.drainInbox(page); } catch (e) { console.error('drain err', e.message); }

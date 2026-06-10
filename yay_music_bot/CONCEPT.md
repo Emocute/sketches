@@ -12,12 +12,13 @@ Yay 通話に常駐する**純音楽BOT**。将来サブスク提供を見据え
 - キュー（追加/一覧/削除/並べ替え/自動送り）
 - 再生制御（スキップ/停止/一時停止/再開/音量/一曲ループ）
 - システム音声配信（/live、DJ 用途）
+- **入退室の読み上げ**（誰が来た/帰ったを名前で短く挨拶。`/greet` で ON/OFF。VOICEVOX があれば実声、無ければ macOS say へ自動フォールバック）
 - スラッシュコマンド + 自然言語（「○○かけて」）。**通話の全員が操作可**（サブスク客が使う前提）
 
 ## やらないこと（yay_bot に残す機能）
 
-- 会話 / 人格（zundamon 等）/ LLM 返信 / 自発おしゃべり
-- 読み上げ（TTS / VOICEVOX）/ 聞き取り（whisper）
+- 会話 / 人格（zundamon 等）/ LLM 返信 / 自発おしゃべり（**`claude -p` を一度も呼ばない＝コンテキスト消費ゼロ**が本botの肝）
+- 会話の読み上げ・聞き取り（whisper）。※入退室あいさつの読み上げ「だけ」は持つ（決定論処理・LLM不使用）
 - 通話録音
 - ファイル/Bash 等の開発ツール（客に渡すと情報漏洩＝危険なので持たない）
 
@@ -33,7 +34,8 @@ Yay 通話に常駐する**純音楽BOT**。将来サブスク提供を見据え
 - `config.mjs` — 設定（ポーリング等）
 - `lib/agora.mjs` + `agora_client.html` — Agora 参加・音楽 publish・RTM
 - `lib/music_agora.mjs` — yt-dlp 解決・stream 中継
-- `yay_api.py` + `.venv` — トークン/creds 取得
+- `lib/tts.mjs` — 入退室あいさつの音声化（VOICEVOX→無ければ macOS say）。会話には使わない
+- `yay_api.py` + `.venv` — トークン/creds 取得（`members` で参加者名簿＝あいさつ差分用）
 - `relogin.sh` + `scripts/` — トークン再取得（X ログイン1クリック）
 - `run.sh` — 起動（tmux: yay_music_bot）
 
@@ -65,3 +67,4 @@ tmux kill-session -t yay_music_bot && pkill -f 'node bot.mjs'   # 停止
 ## 履歴
 
 - 2026-06-06: yay_bot から分離・新設。純音楽（YouTube）に機能を絞った独立 PJ として起票。
+- 2026-06-10: 入退室の読み上げ（あいさつ）を追加。`yay_api.py members`（参加者名簿）＋ `lib/tts.mjs`（yay_bot から移植）＋ bot.mjs に名簿差分→TTSあいさつを実装、`/greet` で ON/OFF、`config.jingle` で調整。agora 側の TTS 配信路（playTTS/ミックスバス）は分離時から残っていたので再利用。**LLMは一切使わない方針は維持**（あいさつは決定論・コンテキスト消費ゼロ）。
