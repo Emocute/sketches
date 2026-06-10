@@ -287,7 +287,7 @@ function nlToCommand(text) {
   if (/(再開|続きから|戻して再生)/.test(t)) return '/resume';
   if (/(止めて|停めて|ストップ|止めろ|停止|音楽.*消)/.test(t)) return '/stop';
   if (/(次の?曲|次に?して|次いって|スキップ|とばして|飛ばして|チェンジして)/.test(t)) return '/skip';
-  if ((m = t.match(/(?:音量|ボリューム|ボリュ)\D*?(\d{1,3})/))) return `/vol ${m[1]}`;
+  if ((m = t.match(/(?:音量|ボリューム|ボリュ)\D*?(\d{1,3}(?:\.\d+)?)/))) return `/vol ${m[1]}`;
   if (/(?:音量|ボリューム|音)/.test(t) && /(上げ|大きく|でかく|あげて|うるさ)/.test(t)) return '/volup';
   if (/(?:音量|ボリューム|音)/.test(t) && /(下げ|小さく|さげて|ちいさ|静か|絞)/.test(t)) return '/voldown';
   const pv = t.match(/(かけて|流して|再生して|プレイして|聴きたい|聞きたい|かけろ|流せ|プレイ|かけ)/);
@@ -400,9 +400,9 @@ async function handleCommand(text) {
       case 'clear': queue = []; return '🧹 キュー消去';
       case 'pause': await agora.pauseMusic(page); return '⏸ 一時停止';
       case 'resume': await agora.resumeMusic(page); return '▶ 再開';
-      case 'vol': { const r = await agora.setMusicVolume(page, q); if (r?.ok) lastVol = r.vol; return r?.ok ? `🔊 音量 ${r.vol}` : '音量は 0〜100（例: /v 15）'; }
-      case 'volup': { const v = Math.min(100, lastVol + 10); const r = await agora.setMusicVolume(page, v); if (r?.ok) lastVol = r.vol; return `🔊 音量 ${r?.vol ?? v}`; }
-      case 'voldown': { const v = Math.max(0, lastVol - 10); const r = await agora.setMusicVolume(page, v); if (r?.ok) lastVol = r.vol; return `🔉 音量 ${r?.vol ?? v}`; }
+      case 'vol': { const r = await agora.setMusicVolume(page, q); if (r?.ok) lastVol = r.vol; return r?.ok ? `🔊 音量 ${r.vol}` : '音量は 0〜100・小数可（例: /v 15, /v 0.5）'; }
+      case 'volup': { const v = Math.min(100, Math.round((lastVol + (lastVol < 2 ? 0.5 : 10)) * 100) / 100); const r = await agora.setMusicVolume(page, v); if (r?.ok) lastVol = r.vol; return `🔊 音量 ${r?.vol ?? v}`; }
+      case 'voldown': { const v = Math.max(0, Math.round((lastVol - (lastVol <= 2 ? 0.5 : 10)) * 100) / 100); const r = await agora.setMusicVolume(page, v); if (r?.ok) lastVol = r.vol; return `🔉 音量 ${r?.vol ?? v}`; }
       case 'np': return statusLine();
       case 'loop': { const r = await agora.setLoop(page); return r?.loop ? '🔁 一曲ループON' : '➡ 一曲ループOFF'; }
       case 'live': await agora.playLive(page, q || null); nowQuery = 'live'; return `▶ システム音声配信中${q ? '（' + q + '）' : ''}`;
@@ -411,7 +411,7 @@ async function handleCommand(text) {
         if (!q) return `🔈 読み上げ音量: ${lastTtsVol}（変更は /ttsvol 0-100）`;
         const r = await agora.setTtsVolume(page, q);
         if (r?.ok) lastTtsVol = r.vol;
-        return r?.ok ? `🔈 読み上げ音量 ${r.vol}` : '音量は 0〜100（例: /ttsvol 15）';
+        return r?.ok ? `🔈 読み上げ音量 ${r.vol}` : '音量は 0〜100・小数可（例: /ttsvol 15, /ttsvol 0.5）';
       }
       case 'greet': {
         const a = q.toLowerCase();
