@@ -73,6 +73,7 @@ let queue = [];        // 未再生キュー（query文字列）
 let nowQuery = null;   // 再生中の曲名/ラベル
 let starting = false;  // 多重起動ガード
 let lastVol = Number(process.env.YAY_MUSIC_VOL || 15);
+let lastTtsVol = Number(process.env.YAY_TTS_VOL || (CONFIG.jingle?.ttsVol ?? 15)); // 読み上げ音量 0-100（/ttsvol で変更）
 let queueRepeat = false; // キュー全体リピート（/qr）。ON で流し終えた曲を末尾へ戻して循環。
 
 const PLAYLIST_LIMIT = 100;   // YouTube プレイリスト展開の上限曲数（チャット氾濫・過負荷防止）
@@ -217,26 +218,32 @@ const CMD = {
   qdn:    ['qj', 'qdn', 'down', '下'],
   qrepeat:['qr', 'repeat', 'rp', 'リピート', '繰り返し'],   // キュー全体リピート on/off（/l は一曲ループ）
   qshuffle:['qsh', 'shuffle', 'shuf', 'シャッフル', 'ランダム'],  // キューをランダム並べ替え
+  ttsvol: ['ttsvol', 'vv', '声量', '読み上げ音量'],   // 読み上げ(あいさつ)の音量 0-100
   ping:   ['ping', 'pi'],
   greet:  ['greet', 'あいさつ', '入退室'],   // 入退室の読み上げ ON/OFF
   leave:  ['leave', 'bye'],
 };
 const ALIAS = {}; for (const [k, vs] of Object.entries(CMD)) for (const v of vs) ALIAS[v] = k;
 
-function renderHelp() {
+// 2層ヘルプ: 引数なし=よく使う核だけ（255字に収まる）/ all=全コマンド。
+function renderHelp(arg) {
+  const full = /^(all|full|全部|詳細|a)$/i.test(String(arg || '').trim());
+  if (!full) {
+    return [
+      '🎧 音楽BOT（詳しくは /h all）',
+      '/p 曲名 = 再生（「○○かけて」でも可）',
+      '/s スキップ ・ /x 停止 ・ /ps 一時停止 ・ /r 再開',
+      '/v 0-100 = 音量 ・ /ql = キュー一覧',
+    ].join('\n');
+  }
   return [
-    '🎧 音楽BOT コマンド',
-    '/p <曲名/URL> = 再生（空きなら即/再生中はキューへ）',
-    '/q <曲> = キュー追加（「曲A, 曲B」で複数可）/ /ql = キュー一覧',
-    '/s = スキップ / /x = 停止（キュー消去）/ /c = キュー消去',
-    '/ps = 一時停止 / /r = 再開',
-    '/l = 一曲ループ / /qr = キューリピート / /qsh = シャッフル',
-    '/v 0-100 = 音量（既定15）/ /vu /vd = ±10',
-    '/np = 再生中 / /qd <N> 削除 /qu <N> 前へ /qj <N> 後ろへ',
-    '/lv [入力] = システム音声配信 / /d = 入力一覧 / /bye = 退出',
-    '/greet [on/off] = 入退室の読み上げ（既定ON・名前で短く挨拶）',
-    '※「○○かけて」など自然言語でも再生できる',
-    '※YouTubeプレイリストURLは全曲キューに展開（最大' + PLAYLIST_LIMIT + '曲）',
+    '🎧 全コマンド',
+    '▶再生 /p 曲orURL（「曲A,曲B」で複数・YT再生リストURLは全曲展開）',
+    '📜キュー /ql 一覧 /qd<N>削除 /qu<N>前 /qj<N>後 /c 消去',
+    '⏯制御 /s スキップ /x 停止 /ps 一時停止 /r 再開',
+    '🔁ループ /l 一曲 /qr キュー全体 /qsh シャッフル',
+    '🔊音量 /v 0-100音楽 /vu /vd ±10 /ttsvol 0-100読み上げ',
+    '⚙その他 /np 再生中 /lv 配信 /d 入力一覧 /greet 入退室読み上げ /bye 退出',
   ].join('\n');
 }
 const onoff = (b) => (b ? '🟢ON' : '⚪OFF');
@@ -301,7 +308,7 @@ async function handleCommand(text) {
   if (!cmd) return null;
   try {
     switch (cmd) {
-      case 'help': return renderHelp();
+      case 'help': return renderHelp(q);
       case 'ping': return '🏓 pong';
       case 'play':
       case 'queue': {
@@ -389,6 +396,12 @@ async function handleCommand(text) {
       case 'loop': { const r = await agora.setLoop(page); return r?.loop ? '🔁 一曲ループON' : '➡ 一曲ループOFF'; }
       case 'live': await agora.playLive(page, q || null); nowQuery = 'live'; return `▶ システム音声配信中${q ? '（' + q + '）' : ''}`;
       case 'dev': { const ds = await agora.listAudioInputs(page); return '🎤 入力: ' + (ds.map((d) => d.label).filter(Boolean).join(' / ') || 'なし'); }
+      case 'ttsvol': {  // 読み上げ音量 0-100
+        if (!q) return `🔈 読み上げ音量: ${lastTtsVol}（変更は /ttsvol 0-100）`;
+        const r = await agora.setTtsVolume(page, q);
+        if (r?.ok) lastTtsVol = r.vol;
+        return r?.ok ? `🔈 読み上げ音量 ${r.vol}` : '音量は 0〜100（例: /ttsvol 15）';
+      }
       case 'greet': {
         const a = q.toLowerCase();
         if (a === '' || a === '?' || a === 'status') return `🎉 入退室あいさつ: ${jingleOn ? 'ON' : 'OFF'}（声${JC().voice === false ? 'OFF' : 'ON'} / 在室${presentCount()}人）`;
@@ -434,6 +447,7 @@ async function main() {
   console.log('[music] self RTM id =', SELF_RTM);
 
   if (process.env.YAY_MUSIC_VOL) { const r = await agora.setMusicVolume(page, process.env.YAY_MUSIC_VOL); console.log('[music] 初期音量', r?.vol); }
+  try { const r = await agora.setTtsVolume(page, lastTtsVol); if (r?.ok) lastTtsVol = r.vol; console.log('[music] 読み上げ初期音量', lastTtsVol); } catch {}
 
   try { await agora.drainInbox(page); } catch {}   // join前の残/エコー一掃
 

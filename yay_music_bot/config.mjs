@@ -18,6 +18,7 @@ export const CONFIG = {
   jingle: {
     enabled: true,        // 既定ON（/greet off で停止）
     voice: true,          // 声でも読む（false=チャット文字だけ）
+    ttsVol: 15,           // 読み上げの初期音量 0-100（音楽の上に乗るので控えめ既定。/ttsvol で変更）
     voiceKey: null,       // TTSボイス（tts.mjs の VOICE_PACKS キー。null=エンジン既定→say時はKyoko）
     pollMs: 12000,        // 名簿ポーリング間隔
     minGapMs: 8000,       // 連続あいさつの最小間隔（連打防止）

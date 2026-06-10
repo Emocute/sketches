@@ -75,7 +75,7 @@
   //   musicGain（曲）と ttsGain（読み上げ）を両方そこへ合流。TTS中は musicGain をダッキング。
   //   → 音楽を止めずに読み上げが乗る。音量は musicGain.gain で制御（Agora setVolume は使わない）。
   S.musicVol = (typeof S.musicVol === 'number') ? S.musicVol : 15;
-  S.ttsVol = (typeof S.ttsVol === 'number') ? S.ttsVol : 30;   // 読み上げ(ずんだもん声)音量。既定控えめ
+  S.ttsVol = (typeof S.ttsVol === 'number') ? S.ttsVol : 15;   // 読み上げ音量。既定控えめ（bot起動時に config.jingle.ttsVol で上書き）
   S.duck = (typeof S.duck === 'number') ? S.duck : 0.25;   // TTS中の音楽残し率
   const volToGain = (v) => Math.max(0, Math.min(100, Number(v) || 0)) / 100;
 
