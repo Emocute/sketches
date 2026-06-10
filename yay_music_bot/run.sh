@@ -19,7 +19,14 @@ echo "✓ token ok"
 echo "▶ bot 起動（tmux: yay_music_bot）"
 tmux kill-session -t yay_music_bot 2>/dev/null
 sleep 1
-tmux new-session -d -s yay_music_bot "node bot.mjs 2>&1 | tee /tmp/yay_music_bot.log"
+# tmux サーバの env は引き継がれない場合があるので、追跡uid等をコマンド文字列に明示注入する。
+# 空文字 env を注入すると Python 側の default が効かず int('') で落ちるため、値がある変数だけ前置する。
+ENV_PREFIX=""
+[ -n "$YAY_WATCH_UID" ] && ENV_PREFIX="${ENV_PREFIX}YAY_WATCH_UID='${YAY_WATCH_UID}' "
+[ -n "$YAY_SELF_UID" ]  && ENV_PREFIX="${ENV_PREFIX}YAY_SELF_UID='${YAY_SELF_UID}' "
+[ -n "$YAY_MUSIC_VOL" ] && ENV_PREFIX="${ENV_PREFIX}YAY_MUSIC_VOL='${YAY_MUSIC_VOL}' "
+[ -n "$YAY_CALL_ID" ]   && ENV_PREFIX="${ENV_PREFIX}YAY_CALL_ID='${YAY_CALL_ID}' "
+tmux new-session -d -s yay_music_bot "${ENV_PREFIX}node bot.mjs 2>&1 | tee /tmp/yay_music_bot.log"
 sleep 4
 echo "── 状態 ──"
 tmux has-session -t yay_music_bot 2>/dev/null && echo "bot: tmux yay_music_bot 稼働中" || echo "bot: 起動失敗"

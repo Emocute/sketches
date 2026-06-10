@@ -40,7 +40,8 @@ DEVICE_FILE = _resolve(os.environ.get("YAY_DEVICE_FILE"), ".yay_device")
 # 究が共有した Yay の Agora App ID（通話の RTC/RTM 共通）
 AGORA_APP_ID = os.environ.get("YAY_AGORA_APP_ID", "79046b8c9be54945b7f10a4d128d5395")
 # Emo Claude の Yay user id（config.mjs selfUserHref /user/11320230 と一致）
-SELF_UID = int(os.environ.get("YAY_SELF_UID", "11320230"))
+# 注意: 空文字 env（run.sh が未設定 uid を YAY_SELF_UID='' と注入する場合）でも default に倒す
+SELF_UID = int((os.environ.get("YAY_SELF_UID") or "11320230").strip())
 SELF_EMAIL = os.environ.get("YAY_SELF_EMAIL", "")
 
 
