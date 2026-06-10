@@ -102,6 +102,16 @@ async def _creds_for_call(client, call_id: int) -> dict:
     conf = getattr(conf_res, "conference_call", None)
     if conf is None:
         return {"ok": False, "stage": "get_conference_call", "error": "conference_call が空"}
+    # 部外者には agora_channel/agora_token が空で返る（rtm token は -318 "not joined yet"）。
+    # Yay 側の join = start_conference_call(conference_id) を踏むと参加者扱いになり creds が開示される。
+    if not getattr(conf, "agora_channel", None) or not getattr(conf, "agora_token", None):
+        try:
+            join_res = await client.start_conference_call(conference_id=call_id)
+        except Exception as e:
+            return {"ok": False, "stage": "start_conference_call", "error": f"{type(e).__name__}: {e}"}
+        jconf = getattr(join_res, "conference_call", None)
+        if jconf is not None:
+            conf_res, conf = join_res, jconf
     rtm = None
     try:
         rtm_res = await client.get_agora_rtm_token(call_id)
@@ -111,6 +121,8 @@ async def _creds_for_call(client, call_id: int) -> dict:
         sys.stderr.write(f"[warn] rtm token 取得失敗: {e}\n")
     out = _conf_to_creds(conf, rtm)
     out["conference_call_user_uuid"] = getattr(conf_res, "conference_call_user_uuid", None)
+    if not out["channel"] or not out["rtc_token"]:
+        return {"ok": False, "stage": "creds", "error": "join 後も agora creds が空", "conference_id": call_id}
     return out
 
 
