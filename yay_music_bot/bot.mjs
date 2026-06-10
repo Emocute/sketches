@@ -225,25 +225,25 @@ const CMD = {
 };
 const ALIAS = {}; for (const [k, vs] of Object.entries(CMD)) for (const v of vs) ALIAS[v] = k;
 
-// 2層ヘルプ: 引数なし=よく使う核だけ（255字に収まる）/ all=全コマンド。
+// 2層ヘルプ: 引数なし=みんなが使う基本 / all=究が使う専門。各項目を絵文字で統一（表記揺れ防止）。
 function renderHelp(arg) {
-  const full = /^(all|full|全部|詳細|a)$/i.test(String(arg || '').trim());
-  if (!full) {
+  const pro = /^(all|full|pro|全部|詳細|専門|a)$/i.test(String(arg || '').trim());
+  if (!pro) {
     return [
-      '🎧 音楽BOT（詳しくは /h all）',
-      '/p 曲名 = 再生（「○○かけて」でも可）',
-      '/s スキップ ・ /x 停止 ・ /ps 一時停止 ・ /r 再開',
-      '/v 0-100 = 音量 ・ /ql = キュー一覧',
+      '🎧 音楽BOT（専門コマンドは /h all）',
+      '▶️ /p 曲名 再生（「○○かけて」でも可）',
+      '⏭️ /s スキップ  ⏹️ /x 停止',
+      '⏸️ /ps 一時停止  ⏯️ /r 再開',
+      '🔊 /v 0-100 音量  🎵 /np 再生中  📜 /ql キュー一覧',
     ].join('\n');
   }
   return [
-    '🎧 全コマンド',
-    '▶再生 /p 曲orURL（「曲A,曲B」で複数・YT再生リストURLは全曲展開）',
-    '📜キュー /ql 一覧 /qd<N>削除 /qu<N>前 /qj<N>後 /c 消去',
-    '⏯制御 /s スキップ /x 停止 /ps 一時停止 /r 再開',
-    '🔁ループ /l 一曲 /qr キュー全体 /qsh シャッフル',
-    '🔊音量 /v 0-100音楽 /vu /vd ±10 /ttsvol 0-100読み上げ',
-    '⚙その他 /np 再生中 /lv 配信 /d 入力一覧 /greet 入退室読み上げ /bye 退出',
+    '🎧 専門コマンド',
+    '🔂 /l 一曲ループ  🔁 /qr キュー全体  🔀 /qsh シャッフル',
+    '🔼 /qu N 前へ  🔽 /qj N 後ろへ  🗑️ /qd N 削除  🧹 /c 全消去',
+    '🗣️ /ttsvol 0-100 読み上げ音量  👋 /greet 入退室読み上げ',
+    '📡 /lv 音声配信  🎛️ /d 入力一覧  🔉 /vu /vd 音量±10',
+    '➕ 複数曲「曲A,曲B」  📋 YT再生リストURLは全曲展開  🚪 /bye 退出',
   ].join('\n');
 }
 const onoff = (b) => (b ? '🟢ON' : '⚪OFF');
