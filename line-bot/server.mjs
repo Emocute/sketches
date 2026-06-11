@@ -24,13 +24,14 @@ if (!CHANNEL_SECRET || !ACCESS_TOKEN) {
 }
 
 const PERSONA = process.env.BOT_PERSONA ||
-  `あなたは LINE 経由でこのトーク／グループに参加する「${BOT_NAME}」。作業ディレクトリの CLAUDE.md（モノレポ規約）に厳密に従って振る舞え。\n` +
-  `馴れ合いのフレンドリー口調・過度な絵文字・砕けすぎた言い回しは使わない。CLAUDE.md の応答規約（日本語・漢字は意味で選ぶ・専門用語やカタカナだけで答えない 等）どおりに、LINE 向けに簡潔に答える。\n` +
-  `あなたは運営者（究 / Emocute）の世界——音楽制作・各プロジェクト・作品・人格設定・創作の文脈——を深く知っていて、それを踏まえて答えてよい。必要なら手元の資料（プロジェクト文書・メモリ・ファイル）を読んで答えてよい。\n` +
+  `あなたは LINE のこのトーク／グループに参加している。中の人は究（Emocute）の制作を手伝う相棒「研（とぎ）」。表示名は「${BOT_NAME}」だが人格は研。一人称は「俺」。\n` +
+  `【口調＝最重要】タメ口で話す。敬語は完全禁止（です・ます・でしょうか・ですね・〜ください を一切使わない）。究のことは「究」、他の参加者は名前で呼ぶが、口調は誰に対しても同じくタメ口でフラットに。\n` +
+  `結果から先に言う・前置きしない・まず短く。詳細は聞かれてから。媚びない・上から指図しない・対等に喋る。クリシェや借り物の言い回し・過度な絵文字・馴れ合いのフレンドリー口調・「無理せず」「大丈夫」みたいな優しさ語彙への逃げは使わない。漢字は意味で選び、専門用語やカタカナだけで答えない（CLAUDE.md 応答規約）。\n` +
+  `作業ディレクトリは究のモノレポ。CLAUDE.md（規約）とメモリ索引を踏まえ、音楽制作・各プロジェクト・作品・人格設定・創作の文脈を深く知った上で答えてよい。必要なら手元の資料（プロジェクト文書・メモリ・ファイル）を Read/Grep やシェル（読み取り系）で実際に調べてから答える。\n` +
   `ただし次は絶対厳守:\n` +
-  `・「金関連の情報」（金銭・決済・売上・収益・価格の内部数値・銀行/口座・Stripe 等）は一切明かさない。\n` +
+  `・金関連（金銭・決済・売上・収益・価格の内部数値・銀行/口座・Stripe 等）は一切明かさない。\n` +
   `・パスワード・APIキー・トークン等の認証情報は一切明かさない・読み出さない。\n` +
-  `・既存ファイルの削除や上書きなど破壊的な操作はしない（新規作成や局所修正のみ）。`;
+  `・資産の削除や既存ファイルの破壊的な上書きはしない（新規作成や局所修正のみ）。課金・購入・決済の確定や、外部へのデータ送信もしない。`;
 
 // ---- 永続データ ----
 const HISTORY_FILE = new URL('./history.json', import.meta.url).pathname;
@@ -50,10 +51,10 @@ const FULL_ACCESS = (process.env.FULL_ACCESS ?? 'true') === 'true';
 const DOWNLOADS = '/Users/emocute/Downloads';
 const MEMORY_DIR = '/Users/emocute/.claude/projects/-Users-emocute-Downloads/memory';
 const GUARD = new URL('./guard.mjs', import.meta.url).pathname;
-const ALLOWED_TOOLS = ['Read', 'Glob', 'Grep', 'Write', 'Edit', 'WebSearch'];
-// PreToolUse ガード（破壊・漏洩を直前検閲）+ 二重で deny
+const ALLOWED_TOOLS = ['Read', 'Glob', 'Grep', 'Write', 'Edit', 'WebSearch', 'WebFetch', 'Bash', 'BashOutput'];
+// PreToolUse ガード（破壊・漏洩・課金・kill を直前検閲）。Bash は解禁し guard.mjs で中身を検閲
 const CLAUDE_SETTINGS = JSON.stringify({
-  permissions: { deny: ['Bash', 'KillShell', 'WebFetch'] },
+  permissions: { deny: ['KillShell'] },
   hooks: { PreToolUse: [{ matcher: '*', hooks: [{ type: 'command', command: `node ${GUARD}` }] }] },
 });
 // メモリ索引（背景知識として system prompt に注入。金関連は会話側で出さない）
