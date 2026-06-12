@@ -75,7 +75,7 @@ let queue = [];        // 未再生キュー（確定URL or query文字列）
 const titleCache = new Map();  // URL → 正式タイトル（先行検索で確定したものを表示用に保持）
 let nowQuery = null;   // 再生中の曲名/ラベル
 let starting = false;  // 多重起動ガード
-let lastVol = Number(process.env.YAY_MUSIC_VOL || 15);
+let lastVol = Number(process.env.YAY_MUSIC_VOL || 3);   // 音楽の初期音量（究指示 2026-06-12 既定3）
 let lastTtsVol = Number(process.env.YAY_TTS_VOL || (CONFIG.jingle?.ttsVol ?? 15)); // 読み上げ音量 0-100（/ttsvol で変更）
 let queueRepeat = false; // キュー全体リピート（/qr）。ON で流し終えた曲を末尾へ戻して循環。
 
@@ -633,7 +633,7 @@ async function main() {
   const SELF_RTM = String(creds.conference_call_user_uuid || SELF_UID);
   console.log('[music] self RTM id =', SELF_RTM);
 
-  if (process.env.YAY_MUSIC_VOL) { const r = await agora.setMusicVolume(page, process.env.YAY_MUSIC_VOL); console.log('[music] 初期音量', r?.vol); }
+  { const r = await agora.setMusicVolume(page, lastVol); if (r?.ok) lastVol = r.vol; console.log('[music] 初期音量', r?.vol ?? lastVol); }
   try { const r = await agora.setTtsVolume(page, lastTtsVol); if (r?.ok) lastTtsVol = r.vol; console.log('[music] 読み上げ初期音量', lastTtsVol); } catch {}
 
   try { await agora.drainInbox(page); } catch {}   // join前の残/エコー一掃
