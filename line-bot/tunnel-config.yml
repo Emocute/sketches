@@ -1,0 +1,7 @@
+tunnel: deecd9ea-1423-443a-852d-39403c849483
+credentials-file: /Users/emocute/.cloudflared/deecd9ea-1423-443a-852d-39403c849483.json
+
+ingress:
+  - hostname: line-bot.emocutelab.com
+    service: http://localhost:8787
+  - service: http_status:404

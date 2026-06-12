@@ -144,3 +144,25 @@ grep -oE "https://[a-z0-9-]+\.trycloudflare\.com" tunnel.log | head -1
 ```bash
 node test_webhook.mjs   # 署名付き webhook を自サーバーに投げて claude 応答を確認
 ```
+
+---
+
+## 運用（2026-06-12 恒久化）
+
+quick tunnel（URL毎回変動）→ **固定URL + launchd 自動再起動**へ移行。プロセス落ち・再起動でも自動復旧する。
+
+- **固定 Webhook URL**: `https://line-bot.emocutelab.com/webhook`（named tunnel `line-bot`、UUID `deecd9ea-…`）
+- **自動起動 (launchd, KeepAlive)**:
+  - `~/Library/LaunchAgents/com.emocute.linebot.server.plist` … `node --env-file=.env server.mjs`
+  - `~/Library/LaunchAgents/com.emocute.linebot.tunnel.plist` … `cloudflared tunnel --protocol http2 --config tunnel-config.yml run line-bot`
+  - ログは TCC 回避で `~/Library/Logs/linebot/{server,tunnel}.log`（Downloads 配下だと launchd が EX_CONFIG で開けない）
+  - 手動再読込: `launchctl bootout gui/$(id -u)/<label>` → `launchctl bootstrap gui/$(id -u) <plist>`
+- **トンネルは `--protocol http2` 必須**（この回線では QUIC が `tls: no application protocol` で弾かれる）
+- **Webhook URL の登録は API で完結**（LINE コンソール不要）:
+  `PUT https://api.line.me/v2/bot/channel/webhook/endpoint` + `POST …/webhook/test` で疎通確認
+- **会話記憶**: `.env` の `MAX_HISTORY`（2026-06-12 に 24→200 へ拡張、過去ログを多めに読む）
+
+### 反応しない時の切り分け
+1. `curl https://line-bot.emocutelab.com/health` → `ok` か（NG=トンネル落ち、launchd ログ確認）
+2. `lsof -i :8787` でサーバ生存（NG=server.plist 確認）
+3. LINE 側 endpoint: `GET …/webhook/endpoint` が固定URL & `active:true` か
