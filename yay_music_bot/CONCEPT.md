@@ -1,5 +1,10 @@
 # yay_music_bot — CONCEPT
 
+## 起動（唯一の入口）
+
+`./yaybot.sh`（ターミナルは alias `yaybot`、Claude Desktop の Dispatch からは `Sketches/yay_music_bot/yaybot.sh` を実行）。
+トークン失効時は自動で relogin（究の X ログイン1クリックだけ手動）→ run.sh で起動まで連鎖。`yaybot status|stop|restart` も同スクリプト。
+
 ## 目的
 
 Yay 通話に常駐する**純音楽BOT**。将来サブスク提供を見据えた、機能を絞った優秀な音楽再生 bot。
