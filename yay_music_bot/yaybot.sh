@@ -12,19 +12,23 @@
 # 「言えば入る」は Dispatch ではなくこの常駐で実現する＝そもそも起動操作が要らなくなる。
 #
 # 使い方:
-#   yaybot install    … 常駐化（tmux supervise を起動。最初の一回／reboot後）
-#   yaybot            … 今すぐ再起動（= restart。部屋を移った時など即入り直し）
+#   yaybot            … 「起動」＝常駐を保証（未常駐なら立てる／既に追尾中なら触らない＝冪等）
+#   yaybot install    … 同上（明示）
+#   yaybot restart    … 現在の通話へ即入り直す（部屋を移った時）
 #   yaybot status     … 稼働状況・トークン・追跡uid を表示
 #   yaybot stop       … 常駐停止
 #   yaybot relogin    … トークン失効時。素Chromeでログイン1クリック→自動で再起動
 #   yaybot boot-enable… reboot 後も自動起動（launchd＋Full Disk Access、要一回手動付与）
+#
+# トークン消費: この音楽botは LLM 不使用（regex＋TTSのみ）＝Claude/AIトークン消費ゼロ。
+#              Yayトークンは認証鍵(約1年)で、追尾し続けても減らない・課金ゼロ。
 
 cd "$(dirname "$0")"
 PY=".venv/bin/python"
 SESSION="yaybot"
 LOG="/tmp/yay_music_bot.log"
 
-CMD="${1:-restart}"
+CMD="${1:-up}"
 
 _token_ok()        { $PY yay_api.py check 2>/dev/null | grep -q '"ok": true'; }
 _full_bot_running(){ pgrep -f "node bot_agora.mjs" >/dev/null 2>&1; }
@@ -53,6 +57,17 @@ cmd_install() {
   tmux new-session -d -s "$SESSION" "zsh supervise.sh 2>&1 | tee $LOG"
   echo "✓ 常駐化（tmux: $SESSION）。Mac ログイン中ずっと待ち受け→自動追尾。"
   sleep 3; cmd_status
+}
+
+cmd_up() {
+  # 「Yaybot起動」の既定。常駐してなければ立てる／既に追尾中なら触らない（冪等）。
+  if _alive && _bot_running; then
+    echo "✓ 既に常駐・追尾中（触りません）"; cmd_status; return
+  fi
+  if _alive && ! _bot_running; then
+    echo "✓ 常駐中（supervise が数秒で bot を立て直します）"; cmd_status; return
+  fi
+  cmd_install
 }
 
 cmd_restart() {
@@ -99,9 +114,8 @@ cmd_status() {
 }
 
 case "$CMD" in
-  install)        cmd_install ;;
-  start)          _alive && cmd_restart || cmd_install ;;
-  restart|"")     cmd_restart ;;
+  install|start|up|"") cmd_up ;;     # 「Yaybot起動」＝常駐を保証（冪等）
+  restart)        cmd_restart ;;     # 明示的に現在の通話へ入り直す
   stop)           cmd_stop ;;
   relogin)        cmd_relogin ;;
   boot-enable)    cmd_boot_enable ;;
