@@ -264,6 +264,26 @@ function yayRejoin(callId) {
     });
   });
 }
+// 追従: 究(YAY_WATCH_UID)が別の通話へ移ったら検知し、再起動して新しい通話を再発見する。
+//   生のチャンネル切替よりプロセス再起動（supervise が立て直し→起動時discovery）の方が堅い。
+//   明示ピン(YAY_CALL_ID)時や watch 未設定時は追従しない。
+let lastFollowAt = 0;
+async function followWatchedUser() {
+  if (process.env.YAY_CALL_ID || !process.env.YAY_WATCH_UID) return;
+  const now = Date.now();
+  if (now - lastFollowAt < (CONFIG.followMs || 30000)) return;
+  lastFollowAt = now;
+  let cur;
+  try { cur = await fetchCreds(); } catch { return; }   // active 9714060（究の現在通話）
+  if (!cur || !cur.ok) return;                           // 究が通話に居ない/取得失敗 → 何もしない
+  const here = String(creds?.conference_id || '');
+  const there = String(cur.conference_id || '');
+  if (there && here && there !== here) {
+    console.log(`[music] 究が別の通話へ移動 (${here}→${there}) → 追従のため再起動`);
+    try { await agora.leave(page); } catch {}
+    process.exit(0);   // supervise が5秒で立て直し、起動時discoveryで新通話へ入る
+  }
+}
 // 名簿ポーリング＋差分（throttle はここで持つ。loop から毎周回呼んでよい）。
 // あいさつOFFでも回す（Yay参加見張りはあいさつと独立に必要）。
 async function pollMembersAndDiff() {
@@ -670,6 +690,8 @@ async function main() {
       } catch {}
     }
 
+    // 究が別の通話へ移ったら追従（throttle は関数内）
+    try { await followWatchedUser(); } catch (e) { console.error('follow', e.message); }
     // 入退室の読み上げ（名簿差分→挨拶。throttle は関数内）＋ Yay参加見張り
     try { await pollMembersAndDiff(); } catch (e) { console.error('greet poll', e.message); }
     try { await drainJingle(); } catch (e) { console.error('greet drain', e.message); }
