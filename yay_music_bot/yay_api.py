@@ -138,6 +138,8 @@ async def cmd_active(client, user_id: int) -> dict:
         return {"ok": False, "stage": "get_active_call_post", "error": "参加中の通話が無い"}
     conf = getattr(post, "conference_call", None)
     call_id = getattr(conf, "id", None) if conf else None
+    # 通話を立てた人（＝枠のホスト）= post の作成者 user.id。追従の「俺の枠だけ」判定に使う。
+    host_uid = getattr(getattr(post, "user", None), "id", None)
     # post に conference_call が乗っていれば agora_channel/token もそのまま入る
     if conf and getattr(conf, "agora_channel", None) and getattr(conf, "agora_token", None):
         rtm = None
@@ -148,10 +150,12 @@ async def cmd_active(client, user_id: int) -> dict:
                 sys.stderr.write(f"[warn] rtm token: {e}\n")
         out = _conf_to_creds(conf, rtm)
         out["post_id"] = getattr(post, "id", None)
+        out["host_uid"] = host_uid
         return out
     if call_id:  # 念のため詳細を引き直す
         out = await _creds_for_call(client, call_id)
         out["post_id"] = getattr(post, "id", None)
+        out["host_uid"] = host_uid
         return out
     return {"ok": False, "stage": "active", "error": "post に conference_call.id が無い"}
 

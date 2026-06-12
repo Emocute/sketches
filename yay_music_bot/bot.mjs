@@ -30,6 +30,14 @@ const saveState = (s) => { try { writeFileSync(CONFIG.stateFile, JSON.stringify(
 // yay_api.py を叩いて creds JSON を得る（最終行が JSON）。
 //   発見uid = YAY_WATCH_UID(別アカ運用時) があればそれ、無ければ SELF_UID。
 const DISCOVER_UID = String(process.env.YAY_WATCH_UID || SELF_UID);
+// 追従先の制限: 究(WATCH_UID)が「自分で立てた枠」だけに入る。他人の枠にゲスト参加してても追わない。
+//   判定 = その通話の post 作成者(host_uid) が究のuidと一致するか。
+//   明示ピン(YAY_CALL_ID)時や watch 未設定時は制限しない。YAY_FOLLOW_ANY=1 で無効化（昔の挙動）。
+const WATCH_UID = process.env.YAY_WATCH_UID ? String(process.env.YAY_WATCH_UID) : null;
+function isOwnRoom(c) {
+  if (!WATCH_UID || process.env.YAY_CALL_ID || process.env.YAY_FOLLOW_ANY === '1') return true;
+  return String(c?.host_uid ?? '') === WATCH_UID;
+}
 function fetchCreds() {
   const args = process.env.YAY_CALL_ID ? ['creds', String(process.env.YAY_CALL_ID)] : ['active', DISCOVER_UID];
   return new Promise((resolve, reject) => {
@@ -276,6 +284,7 @@ async function followWatchedUser() {
   let cur;
   try { cur = await fetchCreds(); } catch { return; }   // active 9714060（究の現在通話）
   if (!cur || !cur.ok) return;                           // 究が通話に居ない/取得失敗 → 何もしない
+  if (!isOwnRoom(cur)) return;                           // 究が他人の枠に居るだけ → 追わない
   const here = String(creds?.conference_id || '');
   const there = String(cur.conference_id || '');
   if (there && here && there !== here) {
@@ -628,9 +637,13 @@ async function main() {
   console.log('[music] 通話待ち受け開始（通話に入ったら自動参加）…');
   for (;;) {
     creds = await fetchCreds().catch((e) => ({ ok: false, error: e.message }));
-    if (creds && creds.ok) break;
+    if (creds && creds.ok) {
+      if (isOwnRoom(creds)) break;
+      console.log(`[music] 究の枠ではない通話 (host=${creds.host_uid}) → 入らず待機`);
+      creds = { ok: false, error: 'not own room' };
+    }
     const reason = creds?.error || '不明';
-    if (!/参加中の通話が無い/.test(String(reason))) console.log('[music] creds 取得待ち:', reason);
+    if (!/参加中の通話が無い|not own room/.test(String(reason))) console.log('[music] creds 取得待ち:', reason);
     await sleep(WAIT_MS);
   }
   console.log('[music] ✓ 通話発見→自動参加 channel=%s uid=%s', creds.channel, creds.uid);
