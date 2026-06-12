@@ -71,7 +71,8 @@ const sendYayChat = (p, text) => agora.sendChat(p, yayEnvelope(text));
 let page, fileBase, creds;
 
 // ===== 音楽状態 =====
-let queue = [];        // 未再生キュー（query文字列）
+let queue = [];        // 未再生キュー（確定URL or query文字列）
+const titleCache = new Map();  // URL → 正式タイトル（先行検索で確定したものを表示用に保持）
 let nowQuery = null;   // 再生中の曲名/ラベル
 let starting = false;  // 多重起動ガード
 let lastVol = Number(process.env.YAY_MUSIC_VOL || 15);
@@ -98,8 +99,10 @@ function splitCommandLines(text) {
 function isPlaylistUrl(u) {
   return /^https?:\/\//i.test(u) && /(youtube\.com|youtu\.be)/i.test(u) && /[?&]list=/i.test(u);
 }
-// キュー表示用ラベル（長いURLは動画IDに短縮、曲名はそのまま）。
+// キュー表示用ラベル（先行検索で確定した正式タイトルがあればそれ、無ければURL短縮/曲名そのまま）。
 function qLabel(s) {
+  const cached = titleCache.get(s);
+  if (cached) return cached;
   if (!/^https?:\/\//i.test(s)) return s;
   const m = s.match(/[?&]v=([\w-]{6,})/) || s.match(/youtu\.be\/([\w-]{6,})/);
   return m ? `▶ ${m[1]}` : s.slice(0, 48);
@@ -324,6 +327,7 @@ const CMD = {
   help:   ['help', 'h', '?'],
   play:   ['play', 'p', 'pl'],
   queue:  ['queue', 'q', 'add'],
+  plsearch:['plist', 'plsearch', 'pls', 'プレイリスト', '再生リスト'],  // キーワードでプレイリストを検索→展開してキューへ
   skip:   ['skip', 's', 'next', 'n'],
   stop:   ['stop', 'x'],
   pause:  ['pause', 'ps'],
@@ -357,6 +361,7 @@ function renderHelp(arg) {
     return [
       '🎧 音楽BOT（専門コマンドは /h all）',
       '▶️ /p 曲名 再生（「○○かけて」でも可）',
+      '📃 /plist 名前 プレイリスト検索（「○○のプレイリストかけて」でも可）',
       '⏭️ /s スキップ  ⏹️ /x 停止',
       '⏸️ /ps 一時停止  ⏯️ /r 再開',
       '🔊 /v 0-100 音量  🎵 /np 再生中  📜 /ql キュー一覧',
@@ -408,6 +413,10 @@ function nlToCommand(text) {
   if ((m = t.match(/(?:音量|ボリューム|ボリュ)\D*?(\d{1,3}(?:\.\d+)?)/))) return `/vol ${m[1]}`;
   if (/(?:音量|ボリューム|音)/.test(t) && /(上げ|大きく|でかく|あげて|うるさ)/.test(t)) return '/volup';
   if (/(?:音量|ボリューム|音)/.test(t) && /(下げ|小さく|さげて|ちいさ|静か|絞)/.test(t)) return '/voldown';
+  // 「○○(の)プレイリスト(を)かけて」→ プレイリスト検索。
+  //   ※ play動詞の "プレイ" が "プレイリスト" に誤爆するので、こちらを先に・専用パターンで判定。
+  const plm = t.match(/^(.*?)(?:の|を)?\s*(?:プレイリスト|playlist|再生リスト)\s*(?:を|で)?\s*(?:かけて|流して|再生して|プレイして|かけろ|流せ|流す|再生|聴きたい|聞きたい|して|ちょうだい|頂戴)?\s*$/i);
+  if (plm && plm[1] && plm[1].trim()) return `/plist ${plm[1].trim()}`;
   const pv = t.match(/(かけて|流して|再生して|プレイして|聴きたい|聞きたい|かけろ|流せ|プレイ|かけ)/);
   if (pv) {
     let q = t.slice(0, pv.index).trim();
@@ -442,39 +451,56 @@ async function handleCommand(text) {
       case 'play':
       case 'queue': {
         if (!q) return renderQueue();           // 引数なし = 番号付き一覧
-        let songs = splitSongs(q);              // カンマ/読点/改行区切りで複数曲対応
-        // YouTube プレイリストURL は各動画へ展開（展開失敗時はそのURLを単曲扱い）
-        let plNote = '';
-        if (songs.some(isPlaylistUrl)) {
-          const ex = [];
-          for (const s of songs) {
-            if (!isPlaylistUrl(s)) { ex.push(s); continue; }
+        const songs = splitSongs(q);            // カンマ/読点/改行区切りで複数曲対応
+        // 各入力を「確定アイテム {url,title}」へ先行解決してからキューに入れる。
+        //   プレイリストURL → 展開（title付き）。曲名/動画URL → searchTrack で検索し正式タイトル確定。
+        const items = [];   // {url, title}
+        let note = '';
+        for (const s of songs) {
+          if (isPlaylistUrl(s)) {
             try {
-              const items = await music.expandPlaylist(s, { limit: PLAYLIST_LIMIT });
-              if (items.length) { ex.push(...items.map((it) => it.url)); plNote += `📃 プレイリスト展開: ${items.length}曲\n`; }
-              else { ex.push(s); plNote += '⚠ プレイリストが空（単曲扱い）\n'; }
-            } catch (e) { console.error('playlist expand', e.message); ex.push(s); plNote += '⚠ プレイリスト展開失敗（単曲扱い）\n'; }
+              const ex = await music.expandPlaylist(s, { limit: PLAYLIST_LIMIT });
+              if (ex.length) { items.push(...ex); note += `📃 プレイリスト展開: ${ex.length}曲\n`; }
+              else note += '⚠ プレイリストが空\n';
+            } catch (e) { console.error('playlist expand', e.message); note += '⚠ プレイリスト展開失敗\n'; }
+          } else {
+            const hit = await music.searchTrack(s);   // ← キュー前に検索して曲名確認
+            if (hit) items.push(hit);
+            else note += `❌ 見つからず: ${s}\n`;
           }
-          songs = ex;
         }
-        if (!songs.length) return notFoundMsg(q);
-        // 複数曲: 空いてれば先頭を即再生、残りをキュー。再生中なら全部キュー末尾へ。
-        if (songs.length > 1) {
-          let started = null; const added = [];
-          for (const s of songs) {
-            if (!nowQuery && !starting && !started) {
-              const r = await startTrack(s);
-              if (r.ok) started = s; else { queue.push(s); added.push(s); }
-            } else { queue.push(s); added.push(s); }
-          }
-          const head = started ? `▶ 再生: ${qLabel(started)}\n` : '';
-          return `${plNote}${head}➕ ${added.length}曲をキューに追加\n` + renderQueue();
+        if (!items.length) return (note || notFoundMsg(q)).trim();
+        for (const it of items) titleCache.set(it.url, it.title);   // 表示用に正式タイトル保持
+        // 空いてれば先頭を即再生、残りをキュー。再生中なら全部キュー末尾へ。
+        let started = null; const added = [];
+        for (const it of items) {
+          if (!nowQuery && !starting && !started) {
+            const r = await startTrack(it.url);
+            if (r.ok) started = it; else { queue.push(it.url); added.push(it); }
+          } else { queue.push(it.url); added.push(it); }
         }
-        // 単曲
-        const one = songs[0];
-        if (!nowQuery && !starting) { const r = await startTrack(one); return r.ok ? (plNote || null) : notFoundMsg(one); }
-        queue.push(one);
-        return `${plNote}➕ キューに追加(${queue.length}): ${qLabel(one)}`;
+        // 「今流れてる」は startTrack が "🎵 タイトル" を別途送る。ここではキュー結果だけ返す。
+        if (added.length === 1 && !started) return `${note}➕ キューに追加(${queue.length}): ${added[0].title}`.trim();
+        if (added.length) return `${note}➕ ${added.length}曲をキューに追加\n${renderQueue()}`.trim();
+        return note.trim() || null;
+      }
+      case 'plsearch': {
+        if (!q) return '🔎 プレイリスト名を指定（例: /plist 作業用BGM jazz）';
+        let pl;
+        try { pl = await music.searchPlaylist(q); } catch (e) { console.error('plsearch', e.message); }
+        if (!pl) return `❌ プレイリストが見つかりません: ${q}`;
+        let ex = [];
+        try { ex = await music.expandPlaylist(pl.url, { limit: PLAYLIST_LIMIT }); } catch (e) { console.error('pl expand', e.message); }
+        if (!ex.length) return `❌ 展開できませんでした: ${pl.title}`;
+        for (const it of ex) titleCache.set(it.url, it.title);
+        let started = null; const added = [];
+        for (const it of ex) {
+          if (!nowQuery && !starting && !started) {
+            const r = await startTrack(it.url);
+            if (r.ok) started = it; else { queue.push(it.url); added.push(it); }
+          } else { queue.push(it.url); added.push(it); }
+        }
+        return `📃 プレイリスト「${pl.title}」${ex.length}曲\n➕ ${added.length}曲をキューに追加\n${renderQueue()}`.trim();
       }
       case 'qlist': return renderQueue();
       case 'qdel': {

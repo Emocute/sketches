@@ -74,6 +74,48 @@ export async function expandPlaylist(url, { timeout = 60000, limit = 100 } = {})
   }).filter((x) => /^https?:\/\//.test(x.url));
 }
 
+// 曲名/URL → 正式タイトル＋確定の動画URL（DLも stream解決もしない＝軽量・速い）。
+//   キュー投入前に「正しい曲名で入ったか」を確認するための先行検索。見つからなければ null。
+export async function searchTrack(query, { timeout = 30000 } = {}) {
+  const q = (query || '').trim();
+  if (!q) return null;
+  const target = /^https?:\/\//i.test(q) ? q : `ytsearch1:${q}`;
+  let out;
+  try {
+    out = await sh('yt-dlp', ['--flat-playlist', '--no-warnings',
+      '--print', '%(title)s\t%(webpage_url)s', target], { timeout });
+  } catch { return null; }
+  const line = (out || '').trim().split('\n').filter(Boolean)[0];
+  if (!line) return null;
+  const i = line.indexOf('\t');
+  const title = (i < 0 ? line : line.slice(0, i)).trim();
+  const url = (i < 0 ? '' : line.slice(i + 1)).trim();
+  if (!/^https?:\/\//.test(url)) return null;
+  return { title: title || q, url };
+}
+
+// キーワード → YouTube プレイリストを検索し、先頭の { title, url }（プレイリストURL）を返す。
+//   既にプレイリストURLならそのまま。見つからなければ null。展開は呼び出し側で expandPlaylist。
+export async function searchPlaylist(query, { timeout = 40000 } = {}) {
+  const q = (query || '').trim();
+  if (!q) return null;
+  if (/[?&]list=/.test(q) && /^https?:\/\//i.test(q)) return { title: q, url: q };
+  // YouTube 検索のプレイリストフィルタ（sp=EgIQAw%3D%3D ＝ type:playlist）
+  const target = `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}&sp=EgIQAw%3D%3D`;
+  let out;
+  try {
+    out = await sh('yt-dlp', ['--flat-playlist', '--no-warnings', '-I', '1:1',
+      '--print', '%(title)s\t%(url)s', target], { timeout });
+  } catch { return null; }
+  const line = (out || '').trim().split('\n').filter(Boolean)[0];
+  if (!line) return null;
+  const i = line.indexOf('\t');
+  const title = (i < 0 ? line : line.slice(0, i)).trim();
+  const url = (i < 0 ? '' : line.slice(i + 1)).trim();
+  if (!/[?&]list=/.test(url)) return null;
+  return { title: title || q, url };
+}
+
 // /play 入力 → { path } （ローカル絶対パス、旧DL方式。フォールバック用に残置）
 export async function resolve(query) {
   const q = (query || '').trim();
