@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  yay_music_bot 常駐監視（launchd LaunchAgent）。
+  Mac ログイン中ずっと node bot.mjs を生かし続け、究(.yay_watch のuid)が通話に入ったら自動 join・追尾する。
+  導入/停止は `yaybot install` / `yaybot stop`（このファイルを直接いじらない）。
+  注意: パスは emocute マシン固定。別マシンでは要修正。
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.emocute.yaybot</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/zsh</string>
+    <string>/Users/emocute/Downloads/Sketches/yay_music_bot/launchd_run.sh</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/emocute/Downloads/Sketches/yay_music_bot</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>ThrottleInterval</key>
+  <integer>15</integer>
+
+  <key>ProcessType</key>
+  <string>Background</string>
+
+  <key>StandardOutPath</key>
+  <string>/tmp/yay_music_bot.log</string>
+  <key>StandardErrorPath</key>
+  <string>/tmp/yay_music_bot.log</string>
+</dict>
+</plist>

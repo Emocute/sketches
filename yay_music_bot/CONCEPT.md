@@ -1,9 +1,13 @@
 # yay_music_bot — CONCEPT
 
-## 起動（唯一の入口）
+## 起動（常駐・自動追尾）
 
-`./yaybot.sh`（ターミナルは alias `yaybot`、Claude Desktop の Dispatch からは `Sketches/yay_music_bot/yaybot.sh` を実行）。
-トークン失効時は自動で relogin（究の X ログイン1クリックだけ手動）→ run.sh で起動まで連鎖。`yaybot status|stop|restart` も同スクリプト。
+`./yaybot.sh`（ターミナルは alias `yaybot`）。**方式＝tmux セッション `yaybot` で `supervise.sh` を回し node bot.mjs を落ちても立て直し続ける常駐**。
+Mac ログイン中ずっと待ち受け→究(.yay_watch のuid)が通話に入ったら自動 join・蹴られても再join＝起動操作が要らない。
+- `yaybot install` 常駐化（最初の一回／reboot後） / `yaybot` 即再起動（部屋移動時） / `yaybot status|stop` / `yaybot relogin` トークン失効時
+- **launchd は使えない**: Downloads は macOS の TCC 保護で launchd 由来プロセスが読めず exit 127（usage_share でも踏んだ壁）。tmux supervise はユーザー文脈で動くので可
+- **Dispatch（Claude Desktop）はプロセスを起動できない**（クリップボード手渡しが限界）→「言えば入る」は常駐で実現
+- reboot 後も自動で上げたい時のみ `yaybot boot-enable`（launchd＋/bin/zsh に Full Disk Access 一回付与）
 
 ## 目的
 
