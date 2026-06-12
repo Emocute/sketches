@@ -5,19 +5,18 @@
 #               「yay bot 起動」と言えば agent がこのスクリプトを実行できる →  Sketches/yay_music_bot/yaybot.sh
 # ターミナルから: alias `yaybot`（~/.zshrc 登録）か、このファイルを直接実行。
 #
-# やること（start 時）:
-#   1. フル機能bot（yay_bot/bot_agora.mjs）が動いてたら SAME_UID で蹴り合うので警告して中断（--force で強行）
+# やること（start 時）— 呼んだら無条件で再起動する（究指示「どっかで起動してても無理やり再起動」）:
+#   1. フル機能bot（yay_bot/bot_agora.mjs）が動いてたら SAME_UID 競合回避のため問答無用で停止
 #   2. .yay_token をチェック。失効してたら relogin.sh を自動で呼ぶ（究の X ログイン1クリックだけ手動・自動入力はしない）
-#   3. token ok になったら run.sh で tmux 起動（.yay_watch の uid が居る通話を自動追従）
+#   3. run.sh で tmux 起動（既存セッションは kill→再起動。.yay_watch の uid が居る通話を自動追従）
 #   4. 状態を1画面で報告
 #
 # 使い方:
-#   yaybot            … 起動（= start）
-#   yaybot start      … 起動
+#   yaybot            … 起動（= start。動いてても必ず再起動）
+#   yaybot start      … 同上
 #   yaybot stop       … 停止
-#   yaybot restart    … 停止して起動し直し
+#   yaybot restart    … 明示的に停止→起動
 #   yaybot status     … 稼働状況・トークン・追跡uid を表示
-#   yaybot start --force … フルbotが動いていても強行起動
 
 cd "$(dirname "$0")"
 PY=".venv/bin/python"
@@ -65,12 +64,15 @@ ensure_token() {
 }
 
 cmd_start() {
-  if _full_bot_running && [ "$FORCE" -ne 1 ]; then
-    echo "⛔ フル機能bot(yay_bot/bot_agora.mjs)が稼働中です。"
-    echo "   同一Yayアカウントなので、音楽botを起動するとフルbotが通話から蹴られます(SAME_UID)。"
-    echo "   フルbotを止めてよければ:  yaybot start --force"
-    echo "   （通話中なら yay_bot_no_restart ルール: 究の許可なく落とさない）"
-    exit 1
+  # 呼ばれたら無条件で再起動する（究指示）。どこかで動いてても問答無用で落として起動し直す。
+  # 音楽bot自身の tmux セッションは run.sh が kill→再起動。ここでは競合するフルbotも落とす。
+  if _full_bot_running; then
+    echo "▶ フル機能bot(yay_bot/bot_agora.mjs)が稼働中 → SAME_UID 競合回避のため停止します"
+    # supervise.sh が落ちると即復活させるので、先に tmux セッションを殺してから pkill する
+    tmux kill-session -t yay_bot 2>/dev/null
+    sleep 1
+    pkill -f "node bot_agora.mjs" 2>/dev/null
+    sleep 1
   fi
   ensure_token || exit 1
   ./run.sh
