@@ -38,17 +38,37 @@ function isOwnRoom(c) {
   if (!WATCH_UID || process.env.YAY_CALL_ID || process.env.YAY_FOLLOW_ANY === '1') return true;
   return String(c?.host_uid ?? '') === WATCH_UID;
 }
-function fetchCreds() {
-  const args = process.env.YAY_CALL_ID ? ['creds', String(process.env.YAY_CALL_ID)] : ['active', DISCOVER_UID];
+function runApiJson(args, timeout = 30000) {
   return new Promise((resolve, reject) => {
-    execFile(PY, [API, ...args], { timeout: 30000 }, (err, stdout, stderr) => {
+    execFile(PY, [API, ...args], { timeout }, (err, stdout, stderr) => {
       const lines = (stdout || '').trim().split('\n').filter(Boolean);
       let json = null;
       for (let i = lines.length - 1; i >= 0; i--) { try { json = JSON.parse(lines[i]); break; } catch {} }
-      if (!json) return reject(new Error('creds JSON 解析不可: ' + (stderr || stdout || err?.message)));
+      if (!json) return reject(new Error('API JSON 解析不可: ' + (stderr || stdout || err?.message)));
       resolve(json);
     });
   });
+}
+function fetchCreds() {
+  const args = process.env.YAY_CALL_ID ? ['creds', String(process.env.YAY_CALL_ID)] : ['active', DISCOVER_UID];
+  return runApiJson(args);
+}
+// 直近に入ってた究の枠への復帰用フォールバック。
+//   Yay の active は「ホスト自身の枠」を返さないことがある→究が自分で立てた枠に居るのに発見できない。
+//   そこで直近 join した call_id を覚えておき、active が空振りした時、その枠にまだ究が居れば creds を取り直す。
+const LASTCALL_FILE = '.yay_lastcall';
+function saveLastCall(id) { try { if (id) writeFileSync(LASTCALL_FILE, JSON.stringify({ id: String(id), at: Date.now() })); } catch {} }
+async function fallbackToLastCall() {
+  if (process.env.YAY_CALL_ID || !WATCH_UID) return null;
+  let last; try { last = JSON.parse(readFileSync(LASTCALL_FILE, 'utf8')); } catch { return null; }
+  if (!last?.id || Date.now() - (last.at || 0) > 12 * 3600 * 1000) return null;   // 12h より古いものは捨てる
+  // その枠にまだ究が居るか確認（究不在の他人だけの枠には入らない＝「俺の枠だけ」維持）
+  let mem; try { mem = await runApiJson(['members', String(last.id)], 20000); } catch { return null; }
+  const here = (mem?.users || []).some((u) => String(u.id ?? '') === WATCH_UID);
+  if (!here) return null;
+  let cr; try { cr = await runApiJson(['creds', String(last.id)], 30000); } catch { return null; }
+  if (cr?.ok) { console.log(`[music] activeが究の枠を返さない→直近の枠(${last.id})に究在室を確認し復帰`); return cr; }
+  return null;
 }
 
 // RTM の生メッセージ → {id, author, text, type}。Yay通話チャットは "chat {JSON}" 形式。
@@ -656,12 +676,17 @@ async function main() {
       if (isOwnRoom(creds)) break;
       console.log(`[music] 究の枠ではない通話 (host=${creds.host_uid}) → 入らず待機`);
       creds = { ok: false, error: 'not own room' };
+    } else {
+      // active が究のホスト枠を返さない時の保険: 直近の自分の枠に究がまだ居れば復帰
+      const fb = await fallbackToLastCall().catch(() => null);
+      if (fb) { creds = fb; break; }
     }
     const reason = creds?.error || '不明';
     if (!/参加中の通話が無い|not own room/.test(String(reason))) console.log('[music] creds 取得待ち:', reason);
     await sleep(WAIT_MS);
   }
   console.log('[music] ✓ 通話発見→自動参加 channel=%s uid=%s', creds.channel, creds.uid);
+  saveLastCall(creds.conference_id);   // 次回 active 空振り時の復帰用に覚えておく
 
   const fs = await agora.startFileServer(0);
   fileBase = `http://127.0.0.1:${fs.port}`;
