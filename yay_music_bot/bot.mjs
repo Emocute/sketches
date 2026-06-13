@@ -11,7 +11,7 @@
 //
 // 起動: node bot.mjs            （現在参加中の通話を自動発見）
 //      YAY_CALL_ID=<id> node bot.mjs （call_id 明示）
-import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, readdirSync, appendFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync, readdirSync, appendFileSync, unlinkSync } from 'node:fs';
 import { appendFile } from 'node:fs/promises';
 import { execFile } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -379,6 +379,7 @@ const CMD = {
   ping:   ['ping', 'pi'],
   greet:  ['greet', 'あいさつ', '入退室'],   // 入退室の読み上げ ON/OFF
   rec:    ['rec', 'record', '録音'],         // 録音 状態/保存/停止/開始
+  say:    ['say', '言って', '送信', 'いって'],   // 任意のテキストを通話チャットへ送る（究の代弁）
   leave:  ['leave', 'bye'],
 };
 const ALIAS = {}; for (const [k, vs] of Object.entries(CMD)) for (const v of vs) ALIAS[v] = k;
@@ -477,6 +478,7 @@ async function handleCommand(text) {
     switch (cmd) {
       case 'help': return renderHelp(q);
       case 'ping': return '🏓 pong';
+      case 'say': return q || '何を言う？（例: /say へーのばか）';   // 返り値がそのままチャットへ送られる
       case 'play':
       case 'queue': {
         if (!q) return renderQueue();           // 引数なし = 番号付き一覧
@@ -708,6 +710,18 @@ async function main() {
     // 入退室の読み上げ（名簿差分→挨拶。throttle は関数内）＋ Yay参加見張り
     try { await pollMembersAndDiff(); } catch (e) { console.error('greet poll', e.message); }
     try { await drainJingle(); } catch (e) { console.error('greet drain', e.message); }
+
+    // 外部送信箱: .yay_say にテキストを書くと、今入ってる通話チャットへ送って消す（究の代弁・再起動不要）
+    try {
+      if (existsSync('.yay_say')) {
+        const t = readFileSync('.yay_say', 'utf8').trim();
+        unlinkSync('.yay_say');
+        for (const line of t.split('\n').map((s) => s.trim()).filter(Boolean)) {
+          await sendYayChat(page, line).catch((e) => console.error('say send', e.message));
+          console.log('  📨 say:', line);
+        }
+      }
+    } catch (e) { console.error('say outbox', e.message); }
 
     // 録音チャンクをファイルへ追記（常時・間引きは関数内）
     try { await drainRecToFile(); } catch (e) { console.error('rec drain', e.message); }
