@@ -65,7 +65,9 @@ function parseMsg(m) {
   } catch {}
   if (type !== 'chat') text = '';
   text = String(text || '').trim();
-  return { id: msgId ? `id:${msgId}` : `${author}|${m.ts}|${text}`, author, text, type };
+  // Yay のチャットメッセージ id は "<送信者のYay uid>_<ts>" 形式。先頭を送信者uidとして取り出す。
+  const senderUid = msgId ? String(msgId).split('_')[0] : null;
+  return { id: msgId ? `id:${msgId}` : `${author}|${m.ts}|${text}`, author, senderUid, text, type };
 }
 
 // Yayが表示できる送信エンベロープ。受信と同形式。
@@ -250,14 +252,25 @@ function inQuietHours() {
   const h = new Date().getHours(); const [a, b] = qh;
   return a <= b ? (h >= a && h < b) : (h >= a || h < b);   // 跨ぎ(例: 23-7)も対応
 }
+// TTSボイス（究指示で無機質・フォーマル＝既定 say Kyoko。config か YAY_VOICE で変更可）。
+const VOICE_KEY = () => process.env.YAY_VOICE || JC().voiceKey || 'say_default';
 // あいさつを声で（音楽を止めず ttsGain に乗せ自動ダッキング）。quietHours/voice=false なら無声。
 async function sayJingle(text) {
   if (JC().voice === false || inQuietHours()) return;
   try {
-    const r = await tts.speak(text, { voice: JC().voiceKey || null });
+    const r = await tts.speak(text, { voice: VOICE_KEY() });
     if (!r.ok || !r.file) return;
     await agora.playTTS(page, agora.fileUrl(fileBase, r.file)).catch((e) => console.error('[greet] playTTS', e.message));
   } catch (e) { console.error('[greet] say', e.message); }
+}
+// 任意テキストを読み上げ（quietHours 等に縛られず常に喋る。/say・送信箱・究の発言読み上げ用）。
+async function speakText(text) {
+  const t = String(text || '').trim();
+  if (!t) return;
+  try {
+    const r = await tts.speak(t, { voice: VOICE_KEY() });
+    if (r.ok && r.file) await agora.playTTS(page, agora.fileUrl(fileBase, r.file)).catch((e) => console.error('[say] playTTS', e.message));
+  } catch (e) { console.error('[say] speak', e.message); }
 }
 // Yay側参加の見張り: Yay はしばらくすると bot の参加を名簿から落とすことがある。
 // その間アプリ上で bot が見えず chat も表示されない（Agora の RTC/RTM は生きてるので
@@ -478,7 +491,7 @@ async function handleCommand(text) {
     switch (cmd) {
       case 'help': return renderHelp(q);
       case 'ping': return '🏓 pong';
-      case 'say': return q || '何を言う？（例: /say へーのばか）';   // 返り値がそのままチャットへ送られる
+      case 'say': { if (!q) return '何を言う？（例: /say へーのばか）'; speakText(q); return q; }   // 読み上げ＋文字（返り値がチャットへ）
       case 'play':
       case 'queue': {
         if (!q) return renderQueue();           // 引数なし = 番号付き一覧
@@ -718,6 +731,7 @@ async function main() {
         unlinkSync('.yay_say');
         for (const line of t.split('\n').map((s) => s.trim()).filter(Boolean)) {
           await sendYayChat(page, line).catch((e) => console.error('say send', e.message));
+          await speakText(line);   // 読み上げも
           console.log('  📨 say:', line);
         }
       }
@@ -744,6 +758,10 @@ async function main() {
           if (nl) { console.log('  🗣→cmd', nl); mr = await handleCommand(nl); }
         }
         if (mr) { await sendYayChat(page, mr).catch((e) => console.error('send', e.message)); console.log('  ♪', mr); }
+        // 究(WATCH_UID)の素のチャット（コマンド/音楽指示でない）は読み上げる
+        else if (WATCH_UID && m.senderUid === WATCH_UID && !/^[!\/]/.test(m.text)) {
+          await speakText(m.text); console.log('  🔊 究の発言を読み上げ:', m.text);
+        }
       }
       saveState({ seen: [...seen].slice(-2000) });
     }

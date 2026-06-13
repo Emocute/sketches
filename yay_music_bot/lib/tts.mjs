@@ -7,7 +7,7 @@
 //   2) 無ければ macOS `say`（既定 Kyoko）で WAV 生成。即動くがずんだもん音色ではない。
 // 課金ゼロ・完全ローカル。
 import { execFile, spawn } from 'node:child_process';
-import { writeFileSync, mkdirSync, unlinkSync, existsSync } from 'node:fs';
+import { writeFileSync, readFileSync, mkdirSync, unlinkSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
 const TMP = fileURLToPath(new URL('../_tts_tmp', import.meta.url));
@@ -58,17 +58,18 @@ async function viaVoicevox(text, speaker = VV_SPEAKER) {
 }
 
 async function viaSay(text, voice = SAY_VOICE) {
-  // say コマンドで WAV を標準出力に出す
-  return new Promise((res, rej) => {
-    const p = spawn('say', ['-v', voice, '-r', '180', '-o', '/dev/stdout', text], { stdio: ['ignore', 'pipe', 'ignore'] });
-    const chunks = [];
-    p.stdout.on('data', (d) => chunks.push(d));
-    p.on('close', (code) => {
-      if (code === 0) res(Buffer.concat(chunks));
-      else rej(new Error('say exit ' + code));
-    });
+  // say は /dev/stdout への出力が macOS で失敗する(-54)ので、一時 WAV へ出して読み戻す。
+  // --data-format=LEI16@24000 + .wav 拡張子 で RIFF WAV(PCM) を生成（VOICEVOX 経路と同じ wav 形式）。
+  mkdirSync(TMP, { recursive: true });
+  const tmpf = `${TMP}/sayraw_${process.pid}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}.wav`;
+  await new Promise((res, rej) => {
+    const p = spawn('say', ['-v', voice, '-r', '180', '--data-format=LEI16@24000', '-o', tmpf, text], { stdio: ['ignore', 'ignore', 'ignore'] });
+    p.on('close', (code) => (code === 0 ? res() : rej(new Error('say exit ' + code))));
     p.on('error', rej);
   });
+  const buf = readFileSync(tmpf);
+  try { unlinkSync(tmpf); } catch {}
+  return buf;
 }
 
 // テキストを音声化して WAV ファイルに保存。ファイルパスを返す（Agora playUrl 用）。
