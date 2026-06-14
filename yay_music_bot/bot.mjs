@@ -295,7 +295,7 @@ function inQuietHours() {
 //   `.yay_mode` ファイルに永続。/voice コマンドで再起動なしにトグル可。
 const MODE_FILE = '.yay_mode';
 const MODE_VOICE = { kiritan: 'kiritan', zunda: 'zundamon', english: 'english' };
-let voiceMode = (() => { try { const m = readFileSync(MODE_FILE, 'utf8').trim(); return MODE_VOICE[m] ? m : 'kiritan'; } catch { return 'kiritan'; } })();
+let voiceMode = (() => { try { const m = readFileSync(MODE_FILE, 'utf8').trim(); return MODE_VOICE[m] ? m : 'english'; } catch { return 'english'; } })();   // 既定=English(究指示2026-06-14)
 function setVoiceMode(m) { if (!MODE_VOICE[m]) return false; voiceMode = m; try { writeFileSync(MODE_FILE, m); } catch {} return true; }
 // TTSボイス: モード(kiritan/zunda/english)の声。YAY_VOICE で明示上書き可。
 const VOICE_KEY = () => process.env.YAY_VOICE || MODE_VOICE[voiceMode] || 'say_default';
