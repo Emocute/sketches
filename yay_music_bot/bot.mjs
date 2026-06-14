@@ -272,8 +272,9 @@ function inQuietHours() {
   const h = new Date().getHours(); const [a, b] = qh;
   return a <= b ? (h >= a && h < b) : (h >= a || h < b);   // 跨ぎ(例: 23-7)も対応
 }
-// TTSボイス（究指示で無機質・フォーマル＝既定 say Kyoko。config か YAY_VOICE で変更可）。
-const VOICE_KEY = () => process.env.YAY_VOICE || JC().voiceKey || 'say_default';
+// TTSボイス。CoeFont キー(COEFONT_ACCESSKEY/SECRET)が入ってればひろゆき(究指示2026-06-14)を自動使用。
+// 無ければ config の声（既定=無機質フォーマル say Kyoko）。YAY_VOICE で明示上書き可。
+const VOICE_KEY = () => process.env.YAY_VOICE || ((tts.coefontConfigured && tts.coefontConfigured()) ? 'hiroyuki' : (JC().voiceKey || 'say_default'));
 // あいさつを声で（音楽を止めず ttsGain に乗せ自動ダッキング）。quietHours/voice=false なら無声。
 async function sayJingle(text) {
   if (JC().voice === false || inQuietHours()) return;
