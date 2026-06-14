@@ -342,12 +342,14 @@ async function sayJingle(text) {
     await agora.playTTS(page, agora.fileUrl(fileBase, r.file)).catch((e) => console.error('[greet] playTTS', e.message));
   } catch (e) { console.error('[greet] say', e.message); }
 }
-// 任意テキストを読み上げ（quietHours 等に縛られず常に喋る。/say・送信箱・究の発言読み上げ用）。
+// 究が書いた文字（/say・送信箱・究の発言読み上げ）は常に東北きりたんで読む（究指示2026-06-14）。
+// あいさつ(sayJingle)はモードの声のまま。きりたんは日本語をそのまま読むのでローマ字化しない。
+const USER_VOICE = 'kiritan';
 async function speakText(text) {
   const t = String(text || '').trim();
   if (!t) return;
   try {
-    const r = await tts.speak(await spokenForm(t), { voice: VOICE_KEY() });
+    const r = await tts.speak(t, { voice: USER_VOICE });
     if (r.ok && r.file) await agora.playTTS(page, agora.fileUrl(fileBase, r.file)).catch((e) => console.error('[say] playTTS', e.message));
   } catch (e) { console.error('[say] speak', e.message); }
 }
