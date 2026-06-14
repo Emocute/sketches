@@ -1,5 +1,8 @@
 #!/bin/zsh
 # line-bot 監視塔（launchd で 60 秒毎に起動 → 1 回チェックして終了）。
+# ※このファイルが repo 正本。launchd は TCC 保護で ~/Downloads 内のスクリプトを開けないため、
+#   実行コピーは ~/Library/Application Support/linebot/watchdog.sh に置く（plist もそこを指す）。
+#   編集したら必ず実行コピーへ反映: cp watchdog.sh "$HOME/Library/Application Support/linebot/watchdog.sh"
 # KeepAlive で拾えない異常を検知して自動修復する:
 #   ① ローカル /health 無応答（プロセスは生きててもイベントループ閉塞）→ server 再起動
 #   ② 公開トンネル経由 /health 無応答（ローカルは生きてる）→ tunnel 再起動
@@ -16,6 +19,8 @@ STALE_SEC=300   # claude -p がこの秒数を超えて生存＝詰まり（serv
 
 mkdir -p "$(dirname "$LOG")"
 log() { print -r -- "$(date '+%Y-%m-%d %H:%M:%S') $1" >> "$LOG"; }
+# 生存証明（毎回更新。これが古ければ番人自身が死んでる）
+print -r -- "$(date '+%Y-%m-%d %H:%M:%S') alive" > "$HOME/Library/Logs/linebot/watchdog.heartbeat"
 restart() { # $1=ラベル $2=理由
   log "RESTART $1 : $2"
   launchctl kickstart -k "$1" >/dev/null 2>&1
