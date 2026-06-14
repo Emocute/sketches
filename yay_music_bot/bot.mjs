@@ -252,19 +252,20 @@ function fetchMembers(callId) {
     });
   });
 }
+// 究指示2026-06-14「敬語・フォーマルモード」: 東北きりたんのクールで落ち着いた口調を、敬語で。
 function greetWord() {
   const h = new Date().getHours();
-  if (h >= 5 && h < 11) return 'おはよ';
-  if (h >= 11 && h < 18) return 'やっほー';
+  if (h >= 5 && h < 11) return 'おはようございます';
+  if (h >= 11 && h < 18) return 'こんにちは';
   return 'こんばんは';
 }
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 function jingleLine({ kind, nick, returning }) {
-  const who = nick || '誰か';
-  if (kind === 'leave') return pick([`${who} またね`, `${who} ばいばい`, `${who} おつかれ`, `${who}、また来てね`]);
-  if (returning) return pick([`${who} おかえり`, `${who} 戻ってきた`, `おっ ${who} おかえり`]);
+  const who = (nick || '誰か') + 'さん';
+  if (kind === 'leave') return pick([`${who}、お疲れさまでした`, `${who}、またお越しください`, `${who}、またお会いしましょう`]);
+  if (returning) return pick([`${who}、おかえりなさいませ`, `${who}、お戻りですね`, `${who}、おかえりなさい`]);
   const g = greetWord();
-  return pick([`${who} ${g}！いらっしゃい`, `${g} ${who}！来てくれた`, `${who} いらっしゃい`, `お、${who} 来た！${g}`]);
+  return pick([`${who}、${g}。いらっしゃいませ`, `${who}、${g}。ようこそお越しくださいました`, `${g}、${who}`, `${who}、ようこそ`]);
 }
 function inQuietHours() {
   const qh = JC().quietHours;
@@ -378,10 +379,10 @@ async function drainJingle() {
   const j = jingleQueue.shift();
   lastJingleAt = now;
   const line = jingleLine(j);
-  const emoji = j.kind === 'leave' ? '👋' : '🎉';
-  try { await sendYayChat(page, `${emoji} ${line}`); } catch (e) { console.error('[greet] chat', e.message); }
+  // フォーマルモード: 絵文字prefixは付けない（敬語の素のテキストで送る）
+  try { await sendYayChat(page, line); } catch (e) { console.error('[greet] chat', e.message); }
   await sayJingle(line);
-  console.log(`  ${emoji} greet:`, line);
+  console.log('  greet:', line);
 }
 function presentCount() { return [...roster.values()].filter((r) => r.present).length; }
 

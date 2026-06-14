@@ -18,6 +18,7 @@ const SAY_VOICE = process.env.YAY_SAY_VOICE || 'Kyoko';
 
 // ボイスパック（Voicevox speaker ID）
 export const VOICE_PACKS = {
+  kiritan: { name: '東北きりたん（ノーマル）', speaker: 108, engine: 'voicevox', speed: 1.2 },   // 究の既定(2026-06-14)・早めの発音
   zundamon: { name: 'ずんだもん（ノーマル）', speaker: 3, engine: 'voicevox' },
   zundamon_power: { name: 'ずんだもん（パワフル）', speaker: 75, engine: 'voicevox' },
   zundamon_sad: { name: 'ずんだもん（悲しい）', speaker: 74, engine: 'voicevox' },
@@ -68,13 +69,14 @@ export function sanitize(text) {
   return t.slice(0, 180);                             // 長すぎ防止
 }
 
-async function viaVoicevox(text, speaker = VV_SPEAKER) {
+async function viaVoicevox(text, speaker = VV_SPEAKER, speed = 1) {
   const q = await fetch(`${VV_URL}/audio_query?speaker=${speaker}&text=${encodeURIComponent(text)}`,
     { method: 'POST', signal: AbortSignal.timeout(8000) });
   if (!q.ok) throw new Error('audio_query ' + q.status);
-  const query = await q.text();
+  const query = await q.json();
+  if (speed && speed !== 1) query.speedScale = speed;   // 発音速度（1=標準、>1で早口）
   const s = await fetch(`${VV_URL}/synthesis?speaker=${speaker}`,
-    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: query, signal: AbortSignal.timeout(15000) });
+    { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(query), signal: AbortSignal.timeout(15000) });
   if (!s.ok) throw new Error('synthesis ' + s.status);
   const wav = Buffer.from(await s.arrayBuffer());
   return wav;
@@ -121,7 +123,10 @@ export async function speak(text, { voice = null } = {}) {
     if (_vvAlive === null) await voicevoxAlive();
     try {
       if (pack?.engine === 'voicevox' || (_vvAlive && !pack)) {
-        if (_vvAlive) { wav = await viaVoicevox(t, pack?.speaker ?? VV_SPEAKER); usedEngine = 'voicevox'; }
+        if (_vvAlive) {
+          const sp = Number(process.env.YAY_TTS_SPEED) || pack?.speed || 1;   // 速度: env優先→パック既定→1
+          wav = await viaVoicevox(t, pack?.speaker ?? VV_SPEAKER, sp); usedEngine = 'voicevox';
+        }
       }
     } catch (e) { _vvAlive = false; /* VOICEVOX落ちたら say へ落ちる */ }
   }
