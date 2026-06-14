@@ -268,6 +268,14 @@ function enGreetWord() {
 }
 function jingleLine({ kind, nick, returning }) {
   const g = greetWord();
+  if (voiceMode === 'katakoto') {
+    const who = nick || 'ミナサン';
+    const h = new Date().getHours();
+    const kg = (h >= 5 && h < 11) ? 'オハヨー' : (h < 18 ? 'コンニチワ' : 'コンバンワ');
+    if (kind === 'leave') return pick([`${who}、マタネー！`, `${who}、バイバーイ！`, `オー、${who}、イッチャウ ノ？`]);
+    if (returning) return pick([`オー！${who}、カエッテキタ ネー！`, `${who}、オカエリ ネー！`]);
+    return pick([`${who}、${kg}！ヨウコソ ネー！`, `オー！${who}、キタ ネー！`, `${who}、イラッシャーイ！`]);
+  }
   if (voiceMode === 'english') {
     const who = nick || 'everyone';
     if (kind === 'leave') return pick([`Goodbye, ${who}.`, `See you, ${who}.`, `Take care, ${who}.`]);
@@ -291,6 +299,10 @@ function jingleLineMulti(kind, items) {
   const ns = items.map((i) => i.nick).filter(Boolean);
   if (ns.length <= 1) return jingleLine(items[0]);
   const g = greetWord();
+  if (voiceMode === 'katakoto') {
+    const nl = ns.join('、');
+    return kind === 'leave' ? `${nl}、マタネー！` : `${nl}、ヨウコソ ネー！`;
+  }
   if (voiceMode === 'english') {
     const nl = nameListEn(ns);
     return kind === 'leave' ? `Goodbye, ${nl}.` : `${enGreetWord()}, ${nl}. Welcome.`;
@@ -311,14 +323,14 @@ function inQuietHours() {
 // 声＋口調モード（究指示2026-06-14）。kiritan=東北きりたん×クール敬語 / zunda=ずんだもん×〜なのだ。
 //   `.yay_mode` ファイルに永続。/voice コマンドで再起動なしにトグル可。
 const MODE_FILE = '.yay_mode';
-const MODE_VOICE = { kiritan: 'kiritan', zunda: 'zundamon', english: 'english' };
-let voiceMode = (() => { try { const m = readFileSync(MODE_FILE, 'utf8').trim(); return MODE_VOICE[m] ? m : 'english'; } catch { return 'english'; } })();   // 既定=English(究指示2026-06-14)
+const MODE_VOICE = { kiritan: 'kiritan', zunda: 'zundamon', english: 'english', katakoto: 'english' };   // katakoto=Daniel声でカタコト日本語
+let voiceMode = (() => { try { const m = readFileSync(MODE_FILE, 'utf8').trim(); return MODE_VOICE[m] ? m : 'katakoto'; } catch { return 'katakoto'; } })();   // 既定=カタコト(究指示2026-06-14)
 function setVoiceMode(m) { if (!MODE_VOICE[m]) return false; voiceMode = m; try { writeFileSync(MODE_FILE, m); } catch {} return true; }
 // TTSボイス: モード(kiritan/zunda/english)の声。YAY_VOICE で明示上書き可。
 const VOICE_KEY = () => process.env.YAY_VOICE || MODE_VOICE[voiceMode] || 'say_default';
 // 読み上げ用テキスト整形: englishモードでは日本語を機械的ローマ字化して Daniel に読ませる（チャット文字は別＝原文のまま）。
 async function spokenForm(text) {
-  if (voiceMode !== 'english') return text;
+  if (voiceMode !== 'english' && voiceMode !== 'katakoto') return text;   // Daniel声は日本語をローマ字化して読む
   try { return await tts.toRomaji(text); } catch { return text; }
 }
 // あいさつを声で（音楽を止めず ttsGain に乗せ自動ダッキング）。quietHours/voice=false なら無声。
@@ -565,12 +577,13 @@ async function handleCommand(text) {
       case 'say': { if (!q) return '何を言う？（例: /say へーのばか）'; speakText(q); return q; }   // 読み上げ＋文字（返り値がチャットへ）
       case 'voice': {   // 声＋口調モード切替（再起動なしで即反映）
         const a = q.toLowerCase();
-        const names = { kiritan: '東北きりたんモード', zunda: 'ずんだもんモード', english: 'Englishモード(Daniel)' };
-        if (!a) return `🎙 現在: ${names[voiceMode]}（切替: /voice kiritan | zunda | english）`;
+        const names = { kiritan: '東北きりたんモード', zunda: 'ずんだもんモード', english: 'Englishモード(Daniel)', katakoto: 'カタコトモード(Daniel)' };
+        if (!a) return `🎙 現在: ${names[voiceMode]}（切替: /voice kiritan | zunda | english | katakoto）`;
         if (/zunda|ずんだ/.test(a)) { setVoiceMode('zunda'); return 'ずんだもんモードに切り替えたのだ！'; }
         if (/kiri|きりたん/.test(a)) { setVoiceMode('kiritan'); return '東北きりたんモードに切り替えました'; }
+        if (/kata|カタコト|片言/.test(a)) { setVoiceMode('katakoto'); return 'オー！カタコトモード ネ！'; }
         if (/eng|英語|daniel/.test(a)) { setVoiceMode('english'); return 'Switched to English mode.'; }
-        return '使い方: /voice kiritan | zunda | english';
+        return '使い方: /voice kiritan | zunda | english | katakoto';
       }
       case 'play':
       case 'queue': {
