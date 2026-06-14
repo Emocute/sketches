@@ -252,19 +252,25 @@ function fetchMembers(callId) {
     });
   });
 }
-// 究指示2026-06-14「敬語・フォーマルモード」: 東北きりたんのクールで落ち着いた口調を、敬語で。
+// あいさつ口調はモードで切替（kiritan=クール敬語 / zunda=〜なのだ）。greetWord は時間帯の挨拶語のみ。
 function greetWord() {
   const h = new Date().getHours();
-  if (h >= 5 && h < 11) return 'おはようございます';
+  if (h >= 5 && h < 11) return voiceMode === 'zunda' ? 'おはよう' : 'おはようございます';
   if (h >= 11 && h < 18) return 'こんにちは';
   return 'こんばんは';
 }
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 function jingleLine({ kind, nick, returning }) {
+  const g = greetWord();
+  if (voiceMode === 'zunda') {
+    const who = nick || '誰か';
+    if (kind === 'leave') return pick([`${who}、またなのだ！`, `${who}、ばいばいなのだ！`, `${who}、お疲れなのだ！`]);
+    if (returning) return pick([`${who}、おかえりなのだ！`, `おっ、${who}が戻ってきたのだ！`]);
+    return pick([`${who}、${g}！いらっしゃいなのだ！`, `${g}！${who}、よく来たのだ！`, `${who}、いらっしゃいなのだ！`]);
+  }
   const who = (nick || '誰か') + 'さん';
   if (kind === 'leave') return pick([`${who}、お疲れさまでした`, `${who}、またお越しください`, `${who}、またお会いしましょう`]);
   if (returning) return pick([`${who}、おかえりなさいませ`, `${who}、お戻りですね`, `${who}、おかえりなさい`]);
-  const g = greetWord();
   return pick([`${who}、${g}。いらっしゃいませ`, `${who}、${g}。ようこそお越しくださいました`, `${g}、${who}`, `${who}、ようこそ`]);
 }
 function inQuietHours() {
@@ -273,9 +279,14 @@ function inQuietHours() {
   const h = new Date().getHours(); const [a, b] = qh;
   return a <= b ? (h >= a && h < b) : (h >= a || h < b);   // 跨ぎ(例: 23-7)も対応
 }
-// TTSボイス。CoeFont キー(COEFONT_ACCESSKEY/SECRET)が入ってればひろゆき(究指示2026-06-14)を自動使用。
-// 無ければ config の声（既定=無機質フォーマル say Kyoko）。YAY_VOICE で明示上書き可。
-const VOICE_KEY = () => process.env.YAY_VOICE || ((tts.coefontConfigured && tts.coefontConfigured()) ? 'hiroyuki' : (JC().voiceKey || 'say_default'));
+// 声＋口調モード（究指示2026-06-14）。kiritan=東北きりたん×クール敬語 / zunda=ずんだもん×〜なのだ。
+//   `.yay_mode` ファイルに永続。/voice コマンドで再起動なしにトグル可。
+const MODE_FILE = '.yay_mode';
+const MODE_VOICE = { kiritan: 'kiritan', zunda: 'zundamon' };
+let voiceMode = (() => { try { const m = readFileSync(MODE_FILE, 'utf8').trim(); return MODE_VOICE[m] ? m : 'kiritan'; } catch { return 'kiritan'; } })();
+function setVoiceMode(m) { if (!MODE_VOICE[m]) return false; voiceMode = m; try { writeFileSync(MODE_FILE, m); } catch {} return true; }
+// TTSボイス: CoeFontキー有→ひろゆき。無ければモードの声。YAY_VOICE で明示上書き可。
+const VOICE_KEY = () => process.env.YAY_VOICE || ((tts.coefontConfigured && tts.coefontConfigured()) ? 'hiroyuki' : (MODE_VOICE[voiceMode] || 'say_default'));
 // あいさつを声で（音楽を止めず ttsGain に乗せ自動ダッキング）。quietHours/voice=false なら無声。
 async function sayJingle(text) {
   if (JC().voice === false || inQuietHours()) return;
@@ -415,6 +426,7 @@ const CMD = {
   greet:  ['greet', 'あいさつ', '入退室'],   // 入退室の読み上げ ON/OFF
   rec:    ['rec', 'record', '録音'],         // 録音 状態/保存/停止/開始
   say:    ['say', '言って', '送信', 'いって'],   // 任意のテキストを通話チャットへ送る（究の代弁）
+  voice:  ['voice', 'mode', 'モード', '声'],      // 声＋口調モード切替（kiritan / zunda）。再起動不要でトグル
   leave:  ['leave', 'bye'],
 };
 const ALIAS = {}; for (const [k, vs] of Object.entries(CMD)) for (const v of vs) ALIAS[v] = k;
@@ -514,6 +526,13 @@ async function handleCommand(text) {
       case 'help': return renderHelp(q);
       case 'ping': return '🏓 pong';
       case 'say': { if (!q) return '何を言う？（例: /say へーのばか）'; speakText(q); return q; }   // 読み上げ＋文字（返り値がチャットへ）
+      case 'voice': {   // 声＋口調モード切替（再起動なしで即反映）
+        const a = q.toLowerCase();
+        if (!a) return `🎙 現在: ${voiceMode === 'zunda' ? 'ずんだもんモード' : '東北きりたんモード'}（切替: /voice zunda | /voice kiritan）`;
+        if (/zunda|ずんだ/.test(a)) { setVoiceMode('zunda'); return 'ずんだもんモードに切り替えたのだ！'; }
+        if (/kiri|きりたん/.test(a)) { setVoiceMode('kiritan'); return '東北きりたんモードに切り替えました'; }
+        return '使い方: /voice zunda | /voice kiritan';
+      }
       case 'play':
       case 'queue': {
         if (!q) return renderQueue();           // 引数なし = 番号付き一覧
