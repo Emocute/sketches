@@ -299,11 +299,16 @@ let voiceMode = (() => { try { const m = readFileSync(MODE_FILE, 'utf8').trim();
 function setVoiceMode(m) { if (!MODE_VOICE[m]) return false; voiceMode = m; try { writeFileSync(MODE_FILE, m); } catch {} return true; }
 // TTSボイス: モード(kiritan/zunda/english)の声。YAY_VOICE で明示上書き可。
 const VOICE_KEY = () => process.env.YAY_VOICE || MODE_VOICE[voiceMode] || 'say_default';
+// 読み上げ用テキスト整形: englishモードでは日本語を機械的ローマ字化して Daniel に読ませる（チャット文字は別＝原文のまま）。
+async function spokenForm(text) {
+  if (voiceMode !== 'english') return text;
+  try { return await tts.toRomaji(text); } catch { return text; }
+}
 // あいさつを声で（音楽を止めず ttsGain に乗せ自動ダッキング）。quietHours/voice=false なら無声。
 async function sayJingle(text) {
   if (JC().voice === false || inQuietHours()) return;
   try {
-    const r = await tts.speak(text, { voice: VOICE_KEY() });
+    const r = await tts.speak(await spokenForm(text), { voice: VOICE_KEY() });
     if (!r.ok || !r.file) return;
     await agora.playTTS(page, agora.fileUrl(fileBase, r.file)).catch((e) => console.error('[greet] playTTS', e.message));
   } catch (e) { console.error('[greet] say', e.message); }
@@ -313,7 +318,7 @@ async function speakText(text) {
   const t = String(text || '').trim();
   if (!t) return;
   try {
-    const r = await tts.speak(t, { voice: VOICE_KEY() });
+    const r = await tts.speak(await spokenForm(t), { voice: VOICE_KEY() });
     if (r.ok && r.file) await agora.playTTS(page, agora.fileUrl(fileBase, r.file)).catch((e) => console.error('[say] playTTS', e.message));
   } catch (e) { console.error('[say] speak', e.message); }
 }

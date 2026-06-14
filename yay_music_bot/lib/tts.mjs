@@ -115,6 +115,72 @@ export async function speak(text, { voice = null } = {}) {
   return { ok: true, engine: usedEngine, voice: voice || 'default', file: f };
 }
 
+// ===== 日本語→ローマ字（英語モードで Daniel に無理やり読ませる用。LLM不使用＝トークン消費ゼロ）=====
+// 漢字の読みは VOICEVOX(ローカル) の audio_query.kana を借りる。カナ→ローマ字は下のテーブルで機械変換。
+function hiraToKata(s) { return String(s).replace(/[ぁ-ゖ]/g, (c) => String.fromCharCode(c.charCodeAt(0) + 0x60)); }
+const YOUON = {
+  キャ: 'kya', キュ: 'kyu', キョ: 'kyo', シャ: 'sha', シュ: 'shu', ショ: 'sho', シェ: 'she',
+  チャ: 'cha', チュ: 'chu', チョ: 'cho', チェ: 'che', ニャ: 'nya', ニュ: 'nyu', ニョ: 'nyo',
+  ヒャ: 'hya', ヒュ: 'hyu', ヒョ: 'hyo', ミャ: 'mya', ミュ: 'myu', ミョ: 'myo',
+  リャ: 'rya', リュ: 'ryu', リョ: 'ryo', ギャ: 'gya', ギュ: 'gyu', ギョ: 'gyo',
+  ジャ: 'ja', ジュ: 'ju', ジョ: 'jo', ジェ: 'je', ビャ: 'bya', ビュ: 'byu', ビョ: 'byo',
+  ピャ: 'pya', ピュ: 'pyu', ピョ: 'pyo', ティ: 'ti', トゥ: 'tu', ディ: 'di', ドゥ: 'du',
+  ファ: 'fa', フィ: 'fi', フェ: 'fe', フォ: 'fo', ウィ: 'wi', ウェ: 'we', ウォ: 'wo',
+  ヴァ: 'va', ヴィ: 'vi', ヴェ: 've', ヴォ: 'vo', ツァ: 'tsa', ツェ: 'tse', ツォ: 'tso',
+};
+const ROMA = {
+  ア: 'a', イ: 'i', ウ: 'u', エ: 'e', オ: 'o', カ: 'ka', キ: 'ki', ク: 'ku', ケ: 'ke', コ: 'ko',
+  サ: 'sa', シ: 'shi', ス: 'su', セ: 'se', ソ: 'so', タ: 'ta', チ: 'chi', ツ: 'tsu', テ: 'te', ト: 'to',
+  ナ: 'na', ニ: 'ni', ヌ: 'nu', ネ: 'ne', ノ: 'no', ハ: 'ha', ヒ: 'hi', フ: 'fu', ヘ: 'he', ホ: 'ho',
+  マ: 'ma', ミ: 'mi', ム: 'mu', メ: 'me', モ: 'mo', ヤ: 'ya', ユ: 'yu', ヨ: 'yo',
+  ラ: 'ra', リ: 'ri', ル: 'ru', レ: 're', ロ: 'ro', ワ: 'wa', ヲ: 'o', ン: 'n',
+  ガ: 'ga', ギ: 'gi', グ: 'gu', ゲ: 'ge', ゴ: 'go', ザ: 'za', ジ: 'ji', ズ: 'zu', ゼ: 'ze', ゾ: 'zo',
+  ダ: 'da', ヂ: 'ji', ヅ: 'zu', デ: 'de', ド: 'do', バ: 'ba', ビ: 'bi', ブ: 'bu', ベ: 'be', ボ: 'bo',
+  パ: 'pa', ピ: 'pi', プ: 'pu', ペ: 'pe', ポ: 'po', ヴ: 'vu',
+  ァ: 'a', ィ: 'i', ゥ: 'u', ェ: 'e', ォ: 'o', ヤ_: 'ya',
+};
+function kanaToRomaji(input) {
+  const kata = hiraToKata(input);
+  let out = '', sokuon = false;
+  for (let i = 0; i < kata.length; i++) {
+    const c = kata[i], pair = kata.substr(i, 2);
+    if (c === 'ッ') { sokuon = true; continue; }
+    if (c === 'ー') { const m = out.match(/[aeiou]$/); if (m) out += m[0]; continue; }
+    let r;
+    if (YOUON[pair]) { r = YOUON[pair]; i++; }
+    else if (ROMA[c] !== undefined) { r = ROMA[c]; }
+    else { r = ''; }
+    if (sokuon) { if (/^[a-z]/.test(r)) out += r[0]; sokuon = false; }
+    out += r;
+  }
+  return out;
+}
+async function vvKana(text) {
+  const r = await fetch(`${VV_URL}/audio_query?speaker=${VV_SPEAKER}&text=${encodeURIComponent(text)}`,
+    { method: 'POST', signal: AbortSignal.timeout(8000) });
+  if (!r.ok) throw new Error('kana ' + r.status);
+  const q = await r.json();
+  return String(q.kana || '').replace(/[^゠-ヿー]/g, '');   // カタカナとーだけ残す
+}
+// 文字列中の日本語を機械的にローマ字へ。英語等はそのまま。漢字は VOICEVOX で読みを取得。
+export async function toRomaji(text) {
+  const t = String(text || '');
+  if (!/[぀-ヿ一-鿿]/.test(t)) return t;   // 日本語なし→そのまま
+  const segs = t.split(/([぀-ヿ一-鿿]+)/);
+  let out = '';
+  for (const s of segs) {
+    if (!s) continue;
+    if (/[぀-ヿ一-鿿]/.test(s)) {
+      let kata = null;
+      if (/[一-鿿]/.test(s)) { try { kata = await vvKana(s); } catch {} }   // 漢字含む→VOICEVOXで読み
+      if (!kata) kata = hiraToKata(s);
+      const ro = kanaToRomaji(kata);
+      out += ro ? ` ${ro} ` : '';
+    } else out += s;
+  }
+  return out.replace(/\s+/g, ' ').trim();
+}
+
 if (process.argv[1] && process.argv[1].endsWith('tts.mjs') && process.argv[2] === 'selftest') {
   await voicevoxAlive();
   console.log('engine:', engineName());
