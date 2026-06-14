@@ -18,7 +18,7 @@ const SAY_VOICE = process.env.YAY_SAY_VOICE || 'Kyoko';
 
 // ボイスパック（Voicevox speaker ID）
 export const VOICE_PACKS = {
-  kiritan: { name: '東北きりたん（ノーマル）', speaker: 108, engine: 'voicevox', speed: 1.2 },   // 究の既定(2026-06-14)・早めの発音
+  kiritan: { name: '東北きりたん（ノーマル）', speaker: 108, engine: 'voicevox', speed: 1.0 },   // 究の既定(2026-06-14)・速度は普通
   zundamon: { name: 'ずんだもん（ノーマル）', speaker: 3, engine: 'voicevox' },
   zundamon_power: { name: 'ずんだもん（パワフル）', speaker: 75, engine: 'voicevox' },
   zundamon_sad: { name: 'ずんだもん（悲しい）', speaker: 74, engine: 'voicevox' },
