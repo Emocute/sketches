@@ -7,7 +7,6 @@
 //   2) 無ければ macOS `say`（既定 Kyoko）で WAV 生成。即動くがずんだもん音色ではない。
 // 課金ゼロ・完全ローカル。
 import { execFile, spawn } from 'node:child_process';
-import { createHmac } from 'node:crypto';
 import { writeFileSync, readFileSync, mkdirSync, unlinkSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 
@@ -26,29 +25,8 @@ export const VOICE_PACKS = {
   akari: { name: 'あかり', speaker: 10, engine: 'voicevox' },
   mafuyu: { name: 'まふゆ', speaker: 12, engine: 'voicevox' },
   say_default: { name: 'Kyoko（macOS）', engine: 'say', voice: 'Kyoko' },
-  // CoeFont 公式「ひろゆき」(西村博之本人ボイス、音声利用は0pt)。要 API キー（Plusプラン）。
-  // 未設定時は say(Kyoko)へ自動フォールバック。coefont = ひろゆきの voice UUID。
-  hiroyuki: { name: 'ひろゆき（CoeFont）', engine: 'coefont', coefont: '19d55439-312d-4a1d-a27b-28f0f31bedc5', voice: 'Kyoko' },
+  english: { name: 'Daniel（英・macOS）', engine: 'say', voice: 'Daniel' },   // 英語モード（究指示2026-06-14）
 };
-
-// CoeFont API（HMAC-SHA256 認証）。text → wav バイナリ。キー未設定なら例外（呼び出し側で say へ落ちる）。
-const CF_KEY = () => process.env.COEFONT_ACCESSKEY || '';
-const CF_SECRET = () => process.env.COEFONT_SECRET || '';
-export function coefontConfigured() { return !!(CF_KEY() && CF_SECRET()); }
-async function viaCoeFont(text, coefontId) {
-  const key = CF_KEY(), secret = CF_SECRET();
-  if (!key || !secret) throw new Error('COEFONT_ACCESSKEY/SECRET 未設定');
-  const date = String(Math.floor(Date.now() / 1000));
-  const body = JSON.stringify({ coefont: coefontId, text: text.slice(0, 1000), format: 'wav' });
-  const sig = createHmac('sha256', secret).update(date + body).digest('hex');
-  const r = await fetch('https://api.coefont.cloud/v2/text2speech', {
-    method: 'POST', redirect: 'follow', signal: AbortSignal.timeout(20000),
-    headers: { 'Content-Type': 'application/json', Authorization: key, 'X-Coefont-Date': date, 'X-Coefont-Content': sig },
-    body,
-  });
-  if (!r.ok) throw new Error('coefont ' + r.status + ' ' + (await r.text().catch(() => '')).slice(0, 120));
-  return Buffer.from(await r.arrayBuffer());
-}
 
 let _vvAlive = null; // キャッシュ（null=未確認）
 export async function voicevoxAlive() {
@@ -112,14 +90,8 @@ export async function speak(text, { voice = null } = {}) {
   let wav = null;
   let usedEngine = 'say';
 
-  // 1) CoeFont（ひろゆき等の外部AI音声、APIキー要）。失敗時は say へ落ちる。
-  if (pack?.engine === 'coefont') {
-    try { wav = await viaCoeFont(t, pack.coefont); usedEngine = 'coefont'; }
-    catch (e) { console.error('[tts] coefont 失敗→sayへ:', e.message); }
-  }
-
-  // 2) VOICEVOX（ローカル）
-  if (!wav && pack?.engine !== 'coefont') {
+  // 1) VOICEVOX（ローカル）
+  if (!wav) {
     if (_vvAlive === null) await voicevoxAlive();
     try {
       if (pack?.engine === 'voicevox' || (_vvAlive && !pack)) {

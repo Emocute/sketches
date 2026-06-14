@@ -260,8 +260,20 @@ function greetWord() {
   return 'こんばんは';
 }
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+function enGreetWord() {
+  const h = new Date().getHours();
+  if (h >= 5 && h < 12) return 'Good morning';
+  if (h >= 12 && h < 18) return 'Good afternoon';
+  return 'Good evening';
+}
 function jingleLine({ kind, nick, returning }) {
   const g = greetWord();
+  if (voiceMode === 'english') {
+    const who = nick || 'everyone';
+    if (kind === 'leave') return pick([`Goodbye, ${who}.`, `See you, ${who}.`, `Take care, ${who}.`]);
+    if (returning) return pick([`Welcome back, ${who}.`, `Good to see you again, ${who}.`]);
+    return pick([`${enGreetWord()}, ${who}. Welcome.`, `Welcome, ${who}.`, `${enGreetWord()}, ${who}.`]);
+  }
   if (voiceMode === 'zunda') {
     const who = nick || '誰か';
     if (kind === 'leave') return pick([`${who}、またなのだ！`, `${who}、ばいばいなのだ！`, `${who}、お疲れなのだ！`]);
@@ -282,11 +294,11 @@ function inQuietHours() {
 // 声＋口調モード（究指示2026-06-14）。kiritan=東北きりたん×クール敬語 / zunda=ずんだもん×〜なのだ。
 //   `.yay_mode` ファイルに永続。/voice コマンドで再起動なしにトグル可。
 const MODE_FILE = '.yay_mode';
-const MODE_VOICE = { kiritan: 'kiritan', zunda: 'zundamon' };
+const MODE_VOICE = { kiritan: 'kiritan', zunda: 'zundamon', english: 'english' };
 let voiceMode = (() => { try { const m = readFileSync(MODE_FILE, 'utf8').trim(); return MODE_VOICE[m] ? m : 'kiritan'; } catch { return 'kiritan'; } })();
 function setVoiceMode(m) { if (!MODE_VOICE[m]) return false; voiceMode = m; try { writeFileSync(MODE_FILE, m); } catch {} return true; }
-// TTSボイス: CoeFontキー有→ひろゆき。無ければモードの声。YAY_VOICE で明示上書き可。
-const VOICE_KEY = () => process.env.YAY_VOICE || ((tts.coefontConfigured && tts.coefontConfigured()) ? 'hiroyuki' : (MODE_VOICE[voiceMode] || 'say_default'));
+// TTSボイス: モード(kiritan/zunda/english)の声。YAY_VOICE で明示上書き可。
+const VOICE_KEY = () => process.env.YAY_VOICE || MODE_VOICE[voiceMode] || 'say_default';
 // あいさつを声で（音楽を止めず ttsGain に乗せ自動ダッキング）。quietHours/voice=false なら無声。
 async function sayJingle(text) {
   if (JC().voice === false || inQuietHours()) return;
@@ -528,10 +540,12 @@ async function handleCommand(text) {
       case 'say': { if (!q) return '何を言う？（例: /say へーのばか）'; speakText(q); return q; }   // 読み上げ＋文字（返り値がチャットへ）
       case 'voice': {   // 声＋口調モード切替（再起動なしで即反映）
         const a = q.toLowerCase();
-        if (!a) return `🎙 現在: ${voiceMode === 'zunda' ? 'ずんだもんモード' : '東北きりたんモード'}（切替: /voice zunda | /voice kiritan）`;
+        const names = { kiritan: '東北きりたんモード', zunda: 'ずんだもんモード', english: 'Englishモード(Daniel)' };
+        if (!a) return `🎙 現在: ${names[voiceMode]}（切替: /voice kiritan | zunda | english）`;
         if (/zunda|ずんだ/.test(a)) { setVoiceMode('zunda'); return 'ずんだもんモードに切り替えたのだ！'; }
         if (/kiri|きりたん/.test(a)) { setVoiceMode('kiritan'); return '東北きりたんモードに切り替えました'; }
-        return '使い方: /voice zunda | /voice kiritan';
+        if (/eng|英語|daniel/.test(a)) { setVoiceMode('english'); return 'Switched to English mode.'; }
+        return '使い方: /voice kiritan | zunda | english';
       }
       case 'play':
       case 'queue': {
