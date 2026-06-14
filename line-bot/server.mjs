@@ -184,6 +184,17 @@ function runClaude(prompt) {
   });
 }
 
+// ---- 会話ごとの直列キュー ----
+// webhook ごとに claude -p を無制限同時起動すると詰まる（各々がモノレポ文脈＋ツール探索で長い）。
+// sid 単位で Promise チェーンに積み、1会話=同時1本だけ走らせて順序も守る。別会話どうしは並行のまま。
+const queues = {}; // sid -> Promise（直前タスクの完了）
+function enqueue(sid, task) {
+  const prev = queues[sid] || Promise.resolve();
+  const next = prev.then(task, task); // 直前が失敗してもチェーンを止めない
+  queues[sid] = next.catch(() => {}); // 例外を飲んでチェーン維持
+  return next;
+}
+
 function pushHistory(sid, entry) {
   history[sid] = history[sid] || [];
   history[sid].push(entry);
@@ -238,7 +249,10 @@ const server = http.createServer((req, res) => {
       res.writeHead(200); res.end('OK'); // LINE には即 200（処理は非同期）
       let body; try { body = JSON.parse(raw.toString('utf8')); } catch { return; }
       console.log(`[webhook] received ${(body.events || []).length} event(s)`);
-      for (const ev of body.events || []) handleEvent(ev).catch((e) => console.error('[handle]', e.message));
+      for (const ev of body.events || []) {
+        const sid = ev.source ? sourceId(ev.source) : 'global';
+        enqueue(sid, () => handleEvent(ev)).catch((e) => console.error('[handle]', e.message));
+      }
     });
     return;
   }
