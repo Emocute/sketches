@@ -18,7 +18,7 @@ export const CONFIG = {
   jingle: {
     enabled: true,        // 既定ON（/greet off で停止）
     voice: true,          // 声でも読む（false=チャット文字だけ）
-    ttsVol: 15,           // 読み上げの初期音量 0-100（音楽の上に乗るので控えめ既定。/ttsvol で変更）
+    ttsVol: 90,           // 読み上げの初期音量 0-100（人の声と同等に聞こえるよう大きめ。究指示2026-06-14「読み上げが聞こえない」。/ttsvol で変更）
     voiceKey: 'kiritan',  // TTSボイス。究指示2026-06-14「東北きりたん・早めの発音」→ VOICEVOX 東北きりたん(spk108, speed1.2)。VOICEVOX落ちてたら自動でmacOS sayへ。YAY_VOICE/YAY_TTS_SPEED env で上書き可
     pollMs: 12000,        // 名簿ポーリング間隔
     minGapMs: 8000,       // 連続あいさつの最小間隔（連打防止）

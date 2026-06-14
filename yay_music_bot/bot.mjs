@@ -285,6 +285,23 @@ function jingleLine({ kind, nick, returning }) {
   if (returning) return pick([`${who}、おかえりなさいませ`, `${who}、お戻りですね`, `${who}、おかえりなさい`]);
   return pick([`${who}、${g}。いらっしゃいませ`, `${who}、${g}。ようこそお越しくださいました`, `${g}、${who}`, `${who}、ようこそ`]);
 }
+// 複数人が同時に来た/去った時は1メッセージにまとめて全員へ挨拶（究指示2026-06-14「一人にしか行かない」修正）。
+function nameListEn(ns) { return ns.length <= 1 ? (ns[0] || 'everyone') : ns.slice(0, -1).join(', ') + ' and ' + ns[ns.length - 1]; }
+function jingleLineMulti(kind, items) {
+  const ns = items.map((i) => i.nick).filter(Boolean);
+  if (ns.length <= 1) return jingleLine(items[0]);
+  const g = greetWord();
+  if (voiceMode === 'english') {
+    const nl = nameListEn(ns);
+    return kind === 'leave' ? `Goodbye, ${nl}.` : `${enGreetWord()}, ${nl}. Welcome.`;
+  }
+  if (voiceMode === 'zunda') {
+    const nl = ns.join('、');
+    return kind === 'leave' ? `${nl}、またなのだ！` : `${nl}、${g}！いらっしゃいなのだ！`;
+  }
+  const nl = ns.map((n) => `${n}さん`).join('、');
+  return kind === 'leave' ? `${nl}、お疲れさまでした` : `${nl}、${g}。いらっしゃいませ`;
+}
 function inQuietHours() {
   const qh = JC().quietHours;
   if (!Array.isArray(qh) || qh.length !== 2) return false;
@@ -404,13 +421,16 @@ async function drainJingle() {
   if (!jingleOn || !jingleQueue.length) return;
   const now = Date.now();
   if (now - lastJingleAt < (JC().minGapMs || 8000)) return;
-  const j = jingleQueue.shift();
   lastJingleAt = now;
-  const line = jingleLine(j);
-  // フォーマルモード: 絵文字prefixは付けない（敬語の素のテキストで送る）
-  try { await sendYayChat(page, line); } catch (e) { console.error('[greet] chat', e.message); }
-  await sayJingle(line);
-  console.log('  greet:', line);
+  // 溜まってる入退室を全部取り、同時のものは join/leave ごとに1メッセージへまとめる。
+  const batch = jingleQueue.splice(0, jingleQueue.length);
+  for (const [kind, items] of [['join', batch.filter((j) => j.kind === 'join')], ['leave', batch.filter((j) => j.kind === 'leave')]]) {
+    if (!items.length) continue;
+    const line = jingleLineMulti(kind, items);
+    try { await sendYayChat(page, line); } catch (e) { console.error('[greet] chat', e.message); }
+    await sayJingle(line);
+    console.log('  greet:', line);
+  }
 }
 function presentCount() { return [...roster.values()].filter((r) => r.present).length; }
 

@@ -412,6 +412,8 @@
     join: async (creds) => {
       const out = { rtc: null, rtm: null };
       try { out.rtc = await joinRtc(creds); } catch (e) { out.rtc = { ok: false, error: err('joinRtc', e) }; }
+      // 参加直後に音声バスを publish して「最初からミュート」を回避（無音でも音声トラックを載せる）。
+      if (out.rtc && out.rtc.ok) { try { await ensurePublished(); } catch (e) { err('ensurePublished@join', e); } }
       // RTM チャンネル名は creds.rtmChannel があればそれ、無ければ RTC channel を流用（発見対象）
       try { out.rtm = await joinRtm({ appId: creds.appId, uid: creds.uid, rtmUid: creds.rtmUid || creds.conference_call_user_uuid, rtmToken: creds.rtmToken || creds.rtm_token, channel: creds.rtmChannel || creds.channel }); }
       catch (e) { out.rtm = { ok: false, error: err('joinRtm', e) }; }
